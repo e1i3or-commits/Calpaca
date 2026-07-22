@@ -13,17 +13,16 @@ The no-double-booking guarantee.
   one transaction. expireHolds(now) releases expired ones (pg-boss will call
   this later).
 - Group bookings: all hosts' holds succeed or the whole createHold rolls back.
-- Tests gated on TEST_DATABASE_URL (docker-compose.test.yml with Postgres is
-  in scope for this task): two concurrent createHold calls for the same
-  host+slot produce exactly one winner; confirm after expiry fails; group
-  hold rollback when one host is contended.
+- The test database is externally provided via TEST_DATABASE_URL. Tests SKIP
+  cleanly when it is unset (same convention as task 11). Tests must be
+  idempotent against a database of unknown state: create the schema if absent
+  by running migrations programmatically, and truncate affected tables in
+  beforeEach.
+- Tests: two concurrent createHold calls for the same host+slot produce
+  exactly one winner; confirm after expiry fails; group hold rollback when
+  one host is contended.
 
 ## Acceptance
 ```
-docker compose -f docker-compose.test.yml up -d --wait && \
-TEST_DATABASE_URL=postgres://test:test@localhost:5433/test bun run verify; \
-rc=$?; docker compose -f docker-compose.test.yml down; exit $rc
+bun run verify
 ```
-
-## Constraints
-Test Postgres on port 5433 to avoid colliding with anything on the box.

@@ -71,7 +71,7 @@ $(cat "$TASK")"
     timeout 45m claude -p "$PROMPT" \
       --permission-mode bypassPermissions \
       --max-turns "$MAX_TURNS" \
-      --output-format stream-json \
+      --output-format stream-json --verbose \
       >> "$ATTEMPT_LOG" 2>&1
     CLAUDE_RC=$?
     log "claude exited $CLAUDE_RC"
@@ -104,6 +104,7 @@ $(cat "$TASK")"
 
   if [[ "$passed" != true ]]; then
     mv "$TASK" "$BLOCKED/"
+    git add -A && git commit -q -m "chore: block ${TASK_NAME} after failed attempts"
     echo "- BLOCKED: $TASK_NAME after $MAX_ATTEMPTS attempts (see logs)" >> "$SUMMARY"
     log "BLOCKED: $TASK_NAME"
     consecutive_blocks=$((consecutive_blocks + 1))

@@ -42,14 +42,23 @@ docker run -it -v "$PWD":/work -e ANTHROPIC_API_KEY scheduler-agent \
 ### 2. Launch the loop
 
 ```bash
-docker run -d --name overnight \
+docker network create overnight-net
+docker run -d --name overnight-db --network overnight-net \
+  -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test \
+  -e POSTGRES_DB=test postgres:16
+docker run -d --name overnight --network overnight-net \
   -v "$PWD":/work \
   -e ANTHROPIC_API_KEY \
+  -e TEST_DATABASE_URL=postgres://test:test@overnight-db:5432/test \
   scheduler-agent bash scripts/loop.sh
 
 # Watch it live if you want
 docker logs -f overnight
 ```
+
+Note: with `TEST_DATABASE_URL` set for the whole run, integration tests
+execute during verification of every task after 11, not only task 12. That
+is intended; it gates tasks 13-14 on the double-booking invariants.
 
 ### 3. Morning review (non-negotiable)
 
@@ -61,6 +70,9 @@ cat logs/loop-summary.md                    # what passed, what blocked, attempt
 ls tasks/blocked/                           # tasks that failed 3x, with failure logs
 git diff main...overnight/phase-1 -- tests/ # confirm test assertions were not weakened
 bun run verify                              # full gate, from a clean checkout
+
+# Teardown
+docker rm -f overnight overnight-db && docker network rm overnight-net
 ```
 
 Review the diff like it came from a fast, overconfident contractor. Merge what is
@@ -71,6 +83,8 @@ good, rewrite task files for what blocked, requeue.
 - The container has no production credentials, no Google OAuth secrets, and only
   the project directory mounted. `--dangerously-skip-permissions` is acceptable
   only because the container boundary does the security work.
+- The Postgres sidecar (`overnight-db`) is a throwaway database on an isolated
+  network with no volume; it is part of the sandbox, not an exception to it.
 - `scripts/verify.sh` and everything under `tests/` are the trust anchors.
   CLAUDE.md forbids editing them to make a task pass; verify.sh additionally
   fails any task whose diff touches verify.sh itself.
