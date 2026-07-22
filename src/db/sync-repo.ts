@@ -107,6 +107,26 @@ export async function listGoogleConnections(executor: Db = getDb()): Promise<Con
     .where(eq(calendarConnections.provider, "google"));
 }
 
+/** Seeds a new busy-source. The caller enqueues the initial sync; the watch
+ * channel follows via the hourly renewal job (channel columns start null). */
+export async function createConnection(
+  userId: string,
+  externalCalendarId: string,
+  executor: Db = getDb(),
+): Promise<ConnectionRow> {
+  const [row] = await executor
+    .insert(calendarConnections)
+    .values({ userId, provider: "google", externalCalendarId })
+    .returning();
+  if (!row) throw new Error("calendar connection insert returned no row");
+  return row;
+}
+
+/** Removes a busy-source; its calendar_busy_cache rows cascade with the FK. */
+export async function deleteConnection(connectionId: string, executor: Db = getDb()): Promise<void> {
+  await executor.delete(calendarConnections).where(eq(calendarConnections.id, connectionId));
+}
+
 export async function getConnection(
   connectionId: string,
   executor: Db = getDb(),

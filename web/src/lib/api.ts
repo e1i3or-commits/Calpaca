@@ -47,6 +47,7 @@ export type CalendarEntry = {
   primary: boolean;
   accessRole: string;
   connected: boolean;
+  connectionId: string | null;
 };
 
 export type AnswerIssue = { field: string; reason: string };
@@ -153,6 +154,19 @@ export function cancelBooking(args: {
 
 export function getMyCalendars(): Promise<{ calendars: CalendarEntry[] }> {
   return request("/api/me/calendars");
+}
+
+export function connectCalendar(calendarId: string): Promise<{ connection: { id: string; calendarId: string } }> {
+  return request("/api/me/calendars/connections", {
+    method: "POST",
+    body: JSON.stringify({ calendarId }),
+  });
+}
+
+export function disconnectCalendar(connectionId: string): Promise<{ ok: true }> {
+  return request(`/api/me/calendars/connections/${encodeURIComponent(connectionId)}`, {
+    method: "DELETE",
+  });
 }
 
 // ---- dashboard admin surface (/api/me/*) ----

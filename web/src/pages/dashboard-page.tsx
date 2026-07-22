@@ -3,6 +3,7 @@ import { Calendar, CheckCircle2, Copy, Pencil, Plus, Trash2 } from "lucide-react
 import {
   ApiError,
   addTeamMember,
+  connectCalendar,
   createEventType,
   createRoutingForm,
   createSchedule,
@@ -10,6 +11,7 @@ import {
   deleteEventType,
   deleteRoutingForm,
   deleteSchedule,
+  disconnectCalendar,
   getMyCalendars,
   listEventTypes,
   listRoutingForms,
@@ -1492,12 +1494,31 @@ function TeamMembers({ team, users }: { team: Team; users: DirectoryUser[] }) {
 function CalendarsTab() {
   const [calendars, setCalendars] = useState<CalendarEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     getMyCalendars()
       .then((r) => setCalendars(r.calendars))
       .catch((e: unknown) => setError(errorText(e)));
   }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function toggle(cal: CalendarEntry) {
+    setBusyId(cal.id);
+    setError(null);
+    try {
+      if (cal.connectionId) await disconnectCalendar(cal.connectionId);
+      else await connectCalendar(cal.id);
+      refresh();
+    } catch (e: unknown) {
+      setError(errorText(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <Card>
@@ -1506,7 +1527,7 @@ function CalendarsTab() {
         <CardDescription>Busy times sync from connected calendars.</CardDescription>
       </CardHeader>
       <CardContent>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
         {!error && !calendars && <p className="text-sm text-muted-foreground">Loading…</p>}
         {calendars && (
           <ul className="flex flex-col gap-2">
@@ -1525,6 +1546,14 @@ function CalendarsTab() {
                     <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> syncing
                   </span>
                 )}
+                <Button
+                  size="sm"
+                  variant={cal.connected ? "outline" : "default"}
+                  disabled={busyId !== null}
+                  onClick={() => void toggle(cal)}
+                >
+                  {busyId === cal.id ? "…" : cal.connected ? "Stop syncing" : "Sync"}
+                </Button>
               </li>
             ))}
           </ul>
