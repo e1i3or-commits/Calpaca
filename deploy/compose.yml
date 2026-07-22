@@ -1,0 +1,50 @@
+# Production stack on the Hetzner box. Postgres is the only infrastructure
+# dependency (hard budget rule); NPM reaches the app by container name over
+# the shared tourscale-net, so no host ports are published.
+#
+# Run from /opt/scheduler:
+#   docker compose -f deploy/compose.yml --env-file .env up -d --build
+#
+# .env (chmod 600, mirrored from Infisical /tier5/scheduler) must define:
+#   SCHEDULER_DB_PASSWORD, DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL,
+#   PUBLIC_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SMTP_URL, EMAIL_FROM,
+#   EMAIL_DELIVERY_WEBHOOK_SECRET
+name: scheduler
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: ts-scheduler-app
+    restart: unless-stopped
+    env_file: ../.env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - default
+      - tourscale-net
+
+  db:
+    image: postgres:16
+    container_name: ts-scheduler-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scheduler
+      POSTGRES_PASSWORD: ${SCHEDULER_DB_PASSWORD}
+      POSTGRES_DB: scheduler
+    volumes:
+      - scheduler-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scheduler -d scheduler"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  scheduler-db-data:
+
+networks:
+  tourscale-net:
+    external: true
