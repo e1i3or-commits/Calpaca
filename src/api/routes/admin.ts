@@ -3,6 +3,7 @@ import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { Temporal } from "@js-temporal/polyfill";
 import { requireSession, type AuthEnv } from "../../auth/session";
+import { themeNames } from "../../core/theming/themes";
 import {
   addTeamMember,
   createEventType,
@@ -130,6 +131,7 @@ const eventTypeBodySchema = z
     mode: z.enum(["solo", "round_robin", "group"]),
     scheduleId: z.string().uuid().nullable(),
     teamId: z.string().uuid().nullable(),
+    theme: z.enum(themeNames).default("default"),
     hosts: z
       .array(
         z.object({

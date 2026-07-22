@@ -12,6 +12,10 @@ type Db = NodePgDatabase<typeof schema>;
 export interface EventTypeConfig {
   readonly id: string;
   readonly slug: string;
+  // optional so injected test fixtures predating theming stay valid;
+  // the repo always populates both
+  readonly title?: string;
+  readonly theme?: string;
   readonly durationMinutes: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -29,6 +33,8 @@ export type AssignmentMode = "solo" | "round_robin" | "group";
 export interface BookingEventTypeConfig {
   readonly id: string;
   readonly slug: string;
+  /** optional for the same fixture-compatibility reason as EventTypeConfig */
+  readonly theme?: string;
   readonly durationMinutes: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -41,6 +47,7 @@ function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingE
   return {
     id: row.id,
     slug: row.slug,
+    theme: row.theme,
     durationMinutes: row.durationMinutes,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
@@ -86,6 +93,8 @@ export async function getEventTypeBySlug(
   return {
     id: row.id,
     slug: row.slug,
+    title: row.title,
+    theme: row.theme,
     durationMinutes: row.durationMinutes,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,

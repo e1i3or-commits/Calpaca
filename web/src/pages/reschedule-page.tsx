@@ -8,6 +8,7 @@ import {
   type RescheduleContext,
   type SlotDto,
 } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 import { browserTimezone, formatDayTime, formatTime } from "@/lib/time";
 import { SlotPicker } from "@/components/slot-picker";
 import { errorMessage, TimezoneSelect } from "@/pages/booking-page";
@@ -28,6 +29,8 @@ export function ReschedulePage({ bookingId, token }: { bookingId: string; token:
   const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useTheme(ctx?.theme);
 
   useEffect(() => {
     getRescheduleContext(bookingId, token)

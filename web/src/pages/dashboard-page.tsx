@@ -36,6 +36,7 @@ import {
   type Team,
   type TeamMember,
 } from "@/lib/api";
+import { themeOptions } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -144,6 +145,7 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   mode: "solo",
   scheduleId: null,
   teamId: null,
+  theme: "default",
   hosts: [],
 };
 
@@ -269,6 +271,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                         mode: et.mode,
                         scheduleId: et.scheduleId,
                         teamId: et.teamId,
+                        theme: et.theme,
                         hosts: et.hosts.map(({ userId, role, weight }) => ({ userId, role, weight })),
                       },
                     })
@@ -440,6 +443,21 @@ function EventTypeForm({
             {schedules.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="et-theme">Theme</Label>
+          <select
+            id="et-theme"
+            className="flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+            value={form.theme}
+            onChange={(e) => set("theme", e.target.value)}
+          >
+            {themeOptions.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
               </option>
             ))}
           </select>

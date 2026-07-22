@@ -183,6 +183,8 @@ export interface AdminEventType {
   readonly rollingWindowDays: number;
   readonly mode: "solo" | "round_robin" | "group";
   readonly scheduleId: string | null;
+  /** optional so pre-theming test fixtures stay valid; reads always set it */
+  readonly theme?: string;
   readonly hosts: readonly (EventTypeHostInput & { name: string; email: string })[];
 }
 
@@ -227,6 +229,7 @@ function toAdminEventType(
     rollingWindowDays: row.rollingWindowDays,
     mode: row.mode,
     scheduleId: row.scheduleId,
+    theme: row.theme,
     hosts,
   };
 }
@@ -271,6 +274,8 @@ export interface EventTypeInput {
   readonly mode: "solo" | "round_robin" | "group";
   readonly scheduleId: string | null;
   readonly teamId: string | null;
+  /** undefined keeps the column default (create) or leaves it unchanged (update) */
+  readonly theme?: string;
   readonly hosts: readonly EventTypeHostInput[];
 }
 
@@ -319,6 +324,7 @@ export async function updateEventType(
         mode: input.mode,
         scheduleId: input.scheduleId,
         teamId: input.teamId,
+        theme: input.theme,
       })
       .where(eq(eventTypes.id, id))
       .returning();

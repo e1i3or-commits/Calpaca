@@ -19,6 +19,13 @@ export type AvailabilityResponse = {
   all: SlotDto[];
 };
 
+export type EventTypeMeta = {
+  slug: string;
+  title: string;
+  durationMinutes: number;
+  theme: string;
+};
+
 export type HoldResponse = {
   holdIds: string[];
   expiresAt: string;
@@ -67,6 +74,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export function getEventTypeMeta(slug: string): Promise<EventTypeMeta> {
+  return request(`/event-types/${encodeURIComponent(slug)}`);
+}
+
 export function getAvailability(args: {
   eventTypeSlug: string;
   start: string;
@@ -110,6 +121,7 @@ export type RescheduleContext = {
   start: RenderedInstant;
   end: RenderedInstant;
   inviteeTimezone: string;
+  theme: string;
 };
 
 export function getRescheduleContext(bookingId: string, token: string): Promise<RescheduleContext> {
@@ -187,6 +199,7 @@ export type AdminEventType = {
   rollingWindowDays: number;
   mode: "solo" | "round_robin" | "group";
   scheduleId: string | null;
+  theme: string;
   hosts: (EventTypeHost & { name: string; email: string })[];
 };
 

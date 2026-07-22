@@ -36,6 +36,13 @@
       "when": 1784739695072,
       "tag": "0004_same_wrecker",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784741890071,
+      "tag": "0005_stale_pride",
+      "breakpoints": true
     }
   ]
 }

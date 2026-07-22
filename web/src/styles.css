@@ -1,25 +1,9 @@
 @import "tailwindcss";
+@import "./themes.css";
 
-/* Design tokens as CSS variables (CLAUDE.md: Tailwind v4 + variable tokens).
-   Themes override this block; component classes reference only tokens. */
-:root {
-  --background: oklch(0.99 0 0);
-  --foreground: oklch(0.2 0.02 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 260);
-  --primary: oklch(0.55 0.18 260);
-  --primary-foreground: oklch(0.99 0 0);
-  --muted: oklch(0.96 0.005 260);
-  --muted-foreground: oklch(0.5 0.02 260);
-  --border: oklch(0.9 0.01 260);
-  --ring: oklch(0.55 0.18 260);
-  --warning: oklch(0.75 0.15 80);
-  --warning-foreground: oklch(0.3 0.08 80);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.99 0 0);
-  --radius: 0.5rem;
-}
-
+/* Tokens live in themes.css; this maps them into Tailwind utility names.
+   Component classes reference only these, so themes swap without touching
+   any component. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

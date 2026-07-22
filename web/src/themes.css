@@ -1,0 +1,62 @@
+/* Design-token file (CLAUDE.md: Tailwind v4 + variable tokens).
+   One block per bundled theme, keyed by [data-theme] on <html>; the registry
+   of valid names lives in src/core/theming/themes.ts. Component classes
+   reference only the @theme mappings in styles.css, never raw values, so a
+   theme is nothing but this block. */
+
+/* default */
+:root {
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.2 0.02 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.02 260);
+  --primary: oklch(0.55 0.18 260);
+  --primary-foreground: oklch(0.99 0 0);
+  --muted: oklch(0.96 0.005 260);
+  --muted-foreground: oklch(0.5 0.02 260);
+  --border: oklch(0.9 0.01 260);
+  --ring: oklch(0.55 0.18 260);
+  --warning: oklch(0.75 0.15 80);
+  --warning-foreground: oklch(0.3 0.08 80);
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --radius: 0.5rem;
+}
+
+/* midnight: dark, cool */
+[data-theme="midnight"] {
+  --background: oklch(0.17 0.02 265);
+  --foreground: oklch(0.93 0.01 260);
+  --card: oklch(0.22 0.025 265);
+  --card-foreground: oklch(0.93 0.01 260);
+  --primary: oklch(0.72 0.14 265);
+  --primary-foreground: oklch(0.16 0.02 265);
+  --muted: oklch(0.27 0.02 265);
+  --muted-foreground: oklch(0.68 0.02 260);
+  --border: oklch(0.32 0.02 265);
+  --ring: oklch(0.72 0.14 265);
+  --warning: oklch(0.78 0.14 80);
+  --warning-foreground: oklch(0.87 0.1 85);
+  --destructive: oklch(0.62 0.19 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --radius: 0.5rem;
+}
+
+/* sand: warm, light, softer corners */
+[data-theme="sand"] {
+  --background: oklch(0.97 0.015 80);
+  --foreground: oklch(0.28 0.03 55);
+  --card: oklch(0.99 0.008 85);
+  --card-foreground: oklch(0.28 0.03 55);
+  --primary: oklch(0.52 0.12 50);
+  --primary-foreground: oklch(0.98 0.01 80);
+  --muted: oklch(0.93 0.02 80);
+  --muted-foreground: oklch(0.5 0.035 60);
+  --border: oklch(0.87 0.025 75);
+  --ring: oklch(0.52 0.12 50);
+  --warning: oklch(0.75 0.15 80);
+  --warning-foreground: oklch(0.35 0.08 70);
+  --destructive: oklch(0.55 0.2 30);
+  --destructive-foreground: oklch(0.99 0 0);
+  --radius: 0.75rem;
+}

@@ -16,6 +16,7 @@ import { subtract, type Interval } from "../../core/availability/intervals";
 import { generateSlots, type SlotConfig } from "../../core/availability/slots";
 import { scoreSlots } from "../../core/availability/scoring";
 import { groupAvailability, type GroupHost } from "../../core/availability/group";
+import { resolveTheme } from "../../core/theming/themes";
 
 /**
  * Repo access the route needs, as plain functions rather than imported
@@ -136,6 +137,21 @@ function groupHostRole(role: EventTypeHostRecord["role"]): "required" | "optiona
 
 export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): Hono {
   const router = new Hono();
+
+  // Public identity of a booking link: what the booking page needs before it
+  // has any slots — the real title and the theme to render with. Config that
+  // could leak host behavior (buffers, notice, hosts) stays private.
+  router.get("/event-types/:slug", async (c) => {
+    const eventType = await deps.getEventTypeBySlug(c.req.param("slug"));
+    if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+
+    return c.json({
+      slug: eventType.slug,
+      title: eventType.title ?? eventType.slug,
+      durationMinutes: eventType.durationMinutes,
+      theme: resolveTheme(eventType.theme),
+    });
+  });
 
   router.get("/availability", async (c) => {
     const parsedQuery = querySchema.safeParse({

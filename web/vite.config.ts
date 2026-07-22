@@ -15,9 +15,9 @@ export default defineConfig({
   },
   build: { outDir: "../dist/web", emptyOutDir: true },
   server: {
-    // availability/holds/bookings are mounted at the API root, not /api
+    // public endpoints are mounted at the API root, not /api
     proxy: Object.fromEntries(
-      ["/api", "/health", "/availability", "/holds", "/bookings"].map((p) => [
+      ["/api", "/health", "/availability", "/holds", "/bookings", "/routing", "/event-types"].map((p) => [
         p,
         "http://localhost:3000",
       ]),

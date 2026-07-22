@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, ArrowLeft, Check, Clock, Globe } from "lucide-react";
 import {
   ApiError,
   confirmBooking,
   createHold,
+  getEventTypeMeta,
   type BookingConfirmation,
+  type EventTypeMeta,
   type RoutingAnswers,
   type SlotDto,
 } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 import { allTimezones, browserTimezone, formatDayTime, formatTime } from "@/lib/time";
 import { SlotPicker } from "@/components/slot-picker";
 import { Button } from "@/components/ui/button";
@@ -44,6 +47,14 @@ export function BookingPage({
   const [step, setStep] = useState<Step>({ name: "pick" });
   const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [meta, setMeta] = useState<EventTypeMeta | null>(null);
+
+  // real title + theme; a failure here is cosmetic (the slug stands in and
+  // the availability load reports the 404), so it's deliberately swallowed
+  useEffect(() => {
+    getEventTypeMeta(slug).then(setMeta, () => {});
+  }, [slug]);
+  useTheme(meta?.theme);
 
   if (step.name === "confirmed") {
     return <Confirmation slot={step.slot} confirmation={step.confirmation} timezone={timezone} />;
@@ -53,7 +64,7 @@ export function BookingPage({
     <div className="mx-auto max-w-2xl px-4 py-10">
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">{slug.replace(/-/g, " ")}</CardTitle>
+          <CardTitle className="text-xl">{meta?.title ?? slug.replace(/-/g, " ")}</CardTitle>
           <CardDescription className="flex items-center gap-1.5">
             <Globe className="h-3.5 w-3.5" />
             <TimezoneSelect value={timezone} onChange={setTimezone} />
