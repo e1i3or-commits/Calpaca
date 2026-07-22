@@ -1,7 +1,8 @@
 # Agent container for overnight Claude Code runs.
-# Contains: Node (for the Claude Code CLI), Bun (project runtime), git,
-# Docker CLI for the task-12 test database. No credentials baked in;
-# ANTHROPIC_API_KEY comes in as an env var at run time.
+# Contains: Node (for the Claude Code CLI), Bun (project runtime), git.
+# No credentials baked in; ANTHROPIC_API_KEY comes in as an env var at
+# run time. The task-12 test database is a Postgres sidecar container
+# reached via TEST_DATABASE_URL; no Docker CLI needed in here.
 FROM node:22-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,11 +16,6 @@ RUN curl -fsSL https://bun.sh/install | bash \
 
 # Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
-
-# Docker CLI only (talks to a socket you choose to mount for task 12;
-# omit the socket mount for the pure-function tasks 01-11).
-RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.1.1.tgz \
-    | tar xz --strip-components=1 -C /usr/local/bin docker/docker
 
 WORKDIR /work
 # Git identity for the loop's commits
