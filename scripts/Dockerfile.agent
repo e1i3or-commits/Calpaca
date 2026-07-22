@@ -1,26 +1,19 @@
-# Agent container for overnight Claude Code runs.
-# Contains: Node (for the Claude Code CLI), Bun (project runtime), git.
-# No credentials baked in; ANTHROPIC_API_KEY comes in as an env var at
-# run time. The task-12 test database is a Postgres sidecar container
-# reached via TEST_DATABASE_URL; no Docker CLI needed in here.
 FROM node:22-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl ca-certificates unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Bun
-RUN curl -fsSL https://bun.sh/install | bash \
-    && ln -s /root/.bun/bin/bun /usr/local/bin/bun \
-    && ln -s /root/.bun/bin/bunx /usr/local/bin/bunx
+RUN curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash \
+    && ln -sf /usr/local/bin/bun /usr/local/bin/bunx
 
-# Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
 WORKDIR /work
-# Git identity for the loop's commits
-RUN git config --global user.name "overnight-loop" \
-    && git config --global user.email "loop@localhost" \
-    && git config --global --add safe.directory /work
+RUN git config --system user.name "overnight-loop" \
+    && git config --system user.email "loop@localhost" \
+    && git config --system --add safe.directory /work \
+    && mkdir -p /home/node/.claude && chown node:node /home/node/.claude
 
+USER node
 CMD ["bash", "scripts/loop.sh"]
