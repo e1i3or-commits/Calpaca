@@ -29,6 +29,8 @@ export interface Invitee {
   readonly email: string;
   readonly name: string;
   readonly timezone: string;
+  /** optional booking-form notes ("anything that will help prepare") */
+  readonly notes?: string;
 }
 
 export type ConfirmHoldError =
@@ -177,6 +179,7 @@ export async function confirmHold(
         inviteeEmail: invitee.email,
         inviteeName: invitee.name,
         inviteeTimezone: invitee.timezone,
+        inviteeNotes: invitee.notes ?? null,
         hostUserIds,
         rescheduleToken: generateToken(),
         cancelToken: generateToken(),

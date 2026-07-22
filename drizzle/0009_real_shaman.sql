@@ -1,0 +1,1 @@
+ALTER TABLE "bookings" ADD COLUMN "invitee_notes" text;

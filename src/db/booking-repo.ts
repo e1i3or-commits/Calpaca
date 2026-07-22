@@ -179,6 +179,9 @@ export interface BookingRow {
   readonly inviteeEmail: string;
   readonly inviteeName: string;
   readonly inviteeTimezone: string;
+  /** booking-form notes; optional for the same fixture-compatibility reason
+   * as inviteStatus below */
+  readonly inviteeNotes?: string | null;
   readonly hostUserIds: readonly string[];
   readonly status: string;
   /** invite lifecycle projection: none | sent | delivered | failed.
@@ -208,6 +211,7 @@ export async function getBookingById(id: string, executor: Db = getDb()): Promis
     inviteeEmail: row.inviteeEmail,
     inviteeName: row.inviteeName,
     inviteeTimezone: row.inviteeTimezone,
+    inviteeNotes: row.inviteeNotes,
     hostUserIds: row.hostUserIds,
     status: row.status,
     inviteStatus: row.inviteStatus,

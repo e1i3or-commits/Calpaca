@@ -122,6 +122,12 @@ const bookingBodySchema = z.object({
     email: z.string().email(),
     name: z.string().min(1),
     timezone: z.string().min(1),
+    // booking-form notes; whitespace-only collapses to absent
+    notes: z
+      .string()
+      .max(2000)
+      .optional()
+      .transform((s) => (s?.trim() ? s.trim() : undefined)),
   }),
   // present when the booking came through a routing form (/routing/evaluate)
   routingAnswers: z

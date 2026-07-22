@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 type Step =
   | { name: "pick" }
@@ -206,6 +207,7 @@ function DetailsStep({
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function submit() {
@@ -217,7 +219,7 @@ function DetailsStep({
       const confirmation = await confirmBooking({
         eventTypeSlug: slug,
         holdIds: hold.holdIds,
-        invitee: { email, name, timezone },
+        invitee: { email, name, timezone, ...(notes.trim() ? { notes: notes.trim() } : {}) },
         routingAnswers,
       });
       onConfirmed(confirmation);
@@ -263,6 +265,18 @@ function DetailsStep({
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="notes">
+            Notes <span className="font-normal text-muted-foreground">(optional)</span>
+          </Label>
+          <Textarea
+            id="notes"
+            maxLength={2000}
+            placeholder="Please share anything that will help prepare for the meeting."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
         </div>
         <Button type="submit" disabled={submitting || !name || !email}>
           {submitting ? "Booking…" : "Confirm booking"}

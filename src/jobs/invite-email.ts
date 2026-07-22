@@ -116,14 +116,16 @@ async function syncGoogleEvent(ctx: InviteContext, kind: InviteKind): Promise<bo
     }
 
     const links = buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken);
+    const descriptionParts = [
+      ...(booking.inviteeNotes ? [`Notes from ${booking.inviteeName}:\n${booking.inviteeNotes}`] : []),
+      ...(links ? [`Reschedule: ${links.reschedule}\nCancel: ${links.cancel}`] : []),
+    ];
     const r = await insertEvent({
       accessToken,
       calendarId,
       event: {
         summary: `${ctx.eventTypeTitle}: ${organizer.name} and ${booking.inviteeName}`,
-        description: links
-          ? `Reschedule: ${links.reschedule}\nCancel: ${links.cancel}`
-          : undefined,
+        description: descriptionParts.length ? descriptionParts.join("\n\n") : undefined,
         startIso,
         endIso,
         attendees: [
@@ -241,6 +243,7 @@ export function buildMail(
     timezone: booking.inviteeTimezone,
     links: kind === "cancelled" ? null : buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken),
     icsAttached: includeIcs,
+    notes: booking.inviteeNotes,
   });
 
   const ics = includeIcs
@@ -252,6 +255,9 @@ export function buildMail(
         start: booking.startsAt,
         end: booking.endsAt,
         summary: `${ctx.eventTypeTitle}: ${organizer.name} and ${booking.inviteeName}`,
+        ...(booking.inviteeNotes
+          ? { description: `Notes from ${booking.inviteeName}:\n${booking.inviteeNotes}` }
+          : {}),
         organizer: { name: organizer.name, email: organizer.email },
         attendees: [
           { name: booking.inviteeName, email: booking.inviteeEmail },

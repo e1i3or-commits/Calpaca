@@ -194,6 +194,9 @@ export const bookings = pgTable("bookings", {
   inviteeEmail: text("invitee_email").notNull(),
   inviteeName: text("invitee_name").notNull(),
   inviteeTimezone: text("invitee_timezone").notNull(),
+  // free-text "anything that will help prepare" from the booking form;
+  // surfaces in the invite email, the ICS, and the Google event description
+  inviteeNotes: text("invitee_notes"),
   // all hosts on the meeting; solo/rr have one, group has many
   hostUserIds: jsonb("host_user_ids").$type<string[]>().notNull(),
   status: text("status").notNull().default("confirmed"), // projection only

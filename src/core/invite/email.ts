@@ -22,6 +22,8 @@ export interface InviteEmailInput {
    * the native invite — the "calendar file attached" line would be a lie.
    * Defaults to true (the ICS fallback path). */
   readonly icsAttached?: boolean;
+  /** invitee's booking-form notes; rendered so the cc'd hosts see them */
+  readonly notes?: string | null;
 }
 
 export interface InviteEmail {
@@ -76,6 +78,10 @@ export function composeInviteEmail(input: InviteEmailInput): InviteEmail {
     "",
     input.kind === "cancelled" ? `Original time: ${when}` : `When: ${when}`,
   ];
+
+  if (input.kind !== "cancelled" && input.notes) {
+    lines.push("", `Notes from ${input.inviteeName}:`, input.notes);
+  }
 
   if (input.kind !== "cancelled") {
     lines.push(

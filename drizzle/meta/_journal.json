@@ -64,6 +64,13 @@
       "when": 1784753264183,
       "tag": "0008_brainy_ink",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784762768759,
+      "tag": "0009_real_shaman",
+      "breakpoints": true
     }
   ]
 }

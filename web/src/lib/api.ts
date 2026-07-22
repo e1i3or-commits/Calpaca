@@ -115,7 +115,7 @@ export function createHold(args: {
 export function confirmBooking(args: {
   eventTypeSlug: string;
   holdIds: string[];
-  invitee: { email: string; name: string; timezone: string };
+  invitee: { email: string; name: string; timezone: string; notes?: string };
   routingAnswers?: RoutingAnswers;
 }): Promise<BookingConfirmation> {
   return request("/bookings", { method: "POST", body: JSON.stringify(args) });
