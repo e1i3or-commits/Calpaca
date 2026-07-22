@@ -19,6 +19,7 @@ const NOW = Temporal.Instant.from("2027-01-04T00:00:00Z"); // Monday 00:00 UTC
 
 const soloEventType: BookingEventTypeConfig = {
   id: "et-solo",
+  slug: "solo-30",
   durationMinutes: 30,
   bufferBeforeMin: 0,
   bufferAfterMin: 0,
@@ -29,6 +30,7 @@ const soloEventType: BookingEventTypeConfig = {
 
 const groupEventType: BookingEventTypeConfig = {
   id: "et-group",
+  slug: "group-60",
   durationMinutes: 60,
   bufferBeforeMin: 0,
   bufferAfterMin: 0,
@@ -39,6 +41,7 @@ const groupEventType: BookingEventTypeConfig = {
 
 const roundRobinEventType: BookingEventTypeConfig = {
   id: "et-rr",
+  slug: "rr-30",
   durationMinutes: 30,
   bufferBeforeMin: 0,
   bufferAfterMin: 0,

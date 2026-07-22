@@ -1,8 +1,8 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
-import { bookingEvents, bookings } from "./schema";
+import { bookingEvents, bookings, eventTypes, users } from "./schema";
 import * as schema from "./schema";
 import { ok, type Result } from "../lib/result";
 import {
@@ -194,6 +194,64 @@ export async function getBookingById(id: string, executor: Db = getDb()): Promis
     status: row.status,
     rescheduleToken: row.rescheduleToken,
     cancelToken: row.cancelToken,
+  };
+}
+
+export interface InviteHost {
+  readonly name: string;
+  readonly email: string;
+  readonly timezone: string;
+}
+
+export interface InviteContext {
+  readonly booking: BookingRow;
+  readonly eventTypeTitle: string;
+  readonly eventTypeSlug: string;
+  readonly hosts: readonly InviteHost[];
+  /** Number of reschedules so far — the ICS SEQUENCE for iTIP updates. */
+  readonly rescheduleCount: number;
+}
+
+/** Everything the invite-email job needs in one load: the booking, the event
+ * type's public identity, the hosts' contact details, and the reschedule
+ * count that drives the ICS SEQUENCE. */
+export async function getInviteContext(
+  bookingId: string,
+  executor: Db = getDb(),
+): Promise<InviteContext | null> {
+  const booking = await getBookingById(bookingId, executor);
+  if (!booking) return null;
+
+  const [eventType] = await executor
+    .select({ title: eventTypes.title, slug: eventTypes.slug })
+    .from(eventTypes)
+    .where(eq(eventTypes.id, booking.eventTypeId));
+  if (!eventType) return null;
+
+  const hostRows = booking.hostUserIds.length
+    ? await executor
+        .select({ id: users.id, name: users.name, email: users.email, timezone: users.timezone })
+        .from(users)
+        .where(inArray(users.id, [...booking.hostUserIds]))
+    : [];
+  // preserve hostUserIds order: the first host is the ICS organizer
+  const byId = new Map(hostRows.map((h) => [h.id, h]));
+  const hosts = booking.hostUserIds.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [{ name: row.name, email: row.email, timezone: row.timezone }] : [];
+  });
+
+  const rescheduled = await executor
+    .select({ id: bookingEvents.id })
+    .from(bookingEvents)
+    .where(and(eq(bookingEvents.bookingId, bookingId), eq(bookingEvents.kind, "rescheduled")));
+
+  return {
+    booking,
+    eventTypeTitle: eventType.title,
+    eventTypeSlug: eventType.slug,
+    hosts,
+    rescheduleCount: rescheduled.length,
   };
 }
 

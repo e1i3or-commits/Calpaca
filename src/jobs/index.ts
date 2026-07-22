@@ -2,6 +2,8 @@ import PgBoss from "pg-boss";
 import { getAuth } from "../auth/index";
 import { syncConnection } from "../sync/engine";
 import { listEvents, watchEvents } from "../sync/google";
+import { sendInvite } from "./invite-email";
+import type { InviteKind } from "../core/invite/email";
 import {
   getConnection,
   listConnectionsNeedingChannel,
@@ -21,10 +23,13 @@ import {
 //                  connection; the only trigger in dev (no public URL)
 // channel-renewal  hourly: (re)establishes watch channels expiring within
 //                  24h; skipped entirely without PUBLIC_URL
+// invite-email     one send per booking lifecycle change (ICS + text);
+//                  retried by pg-boss, no-op when SMTP is not configured
 
 export const SYNC_QUEUE = "calendar-sync";
 const SWEEP_QUEUE = "sync-sweep";
 const RENEWAL_QUEUE = "channel-renewal";
+const INVITE_QUEUE = "invite-email";
 
 const CHANNEL_RENEW_AHEAD_MS = 24 * 60 * 60 * 1000;
 
@@ -53,6 +58,16 @@ export async function enqueueSync(connectionId: string, opts?: { forceFull?: boo
     // debounce: at most one queued sync per connection per 30s window
     { singletonKey: connectionId, singletonSeconds: 30 },
   );
+}
+
+/** Fire-and-forget from the booking routes: a failed enqueue must never
+ * fail the booking itself, so this logs instead of throwing. */
+export async function enqueueInviteEmail(bookingId: string, kind: InviteKind): Promise<void> {
+  try {
+    await getBoss().send(INVITE_QUEUE, { bookingId, kind }, { retryLimit: 5, retryDelay: 60, retryBackoff: true });
+  } catch (e) {
+    console.error(`[jobs] enqueue invite ${kind} for ${bookingId} failed:`, e);
+  }
 }
 
 async function runSync(connectionId: string, forceFull: boolean): Promise<void> {
@@ -116,9 +131,14 @@ export async function startJobs(): Promise<void> {
   await b.start();
   await b.createQueue(SYNC_QUEUE);
   await b.createQueue(SWEEP_QUEUE);
+  await b.createQueue(INVITE_QUEUE);
 
   await b.work<{ connectionId: string; forceFull?: boolean }>(SYNC_QUEUE, async ([job]) => {
     if (job) await runSync(job.data.connectionId, job.data.forceFull ?? false);
+  });
+
+  await b.work<{ bookingId: string; kind: InviteKind }>(INVITE_QUEUE, async ([job]) => {
+    if (job) await sendInvite(job.data.bookingId, job.data.kind);
   });
 
   await b.work(SWEEP_QUEUE, async () => {

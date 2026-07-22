@@ -16,6 +16,7 @@
   --warning: oklch(0.75 0.15 80);
   --warning-foreground: oklch(0.3 0.08 80);
   --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(0.99 0 0);
   --radius: 0.5rem;
 }
 
@@ -33,6 +34,7 @@
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);

@@ -1,21 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, ArrowLeft, Check, Clock, Globe } from "lucide-react";
 import {
   ApiError,
   confirmBooking,
   createHold,
-  getAvailability,
-  type AvailabilityResponse,
   type BookingConfirmation,
   type SlotDto,
 } from "@/lib/api";
-import { allTimezones, browserTimezone, dayKey, formatDay, formatDayTime, formatTime } from "@/lib/time";
+import { allTimezones, browserTimezone, formatDayTime, formatTime } from "@/lib/time";
+import { SlotPicker } from "@/components/slot-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-const WINDOW_DAYS = 14;
 
 type Step =
   | { name: "pick" }
@@ -29,55 +26,16 @@ const ERROR_MESSAGES: Record<string, string> = {
   expired: "The hold on that time expired. Pick it again.",
 };
 
-function errorMessage(e: unknown): string {
+export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) return ERROR_MESSAGES[e.code] ?? `Something went wrong (${e.code}).`;
   return "Could not reach the server.";
 }
 
 export function BookingPage({ slug }: { slug: string }) {
   const [timezone, setTimezone] = useState(browserTimezone());
-  const [availability, setAvailability] = useState<AvailabilityResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showAll, setShowAll] = useState(false);
   const [step, setStep] = useState<Step>({ name: "pick" });
+  const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
-
-  const loadAvailability = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const start = new Date();
-      const end = new Date(start.getTime() + WINDOW_DAYS * 86_400_000);
-      setAvailability(
-        await getAvailability({
-          eventTypeSlug: slug,
-          start: start.toISOString(),
-          end: end.toISOString(),
-          inviteeTimezone: timezone,
-        }),
-      );
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [slug, timezone]);
-
-  useEffect(() => {
-    void loadAvailability();
-  }, [loadAvailability]);
-
-  const byDay = useMemo(() => {
-    const groups = new Map<string, SlotDto[]>();
-    for (const slot of availability?.all ?? []) {
-      const key = dayKey(slot.start.utc, timezone);
-      groups.set(key, [...(groups.get(key) ?? []), slot]);
-    }
-    for (const slots of groups.values()) {
-      slots.sort((a, b) => a.start.utc.localeCompare(b.start.utc));
-    }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [availability, timezone]);
 
   if (step.name === "confirmed") {
     return <Confirmation slot={step.slot} confirmation={step.confirmation} timezone={timezone} />;
@@ -90,31 +48,18 @@ export function BookingPage({ slug }: { slug: string }) {
           <CardTitle className="text-xl">{slug.replace(/-/g, " ")}</CardTitle>
           <CardDescription className="flex items-center gap-1.5">
             <Globe className="h-3.5 w-3.5" />
-            <select
-              className="bg-transparent text-sm text-muted-foreground focus:outline-none"
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              aria-label="Timezone"
-            >
-              {allTimezones().map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
-                </option>
-              ))}
-            </select>
+            <TimezoneSelect value={timezone} onChange={setTimezone} />
           </CardDescription>
         </CardHeader>
         <CardContent>
           {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
-          {loading && <p className="text-sm text-muted-foreground">Loading times…</p>}
 
-          {!loading && step.name === "pick" && availability && (
-            <PickStep
-              availability={availability}
-              byDay={byDay}
+          {step.name === "pick" && (
+            <SlotPicker
+              slug={slug}
               timezone={timezone}
-              showAll={showAll}
-              onToggleAll={() => setShowAll((v) => !v)}
+              reloadKey={reloadKey}
+              onLoadError={(e) => setError(errorMessage(e))}
               onPick={(slot) => {
                 setError(null);
                 setStep({ name: "details", slot });
@@ -122,7 +67,7 @@ export function BookingPage({ slug }: { slug: string }) {
             />
           )}
 
-          {!loading && step.name === "details" && (
+          {step.name === "details" && (
             <DetailsStep
               slot={step.slot}
               slug={slug}
@@ -133,7 +78,7 @@ export function BookingPage({ slug }: { slug: string }) {
                 // a 409 means the slot is gone: reload the wall
                 if (e instanceof ApiError && e.status === 409) {
                   setStep({ name: "pick" });
-                  void loadAvailability();
+                  setReloadKey((k) => k + 1);
                 }
               }}
               onConfirmed={(confirmation) => setStep({ name: "confirmed", slot: step.slot, confirmation })}
@@ -145,68 +90,20 @@ export function BookingPage({ slug }: { slug: string }) {
   );
 }
 
-function PickStep({
-  availability,
-  byDay,
-  timezone,
-  showAll,
-  onToggleAll,
-  onPick,
-}: {
-  availability: AvailabilityResponse;
-  byDay: [string, SlotDto[]][];
-  timezone: string;
-  showAll: boolean;
-  onToggleAll: () => void;
-  onPick: (slot: SlotDto) => void;
-}) {
-  if (availability.all.length === 0) {
-    return <p className="text-sm text-muted-foreground">No times available in the next two weeks.</p>;
-  }
-
+export function TimezoneSelect({ value, onChange }: { value: string; onChange: (tz: string) => void }) {
   return (
-    <div className="flex flex-col gap-6">
-      {/* curated top-3 scored slots are the default; the wall is the fallback */}
-      {!showAll && (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm text-muted-foreground">Suggested times</p>
-          {availability.curated.map((slot) => (
-            <Button
-              key={slot.start.utc}
-              variant="outline"
-              size="lg"
-              className="justify-between"
-              onClick={() => onPick(slot)}
-            >
-              <span>{formatDayTime(slot.start.utc, timezone)}</span>
-              {slot.localHourWarning && <AlertTriangle className="h-4 w-4 text-warning" />}
-            </Button>
-          ))}
-        </div>
-      )}
-
-      {showAll && (
-        <div className="flex flex-col gap-4">
-          {byDay.map(([key, slots]) => (
-            <div key={key}>
-              <p className="mb-2 text-sm font-medium">{formatDay(slots[0]!.start.utc, timezone)}</p>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {slots.map((slot) => (
-                  <Button key={slot.start.utc} variant="outline" size="sm" onClick={() => onPick(slot)}>
-                    {formatTime(slot.start.utc, timezone)}
-                    {slot.localHourWarning && <AlertTriangle className="h-3 w-3 text-warning" />}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <Button variant="ghost" size="sm" className="self-start" onClick={onToggleAll}>
-        {showAll ? "Show suggested times" : "Show all times"}
-      </Button>
-    </div>
+    <select
+      className="bg-transparent text-sm text-muted-foreground focus:outline-none"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label="Timezone"
+    >
+      {allTimezones().map((tz) => (
+        <option key={tz} value={tz}>
+          {tz}
+        </option>
+      ))}
+    </select>
   );
 }
 

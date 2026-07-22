@@ -28,6 +28,7 @@ export type AssignmentMode = "solo" | "round_robin" | "group";
  * availability endpoint has no use for, and drops the fields only it needs. */
 export interface BookingEventTypeConfig {
   readonly id: string;
+  readonly slug: string;
   readonly durationMinutes: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -39,6 +40,7 @@ export interface BookingEventTypeConfig {
 function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingEventTypeConfig {
   return {
     id: row.id,
+    slug: row.slug,
     durationMinutes: row.durationMinutes,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,

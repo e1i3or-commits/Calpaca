@@ -97,6 +97,43 @@ export function confirmBooking(args: {
   return request("/bookings", { method: "POST", body: JSON.stringify(args) });
 }
 
+export type RescheduleContext = {
+  bookingId: string;
+  eventTypeSlug: string;
+  durationMinutes: number;
+  status: string;
+  start: RenderedInstant;
+  end: RenderedInstant;
+  inviteeTimezone: string;
+};
+
+export function getRescheduleContext(bookingId: string, token: string): Promise<RescheduleContext> {
+  return request(`/bookings/${bookingId}/reschedule-context?token=${encodeURIComponent(token)}`);
+}
+
+export function rescheduleBooking(args: {
+  bookingId: string;
+  rescheduleToken: string;
+  start: string;
+  end: string;
+}): Promise<{ bookingId: string; start: RenderedInstant; end: RenderedInstant }> {
+  return request(`/bookings/${args.bookingId}/reschedule`, {
+    method: "POST",
+    body: JSON.stringify({ rescheduleToken: args.rescheduleToken, start: args.start, end: args.end }),
+  });
+}
+
+export function cancelBooking(args: {
+  bookingId: string;
+  cancelToken: string;
+  reason?: string;
+}): Promise<{ bookingId: string; status: string }> {
+  return request(`/bookings/${args.bookingId}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ cancelToken: args.cancelToken, reason: args.reason }),
+  });
+}
+
 export function getMyCalendars(): Promise<{ calendars: CalendarEntry[] }> {
   return request("/api/me/calendars");
 }

@@ -37,6 +37,7 @@ import type { AssignmentCandidate, BookingRecord } from "../../core/assignment/r
 import type { BookingState, BookingStateError } from "../../core/booking/state";
 import { ok, type Result } from "../../lib/result";
 import { suggestEmailDomain } from "../../lib/email-typo";
+import { enqueueInviteEmail as jobsEnqueueInviteEmail } from "../../jobs/index";
 
 /** Same "inject repo functions, not module bindings" convention as
  * src/api/routes/availability.ts (task 13), so tests can stub every
@@ -70,6 +71,9 @@ export interface BookingDeps {
   readonly getBookingById: (id: string) => Promise<BookingRow | null>;
   readonly getBookingHistoryForHosts: (hostUserIds: readonly string[]) => Promise<readonly BookingRecord[]>;
   readonly now: () => Temporal.Instant;
+  /** Optional so existing dep fixtures keep compiling; the default wires the
+   * pg-boss invite-email queue. Must never throw into the response path. */
+  readonly enqueueInviteEmail?: (bookingId: string, kind: "created" | "rescheduled" | "cancelled") => Promise<void>;
 }
 
 const defaultDeps: BookingDeps = {
@@ -88,6 +92,7 @@ const defaultDeps: BookingDeps = {
   getBookingById: (id) => dbGetBookingById(id),
   getBookingHistoryForHosts: (hostUserIds) => dbGetBookingHistoryForHosts(hostUserIds),
   now: () => Temporal.Now.instant(),
+  enqueueInviteEmail: (bookingId, kind) => jobsEnqueueInviteEmail(bookingId, kind),
 };
 
 const HOLD_TTL_MINUTES = 10;
@@ -314,7 +319,36 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     const booking = await deps.getBookingById(confirmed.value.bookingId);
     if (!booking) return c.json({ error: "booking_not_found" }, 500);
 
+    await deps.enqueueInviteEmail?.(booking.id, "created");
+
     return c.json(renderBookingConfirmation(booking), 201);
+  });
+
+  // Read side of the reschedule email link: token-authenticated booking
+  // context so the reschedule page knows which event type's slots to show.
+  router.get("/bookings/:id/reschedule-context", async (c) => {
+    const id = c.req.param("id");
+    const token = c.req.query("token");
+    if (!token) return c.json({ error: "invalid_body" }, 400);
+
+    const booking = await deps.getBookingById(id);
+    if (!booking) return c.json({ error: "booking_not_found" }, 404);
+    if (!tokensMatch(booking.rescheduleToken, token)) {
+      return c.json({ error: "invalid_token" }, 403);
+    }
+
+    const eventType = await deps.getEventTypeForBookingById(booking.eventTypeId);
+    if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+
+    return c.json({
+      bookingId: booking.id,
+      eventTypeSlug: eventType.slug,
+      durationMinutes: eventType.durationMinutes,
+      status: booking.status,
+      start: renderInstant(booking.startsAt, booking.inviteeTimezone),
+      end: renderInstant(booking.endsAt, booking.inviteeTimezone),
+      inviteeTimezone: booking.inviteeTimezone,
+    });
   });
 
   router.post("/bookings/:id/reschedule", async (c) => {
@@ -379,6 +413,8 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       return c.json({ error: error.kind }, confirmHoldErrorStatus(error.kind));
     }
 
+    await deps.enqueueInviteEmail?.(booking.id, "rescheduled");
+
     return c.json({
       bookingId: booking.id,
       start: renderInstant(slot.start, booking.inviteeTimezone),
@@ -403,6 +439,8 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (!cancelled.ok) {
       return c.json({ error: "illegal_transition", reason: cancelled.error.reason }, 409);
     }
+
+    await deps.enqueueInviteEmail?.(booking.id, "cancelled");
 
     return c.json({ bookingId: booking.id, status: cancelled.value.status });
   });
