@@ -48,8 +48,8 @@ describe("DST fixtures", () => {
   });
 
   test("US fall-back repeats the wall-clock hour", () => {
-    const earlier = zoned("2027-11-07 01:30", usFallBack.timeZone, "earlier");
-    const later = zoned("2027-11-07 01:30", usFallBack.timeZone, "later");
+    const earlier = zoned(usFallBack.localTransition, usFallBack.timeZone, "earlier");
+    const later = zoned(usFallBack.localTransition, usFallBack.timeZone, "later");
     expect(earlier.offset).toBe("-04:00");
     expect(later.offset).toBe("-05:00");
     expect(later.toInstant().epochMilliseconds - earlier.toInstant().epochMilliseconds).toBe(3600_000);

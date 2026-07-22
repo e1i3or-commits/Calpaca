@@ -16,11 +16,11 @@ export const usSpringForward: DstFixture = {
   localTransition: "2027-03-14 02:00",
 };
 
-/** US fall-back: first Sunday of November, 01:00-02:00 repeats (a fold); 02:00 itself is unambiguous. */
+/** US fall-back: first Sunday of November, the 01:00-02:00 wall-clock hour repeats (a fold). */
 export const usFallBack: DstFixture = {
   name: "US fall-back",
   timeZone: "America/New_York",
-  localTransition: "2027-11-07 02:00",
+  localTransition: "2027-11-07 01:30",
 };
 
 /** Southern-hemisphere DST start: first Sunday of October, clocks skip 02:00 -> 03:00 (a gap). */
