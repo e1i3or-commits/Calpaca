@@ -14,6 +14,7 @@ import {
   type BookingState,
   type BookingStateError,
 } from "../core/booking/state";
+import type { BookingRecord } from "../core/assignment/round-robin";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -158,4 +159,73 @@ export async function rebuildProjection(
     await writeProjection(tx, bookingId, result.value);
     return result;
   });
+}
+
+export interface BookingRow {
+  readonly id: string;
+  readonly eventTypeId: string;
+  readonly startsAt: Temporal.Instant;
+  readonly endsAt: Temporal.Instant;
+  readonly inviteeEmail: string;
+  readonly inviteeName: string;
+  readonly inviteeTimezone: string;
+  readonly hostUserIds: readonly string[];
+  readonly status: string;
+  readonly rescheduleToken: string;
+  readonly cancelToken: string;
+}
+
+/** Loads a booking row for the booking endpoints (task 14): reschedule/cancel
+ * authenticate against rescheduleToken/cancelToken here, and /bookings uses it
+ * to render the confirmation response after confirmHold. */
+export async function getBookingById(id: string, executor: Db = getDb()): Promise<BookingRow | null> {
+  const [row] = await executor.select().from(bookings).where(eq(bookings.id, id));
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    eventTypeId: row.eventTypeId,
+    startsAt: Temporal.Instant.fromEpochMilliseconds(row.startsAt.getTime()),
+    endsAt: Temporal.Instant.fromEpochMilliseconds(row.endsAt.getTime()),
+    inviteeEmail: row.inviteeEmail,
+    inviteeName: row.inviteeName,
+    inviteeTimezone: row.inviteeTimezone,
+    hostUserIds: row.hostUserIds,
+    status: row.status,
+    rescheduleToken: row.rescheduleToken,
+    cancelToken: row.cancelToken,
+  };
+}
+
+/**
+ * Past "created" events for the given hosts, as round-robin's BookingRecord
+ * (task 10 input) - `bookedAt` is when the host's turn was used (the booking
+ * was created), not the meeting time, since that's what weighted
+ * least-recently-booked ranks on. The kind filter narrows the join at the
+ * database; the per-host membership test happens in JS because hostUserIds is
+ * a jsonb array and this project favors the simple approach over a jsonb
+ * containment operator for what is, at this project's scale, a small table.
+ */
+export async function getBookingHistoryForHosts(
+  hostUserIds: readonly string[],
+  executor: Db = getDb(),
+): Promise<BookingRecord[]> {
+  if (hostUserIds.length === 0) return [];
+  const wanted = new Set(hostUserIds);
+
+  const rows = await executor
+    .select({ hostUserIds: bookings.hostUserIds, createdAt: bookingEvents.createdAt })
+    .from(bookingEvents)
+    .innerJoin(bookings, eq(bookingEvents.bookingId, bookings.id))
+    .where(eq(bookingEvents.kind, "created"));
+
+  const records: BookingRecord[] = [];
+  for (const row of rows) {
+    for (const hostUserId of row.hostUserIds) {
+      if (wanted.has(hostUserId)) {
+        records.push({ userId: hostUserId, bookedAt: Temporal.Instant.fromEpochMilliseconds(row.createdAt.getTime()) });
+      }
+    }
+  }
+  return records;
 }

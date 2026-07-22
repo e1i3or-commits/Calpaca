@@ -7,6 +7,8 @@ import * as schema from "./schema";
 import { ok, err, type Result } from "../lib/result";
 import { generateToken } from "../lib/id";
 import { appendEvent } from "./booking-repo";
+import { assign, type AssignmentCandidate, type BookingRecord } from "../core/assignment/round-robin";
+import type { BookingState, BookingStateError } from "../core/booking/state";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -91,16 +93,34 @@ export async function createHold(
 }
 
 /**
+ * Round-robin assignment input for confirmHold (task 14): `candidates` is the
+ * pool's weights (event_type_hosts), `history` is past bookings for load
+ * ranking. Winner selection happens inside confirmHold's own FOR-UPDATE
+ * transaction so the hold row a concurrent racer sees is already resolved.
+ */
+export interface RoundRobinAssignment {
+  readonly candidates: readonly AssignmentCandidate[];
+  readonly history: readonly BookingRecord[];
+}
+
+/**
  * Locks the given hold rows FOR UPDATE, re-verifies each is still active and
  * unexpired, then creates the booking + "created" event (booking-repo,
  * task 11) and marks the holds confirmed — all in one transaction. The
  * bookings row is inserted here, inside the same transaction that appends
  * the "created" event, satisfying booking-repo's ordering requirement.
+ *
+ * `assignment` is round robin only (task 14): when present, one hold row per
+ * currently-free candidate is expected (from /holds recomputing team
+ * availability), and only the winner of weighted least-recently-booked is
+ * confirmed - every other candidate's hold is released, never confirmed, so
+ * it can't linger as a phantom booking claim.
  */
 export async function confirmHold(
   holdIds: readonly string[],
   invitee: Invitee,
   executor: Db = getDb(),
+  assignment?: RoundRobinAssignment,
 ): Promise<Result<ConfirmedBooking, ConfirmHoldError>> {
   return executor.transaction(async (tx) => {
     const rows = await tx
@@ -125,9 +145,26 @@ export async function confirmHold(
     const [first] = rows;
     if (!first) return err({ kind: "not_found" });
 
-    const hostUserIds = rows.map((row) => row.hostUserId);
     const startsAt = toInstant(first.slotStart);
     const endsAt = toInstant(first.slotEnd);
+
+    let hostUserIds = rows.map((row) => row.hostUserId);
+    let holdIdsToConfirm = [...holdIds];
+
+    if (assignment) {
+      const eligible = assignment.candidates.filter((c) => hostUserIds.includes(c.userId));
+      const winner = assign({ start: startsAt, end: endsAt }, eligible, assignment.history);
+      const winningRow = winner ? rows.find((row) => row.hostUserId === winner) : undefined;
+      if (!winningRow) return err({ kind: "not_found" });
+
+      const losingHoldIds = rows.filter((row) => row.id !== winningRow.id).map((row) => row.id);
+      if (losingHoldIds.length > 0) {
+        await tx.update(holds).set({ status: "released" }).where(inArray(holds.id, losingHoldIds));
+      }
+
+      hostUserIds = [winningRow.hostUserId];
+      holdIdsToConfirm = [winningRow.id];
+    }
 
     const [booking] = await tx
       .insert(bookings)
@@ -148,9 +185,56 @@ export async function confirmHold(
     const created = await appendEvent(booking.id, "created", { startsAt, endsAt, hostUserIds }, tx);
     if (!created.ok) throw new Error(`failed to append created event: ${created.error.reason}`);
 
-    await tx.update(holds).set({ status: "confirmed" }).where(inArray(holds.id, [...holdIds]));
+    await tx.update(holds).set({ status: "confirmed" }).where(inArray(holds.id, holdIdsToConfirm));
 
     return ok({ bookingId: booking.id, hostUserIds });
+  });
+}
+
+/**
+ * Reschedule's "confirm" step (task 14): same FOR-UPDATE re-verification as
+ * confirmHold, but the booking already exists, so this appends a
+ * "rescheduled" event (booking-repo, task 11) instead of inserting a new
+ * bookings row. Illegal transitions (cancelled/no_show) surface as the typed
+ * BookingStateError, not a generic failure.
+ */
+export async function confirmReschedule(
+  bookingId: string,
+  holdIds: readonly string[],
+  executor: Db = getDb(),
+): Promise<Result<BookingState, ConfirmHoldError | BookingStateError>> {
+  return executor.transaction(async (tx) => {
+    const rows = await tx
+      .select()
+      .from(holds)
+      .where(inArray(holds.id, [...holdIds]))
+      .for("update");
+
+    const foundIds = new Set(rows.map((row) => row.id));
+    if (holdIds.length === 0 || !holdIds.every((id) => foundIds.has(id))) {
+      return err({ kind: "not_found" });
+    }
+
+    const now = Temporal.Now.instant();
+    for (const row of rows) {
+      if (row.status !== "active") return err({ kind: "not_active" });
+      if (Temporal.Instant.compare(toInstant(row.expiresAt), now) <= 0) {
+        return err({ kind: "expired" });
+      }
+    }
+
+    const [first] = rows;
+    if (!first) return err({ kind: "not_found" });
+
+    const startsAt = toInstant(first.slotStart);
+    const endsAt = toInstant(first.slotEnd);
+
+    const rescheduled = await appendEvent(bookingId, "rescheduled", { startsAt, endsAt }, tx);
+    if (!rescheduled.ok) return rescheduled;
+
+    await tx.update(holds).set({ status: "confirmed" }).where(inArray(holds.id, [...holdIds]));
+
+    return rescheduled;
   });
 }
 

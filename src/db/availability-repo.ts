@@ -22,6 +22,32 @@ export interface EventTypeConfig {
   readonly publicSelectableHostIds: readonly string[];
 }
 
+export type AssignmentMode = "solo" | "round_robin" | "group";
+
+/** Booking-endpoint view of an event type: adds the assignment mode the
+ * availability endpoint has no use for, and drops the fields only it needs. */
+export interface BookingEventTypeConfig {
+  readonly id: string;
+  readonly durationMinutes: number;
+  readonly bufferBeforeMin: number;
+  readonly bufferAfterMin: number;
+  readonly minimumNoticeMin: number;
+  readonly mode: AssignmentMode;
+  readonly publicSelectableHostIds: readonly string[];
+}
+
+function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingEventTypeConfig {
+  return {
+    id: row.id,
+    durationMinutes: row.durationMinutes,
+    bufferBeforeMin: row.bufferBeforeMin,
+    bufferAfterMin: row.bufferAfterMin,
+    minimumNoticeMin: row.minimumNoticeMin,
+    mode: row.mode,
+    publicSelectableHostIds: row.publicSelectableHostIds,
+  };
+}
+
 export interface EventTypeHostRecord {
   readonly userId: string;
   readonly role: "member" | "required" | "optional";
@@ -67,6 +93,27 @@ export async function getEventTypeBySlug(
     curatedSlotCount: row.curatedSlotCount,
     publicSelectableHostIds: row.publicSelectableHostIds,
   };
+}
+
+/** Loads one event type by slug for the booking endpoints (task 14): same
+ * table as getEventTypeBySlug, but shaped around assignment mode instead of
+ * slot-rendering config. */
+export async function getEventTypeForBooking(
+  slug: string,
+  executor: Db = getDb(),
+): Promise<BookingEventTypeConfig | null> {
+  const [row] = await executor.select().from(eventTypes).where(eq(eventTypes.slug, slug));
+  return row ? toBookingEventTypeConfig(row) : null;
+}
+
+/** Same shape as getEventTypeForBooking, keyed by id (reschedule looks up the
+ * event type of an existing booking, which only has the id, not the slug). */
+export async function getEventTypeForBookingById(
+  id: string,
+  executor: Db = getDb(),
+): Promise<BookingEventTypeConfig | null> {
+  const [row] = await executor.select().from(eventTypes).where(eq(eventTypes.id, id));
+  return row ? toBookingEventTypeConfig(row) : null;
 }
 
 /** Loads every host assigned to an event type, with their round-robin/group role. */
