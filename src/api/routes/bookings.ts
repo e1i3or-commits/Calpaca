@@ -37,7 +37,7 @@ import type { AssignmentCandidate, BookingRecord } from "../../core/assignment/r
 import type { BookingState, BookingStateError } from "../../core/booking/state";
 import { ok, type Result } from "../../lib/result";
 import { suggestEmailDomain } from "../../lib/email-typo";
-import { enqueueInviteEmail as jobsEnqueueInviteEmail } from "../../jobs/index";
+import { enqueueInviteEmail as jobsEnqueueInviteEmail, emitBookingWebhook as jobsEmitBookingWebhook } from "../../jobs/index";
 
 /** Same "inject repo functions, not module bindings" convention as
  * src/api/routes/availability.ts (task 13), so tests can stub every
@@ -74,6 +74,12 @@ export interface BookingDeps {
   /** Optional so existing dep fixtures keep compiling; the default wires the
    * pg-boss invite-email queue. Must never throw into the response path. */
   readonly enqueueInviteEmail?: (bookingId: string, kind: "created" | "rescheduled" | "cancelled") => Promise<void>;
+  /** Same optional contract: the default enqueues the webhook fan-out job. */
+  readonly emitBookingWebhook?: (
+    bookingId: string,
+    kind: "created" | "rescheduled" | "cancelled",
+    opts?: { reason?: string },
+  ) => Promise<void>;
 }
 
 const defaultDeps: BookingDeps = {
@@ -93,6 +99,7 @@ const defaultDeps: BookingDeps = {
   getBookingHistoryForHosts: (hostUserIds) => dbGetBookingHistoryForHosts(hostUserIds),
   now: () => Temporal.Now.instant(),
   enqueueInviteEmail: (bookingId, kind) => jobsEnqueueInviteEmail(bookingId, kind),
+  emitBookingWebhook: (bookingId, kind, opts) => jobsEmitBookingWebhook(bookingId, kind, opts),
 };
 
 const HOLD_TTL_MINUTES = 10;
@@ -320,6 +327,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (!booking) return c.json({ error: "booking_not_found" }, 500);
 
     await deps.enqueueInviteEmail?.(booking.id, "created");
+    await deps.emitBookingWebhook?.(booking.id, "created");
 
     return c.json(renderBookingConfirmation(booking), 201);
   });
@@ -414,6 +422,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     }
 
     await deps.enqueueInviteEmail?.(booking.id, "rescheduled");
+    await deps.emitBookingWebhook?.(booking.id, "rescheduled");
 
     return c.json({
       bookingId: booking.id,
@@ -441,6 +450,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     }
 
     await deps.enqueueInviteEmail?.(booking.id, "cancelled");
+    await deps.emitBookingWebhook?.(booking.id, "cancelled", { reason });
 
     return c.json({ bookingId: booking.id, status: cancelled.value.status });
   });

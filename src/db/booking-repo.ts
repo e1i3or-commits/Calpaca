@@ -198,6 +198,7 @@ export async function getBookingById(id: string, executor: Db = getDb()): Promis
 }
 
 export interface InviteHost {
+  readonly id: string;
   readonly name: string;
   readonly email: string;
   readonly timezone: string;
@@ -238,7 +239,7 @@ export async function getInviteContext(
   const byId = new Map(hostRows.map((h) => [h.id, h]));
   const hosts = booking.hostUserIds.flatMap((id) => {
     const row = byId.get(id);
-    return row ? [{ name: row.name, email: row.email, timezone: row.timezone }] : [];
+    return row ? [{ id: row.id, name: row.name, email: row.email, timezone: row.timezone }] : [];
   });
 
   const rescheduled = await executor

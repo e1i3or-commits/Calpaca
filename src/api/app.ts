@@ -3,6 +3,7 @@ import { getAuth } from "../auth/index";
 import { availabilityRoutes } from "./routes/availability";
 import { bookingRoutes } from "./routes/bookings";
 import { meRoutes } from "./routes/me";
+import { webhookAdminRoutes } from "./routes/webhook-admin";
 import { webhookRoutes } from "./routes/webhooks";
 
 export const app = new Hono();
@@ -13,4 +14,5 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => getAuth().handler(c.req.raw));
 app.route("/", availabilityRoutes);
 app.route("/", bookingRoutes);
 app.route("/", meRoutes);
+app.route("/", webhookAdminRoutes);
 app.route("/", webhookRoutes);

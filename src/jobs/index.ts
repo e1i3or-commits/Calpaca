@@ -5,6 +5,12 @@ import { listEvents, watchEvents } from "../sync/google";
 import { sendInvite } from "./invite-email";
 import type { InviteKind } from "../core/invite/email";
 import {
+  deliverWebhook,
+  fanOutBookingWebhooks,
+  type BookingWebhookKind,
+  type DeliveryJob,
+} from "./webhook-delivery";
+import {
   getConnection,
   listConnectionsNeedingChannel,
   listGoogleConnections,
@@ -25,11 +31,17 @@ import {
 //                  24h; skipped entirely without PUBLIC_URL
 // invite-email     one send per booking lifecycle change (ICS + text);
 //                  retried by pg-boss, no-op when SMTP is not configured
+// webhook-fanout   one per lifecycle change: builds a signed-body delivery
+//                  job per active matching endpoint
+// webhook-delivery one POST per endpoint per event; per-endpoint retries so
+//                  a dead consumer never delays another
 
 export const SYNC_QUEUE = "calendar-sync";
 const SWEEP_QUEUE = "sync-sweep";
 const RENEWAL_QUEUE = "channel-renewal";
 const INVITE_QUEUE = "invite-email";
+const WEBHOOK_FANOUT_QUEUE = "webhook-fanout";
+const WEBHOOK_DELIVERY_QUEUE = "webhook-delivery";
 
 const CHANNEL_RENEW_AHEAD_MS = 24 * 60 * 60 * 1000;
 
@@ -67,6 +79,23 @@ export async function enqueueInviteEmail(bookingId: string, kind: InviteKind): P
     await getBoss().send(INVITE_QUEUE, { bookingId, kind }, { retryLimit: 5, retryDelay: 60, retryBackoff: true });
   } catch (e) {
     console.error(`[jobs] enqueue invite ${kind} for ${bookingId} failed:`, e);
+  }
+}
+
+/** Fire-and-forget from the booking routes, same contract as
+ * enqueueInviteEmail: a failed enqueue must never fail the booking. */
+export async function emitBookingWebhook(
+  bookingId: string,
+  kind: BookingWebhookKind,
+  opts?: { reason?: string },
+): Promise<void> {
+  try {
+    await getBoss().send(WEBHOOK_FANOUT_QUEUE, { bookingId, kind, reason: opts?.reason }, {
+      retryLimit: 3,
+      retryDelay: 30,
+    });
+  } catch (e) {
+    console.error(`[jobs] enqueue webhook fan-out ${kind} for ${bookingId} failed:`, e);
   }
 }
 
@@ -139,6 +168,30 @@ export async function startJobs(): Promise<void> {
 
   await b.work<{ bookingId: string; kind: InviteKind }>(INVITE_QUEUE, async ([job]) => {
     if (job) await sendInvite(job.data.bookingId, job.data.kind);
+  });
+
+  await b.createQueue(WEBHOOK_FANOUT_QUEUE);
+  await b.createQueue(WEBHOOK_DELIVERY_QUEUE);
+
+  await b.work<{ bookingId: string; kind: BookingWebhookKind; reason?: string }>(
+    WEBHOOK_FANOUT_QUEUE,
+    async ([job]) => {
+      if (!job) return;
+      const deliveries = await fanOutBookingWebhooks(job.data.bookingId, job.data.kind, {
+        reason: job.data.reason,
+      });
+      for (const delivery of deliveries) {
+        await b.send(WEBHOOK_DELIVERY_QUEUE, delivery, {
+          retryLimit: 8,
+          retryDelay: 30,
+          retryBackoff: true,
+        });
+      }
+    },
+  );
+
+  await b.work<DeliveryJob>(WEBHOOK_DELIVERY_QUEUE, async ([job]) => {
+    if (job) await deliverWebhook(job.data);
   });
 
   await b.work(SWEEP_QUEUE, async () => {
