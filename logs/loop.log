@@ -1,0 +1,5 @@
+[04:29:12] claude exited 1
+[04:29:12] Verification failed.
+[04:29:12] BLOCKED: 01-scaffold
+[04:29:12] 3 consecutive blocked tasks. Environment likely broken. Stopping.
+[04:29:12] Run finished. Summary at /work/logs/loop-summary.md

@@ -1,0 +1,2 @@
+- BLOCKED: 01-scaffold after 3 attempts (see logs)
+- STOPPED: 3 consecutive blocks
