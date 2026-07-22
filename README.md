@@ -29,13 +29,26 @@ cp -r /path/to/handoff/{CLAUDE.md,docs,tasks,scripts,BACKLOG.md} .
 git add -A && git commit -m "chore: handoff package baseline"
 git checkout -b overnight/phase-1
 
-# Build the agent container
+# Build the agent container (runs as node, uid 1000 — the mounted repo
+# and .git must be writable by uid 1000, never root-owned)
 docker build -f scripts/Dockerfile.agent -t scheduler-agent .
+
+# Auth: subscription OAuth token, not an API key. On your workstation
+# (where you are logged in to Claude Code):
+#   claude setup-token        # browser OAuth flow, prints a 1-year token
+# Then on this box:
+export CLAUDE_CODE_OAUTH_TOKEN=<the token>
+unset ANTHROPIC_API_KEY   # if both are set, the API key silently wins
+                          # and you are back on per-token card billing
 
 # Accept the bypass-permissions confirmation ONCE interactively.
 # Known gotcha: without this, headless runs can park on a one-time
-# confirmation dialog and produce zero work all night.
-docker run -it -v "$PWD":/work -e ANTHROPIC_API_KEY scheduler-agent \
+# confirmation dialog and produce zero work all night. The claude-config
+# volume persists the acknowledgment; it must be owned by uid 1000 and
+# CLAUDE_CODE_OAUTH_TOKEN must point claude at it via CLAUDE_CONFIG_DIR.
+docker run -it -v "$PWD":/work -v claude-config:/home/node/.claude \
+  -e CLAUDE_CONFIG_DIR=/home/node/.claude \
+  -e CLAUDE_CODE_OAUTH_TOKEN scheduler-agent \
   claude --dangerously-skip-permissions -p "print hello and exit"
 ```
 
@@ -48,13 +61,24 @@ docker run -d --name overnight-db --network overnight-net \
   -e POSTGRES_DB=test postgres:16
 docker run -d --name overnight --network overnight-net \
   -v "$PWD":/work \
-  -e ANTHROPIC_API_KEY \
+  -v claude-config:/home/node/.claude \
+  -e CLAUDE_CONFIG_DIR=/home/node/.claude \
+  -e CLAUDE_CODE_OAUTH_TOKEN \
   -e TEST_DATABASE_URL=postgres://test:test@overnight-db:5432/test \
   scheduler-agent bash scripts/loop.sh
+
+# Confirm only the OAuth token made it in (no API key = no card billing):
+docker exec overnight env | grep -o -E "ANTHROPIC[A-Z_]*|CLAUDE_CODE[A-Z_]*"
 
 # Watch it live if you want
 docker logs -f overnight
 ```
+
+Subscription-billing caveats: check remaining usage credit before launch —
+if it exhausts mid-run, requests fail and the loop reads that as Claude
+failing (it will burn attempts until the 3-consecutive-blocks stop fires).
+Credit is per-user and does not roll over; a month-end run against unused
+credit costs nothing extra.
 
 Note: with `TEST_DATABASE_URL` set for the whole run, integration tests
 execute during verification of every task after 11, not only task 12. That

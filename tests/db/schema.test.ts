@@ -4,6 +4,9 @@ import * as schema from "../../src/db/schema";
 
 const expectedTables: Record<string, string> = {
   users: "users",
+  sessions: "sessions",
+  accounts: "accounts",
+  verifications: "verifications",
   teams: "teams",
   teamMembers: "team_members",
   calendarConnections: "calendar_connections",

@@ -132,3 +132,20 @@ the morning review can trust the night's work.
 `bun run verify` is the whole gate: typecheck, lint, all tests. It must pass
 from a clean checkout. If it passes locally but you changed test files outside
 an explicit test task, the loop will still reject the work.
+
+## Operator sessions (interactive, human present)
+
+An interactive session on the deployment box may act as the launch
+operator. Operator sessions may:
+- build the agent image and verify the toolchain inside it
+- create the overnight-net network and start the overnight-db sidecar
+- run preflight checks: git state, task queue count, harness syntax,
+  pg_isready, uid write test against the mounted repo
+- start the overnight loop container and tail its logs
+- report status; never interpret or fix task failures mid-run
+
+Operator sessions must NOT: edit anything under scripts/ or tasks/,
+edit this file, run loop.sh directly outside its container, delete
+containers or volumes, or enable usage spillover / change billing.
+The one-time bypass-permissions acceptance dialog requires a human TTY
+and is always done by the human.

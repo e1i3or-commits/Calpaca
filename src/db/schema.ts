@@ -20,10 +20,15 @@ export const holdStatus = pgEnum("hold_status", [
   "active", "confirmed", "expired", "released",
 ]);
 
+// Doubles as BetterAuth's user model (drizzleAdapter usePlural maps user ->
+// users). BetterAuth requires emailVerified/image/updatedAt; timezone and
+// prefs are app-owned and never pass through the auth layer.
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
   timezone: text("timezone").notNull().default("UTC"), // IANA
   // scoring preferences
   prefs: jsonb("prefs").$type<{
@@ -32,7 +37,49 @@ export const users = pgTable("users", {
     focusBlocks?: { dow: number; start: string; end: string }[];
   }>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// BetterAuth-managed tables. uuid ids (not BetterAuth's default text ids)
+// via advanced.database.generateId = crypto.randomUUID in src/auth.
+export const sessions = pgTable("sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("session_user_idx").on(t.userId)]);
+
+// accounts is the OAuth token store: Google access/refresh tokens live here
+// and nowhere else. The sync worker reads them via auth.api.getAccessToken,
+// which refreshes expired tokens itself.
+export const accounts = pgTable("accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull(),   // provider-side user id
+  providerId: text("provider_id").notNull(), // "google"
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
+  scope: text("scope"),
+  password: text("password"), // unused (no credential auth); BetterAuth expects the column
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("account_user_idx").on(t.userId)]);
+
+export const verifications = pgTable("verifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("verification_identifier_idx").on(t.identifier)]);
 
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
