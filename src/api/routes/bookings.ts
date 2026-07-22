@@ -35,6 +35,7 @@ import { expandRules } from "../../core/availability/rules";
 import { subtract, type Interval } from "../../core/availability/intervals";
 import type { AssignmentCandidate, BookingRecord } from "../../core/assignment/round-robin";
 import type { BookingState, BookingStateError } from "../../core/booking/state";
+import type { RoutingAnswers } from "../../core/routing/condition";
 import { ok, type Result } from "../../lib/result";
 import { suggestEmailDomain } from "../../lib/email-typo";
 import { enqueueInviteEmail as jobsEnqueueInviteEmail, emitBookingWebhook as jobsEmitBookingWebhook } from "../../jobs/index";
@@ -59,6 +60,7 @@ export interface BookingDeps {
     holdIds: readonly string[],
     invitee: Invitee,
     assignment?: RoundRobinAssignment,
+    routingAnswers?: RoutingAnswers,
   ) => Promise<Result<ConfirmedBooking, ConfirmHoldError>>;
   readonly confirmReschedule: (
     bookingId: string,
@@ -89,7 +91,8 @@ const defaultDeps: BookingDeps = {
   getSchedulesForUsers: (userIds) => dbGetSchedulesForUsers(userIds),
   getBusyForUsers: (userIds, window) => dbGetBusyForUsers(userIds, window),
   createHold: (eventTypeId, hostUserIds, slot, ttl) => dbCreateHold(eventTypeId, hostUserIds, slot, ttl),
-  confirmHold: (holdIds, invitee, assignment) => dbConfirmHold(holdIds, invitee, undefined, assignment),
+  confirmHold: (holdIds, invitee, assignment, routingAnswers) =>
+    dbConfirmHold(holdIds, invitee, undefined, assignment, routingAnswers),
   confirmReschedule: (bookingId, holdIds) => dbConfirmReschedule(bookingId, holdIds),
   cancelBooking: async (bookingId, reason) => {
     const result = await appendEvent(bookingId, "cancelled", { reason });
@@ -119,6 +122,10 @@ const bookingBodySchema = z.object({
     name: z.string().min(1),
     timezone: z.string().min(1),
   }),
+  // present when the booking came through a routing form (/routing/evaluate)
+  routingAnswers: z
+    .record(z.string(), z.union([z.string().max(1000), z.array(z.string().max(200)).max(50)]))
+    .optional(),
 });
 
 const rescheduleBodySchema = z.object({
@@ -303,7 +310,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     const body = await c.req.json().catch(() => null);
     const parsed = bookingBodySchema.safeParse(body);
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
-    const { eventTypeSlug, holdIds, invitee } = parsed.data;
+    const { eventTypeSlug, holdIds, invitee, routingAnswers } = parsed.data;
 
     const eventType = await deps.getEventTypeForBooking(eventTypeSlug);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
@@ -318,7 +325,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       assignment = { candidates, history };
     }
 
-    const confirmed = await deps.confirmHold(holdIds, invitee, assignment);
+    const confirmed = await deps.confirmHold(holdIds, invitee, assignment, routingAnswers);
     if (!confirmed.ok) {
       return c.json({ error: confirmed.error.kind }, confirmHoldErrorStatus(confirmed.error.kind));
     }

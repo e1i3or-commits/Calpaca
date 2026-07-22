@@ -27,6 +27,7 @@ function serializePayload(event: BookingEvent): StoredPayload {
         startsAt: event.payload.startsAt.toString(),
         endsAt: event.payload.endsAt.toString(),
         hostUserIds: event.payload.hostUserIds,
+        ...(event.payload.routingAnswers ? { routingAnswers: event.payload.routingAnswers } : {}),
       };
     case "rescheduled":
       return {
@@ -50,15 +51,20 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
   const payload = (row.payload ?? {}) as Record<string, unknown>;
 
   switch (row.kind) {
-    case "created":
+    case "created": {
+      const routingAnswers = payload["routingAnswers"] as
+        | Record<string, string | string[]>
+        | undefined;
       return {
         kind: "created",
         payload: {
           startsAt: Temporal.Instant.from(payload["startsAt"] as string),
           endsAt: Temporal.Instant.from(payload["endsAt"] as string),
           hostUserIds: payload["hostUserIds"] as string[],
+          ...(routingAnswers ? { routingAnswers } : {}),
         },
       };
+    }
     case "rescheduled":
       return {
         kind: "rescheduled",

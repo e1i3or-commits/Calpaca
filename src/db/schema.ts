@@ -210,6 +210,8 @@ export const bookingEvents = pgTable("booking_events", {
 
 export const routingForms = pgTable("routing_forms", {
   id: uuid("id").primaryKey().defaultRandom(),
+  // owner-or-team scoping, same shape as eventTypes
+  ownerUserId: uuid("owner_user_id").references(() => users.id),
   teamId: uuid("team_id").references(() => teams.id),
   slug: text("slug").notNull().unique(),
   fields: jsonb("fields").notNull(), // form definition

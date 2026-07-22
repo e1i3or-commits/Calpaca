@@ -42,10 +42,14 @@ export type CalendarEntry = {
   connected: boolean;
 };
 
+export type AnswerIssue = { field: string; reason: string };
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    /** field-level detail, present on invalid_answers responses */
+    readonly issues?: AnswerIssue[],
   ) {
     super(`${status}: ${code}`);
   }
@@ -57,8 +61,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new ApiError(res.status, body.error ?? "unknown_error");
+    const body = (await res.json().catch(() => ({}))) as { error?: string; issues?: AnswerIssue[] };
+    throw new ApiError(res.status, body.error ?? "unknown_error", body.issues);
   }
   return res.json() as Promise<T>;
 }
@@ -93,6 +97,7 @@ export function confirmBooking(args: {
   eventTypeSlug: string;
   holdIds: string[];
   invitee: { email: string; name: string; timezone: string };
+  routingAnswers?: RoutingAnswers;
 }): Promise<BookingConfirmation> {
   return request("/bookings", { method: "POST", body: JSON.stringify(args) });
 }
@@ -246,6 +251,81 @@ export function updateEventType(id: string, input: EventTypeInput): Promise<Admi
 
 export function deleteEventType(id: string): Promise<{ ok: true }> {
   return request(`/api/me/event-types/${id}`, { method: "DELETE" });
+}
+
+// ---- routing forms ----
+
+export type RoutingAnswers = Record<string, string | string[]>;
+
+export type RoutingFieldType = "text" | "email" | "select" | "multiselect";
+
+export type RoutingField = {
+  key: string;
+  label: string;
+  type: RoutingFieldType;
+  required: boolean;
+  options?: string[];
+};
+
+export type RoutingCondition =
+  | { kind: "always" }
+  | { kind: "eq"; field: string; value: string }
+  | { kind: "ne"; field: string; value: string }
+  | { kind: "contains"; field: string; value: string }
+  | { kind: "in"; field: string; values: string[] }
+  | { kind: "and"; all: RoutingCondition[] }
+  | { kind: "or"; any: RoutingCondition[] }
+  | { kind: "not"; not: RoutingCondition };
+
+export type RoutingRule = {
+  priority: number;
+  condition: RoutingCondition;
+  targetEventTypeId: string | null;
+  targetHostUserId: string | null;
+};
+
+export type RoutingForm = {
+  id: string;
+  ownerUserId: string | null;
+  teamId: string | null;
+  slug: string;
+  fields: RoutingField[];
+  rules: (RoutingRule & { id: string })[];
+};
+
+export type RoutingFormInput = {
+  slug: string;
+  teamId: string | null;
+  fields: RoutingField[];
+  rules: RoutingRule[];
+};
+
+export type RoutingEvaluation =
+  | { matched: false }
+  | { matched: true; eventTypeSlug: string | null; hostUserId: string | null; answers: RoutingAnswers };
+
+export function getRoutingForm(slug: string): Promise<{ slug: string; fields: RoutingField[] }> {
+  return request(`/routing/${encodeURIComponent(slug)}`);
+}
+
+export function evaluateRouting(slug: string, answers: RoutingAnswers): Promise<RoutingEvaluation> {
+  return request("/routing/evaluate", { method: "POST", body: JSON.stringify({ slug, answers }) });
+}
+
+export function listRoutingForms(): Promise<{ forms: RoutingForm[] }> {
+  return request("/api/me/routing-forms");
+}
+
+export function createRoutingForm(input: RoutingFormInput): Promise<RoutingForm> {
+  return request("/api/me/routing-forms", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateRoutingForm(id: string, input: RoutingFormInput): Promise<RoutingForm> {
+  return request(`/api/me/routing-forms/${id}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function deleteRoutingForm(id: string): Promise<{ ok: true }> {
+  return request(`/api/me/routing-forms/${id}`, { method: "DELETE" });
 }
 
 export async function signInWithGoogle(callbackURL: string): Promise<string> {

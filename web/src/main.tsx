@@ -11,7 +11,9 @@ import { BookingPage } from "@/pages/booking-page";
 import { CancelPage } from "@/pages/cancel-page";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { ReschedulePage } from "@/pages/reschedule-page";
+import { RoutingFormPage } from "@/pages/routing-form-page";
 import { SignInPage } from "@/pages/sign-in-page";
+import type { RoutingAnswers } from "@/lib/api";
 import "./styles.css";
 
 // Code-based routes: four pages don't justify the file-router codegen step.
@@ -33,12 +35,42 @@ const indexRoute = createRoute({
   ),
 });
 
+// Routing forms hand off ?answers= as JSON. The router's default search
+// parser already JSON.parses object-looking values, so accept both shapes;
+// malformed answers just book without them.
+function parseAnswers(raw: unknown): RoutingAnswers | undefined {
+  if (raw && typeof raw === "object") return raw as RoutingAnswers;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === "object") return parsed as RoutingAnswers;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 const bookRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/book/$slug",
+  validateSearch: (s: Record<string, unknown>): { answers?: RoutingAnswers } => {
+    const answers = parseAnswers(s.answers);
+    return answers ? { answers } : {};
+  },
   component: function BookRoute() {
     const { slug } = bookRoute.useParams();
-    return <BookingPage slug={slug} />;
+    const { answers } = bookRoute.useSearch();
+    return <BookingPage slug={slug} routingAnswers={answers} />;
+  },
+});
+
+const routingFormRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/r/$slug",
+  component: function RoutingFormRoute() {
+    const { slug } = routingFormRoute.useParams();
+    return <RoutingFormPage slug={slug} />;
   },
 });
 
@@ -82,6 +114,7 @@ const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
     bookRoute,
+    routingFormRoute,
     rescheduleRoute,
     cancelRoute,
     signInRoute,

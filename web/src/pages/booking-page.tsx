@@ -5,6 +5,7 @@ import {
   confirmBooking,
   createHold,
   type BookingConfirmation,
+  type RoutingAnswers,
   type SlotDto,
 } from "@/lib/api";
 import { allTimezones, browserTimezone, formatDayTime, formatTime } from "@/lib/time";
@@ -31,7 +32,14 @@ export function errorMessage(e: unknown): string {
   return "Could not reach the server.";
 }
 
-export function BookingPage({ slug }: { slug: string }) {
+export function BookingPage({
+  slug,
+  routingAnswers,
+}: {
+  slug: string;
+  /** present when the invitee arrived via a routing form (/r/<form>) */
+  routingAnswers?: RoutingAnswers;
+}) {
   const [timezone, setTimezone] = useState(browserTimezone());
   const [step, setStep] = useState<Step>({ name: "pick" });
   const [reloadKey, setReloadKey] = useState(0);
@@ -72,6 +80,7 @@ export function BookingPage({ slug }: { slug: string }) {
               slot={step.slot}
               slug={slug}
               timezone={timezone}
+              routingAnswers={routingAnswers}
               onBack={() => setStep({ name: "pick" })}
               onError={(e) => {
                 setError(errorMessage(e));
@@ -111,6 +120,7 @@ function DetailsStep({
   slot,
   slug,
   timezone,
+  routingAnswers,
   onBack,
   onError,
   onConfirmed,
@@ -118,6 +128,7 @@ function DetailsStep({
   slot: SlotDto;
   slug: string;
   timezone: string;
+  routingAnswers?: RoutingAnswers;
   onBack: () => void;
   onError: (e: unknown) => void;
   onConfirmed: (confirmation: BookingConfirmation) => void;
@@ -136,6 +147,7 @@ function DetailsStep({
         eventTypeSlug: slug,
         holdIds: hold.holdIds,
         invitee: { email, name, timezone },
+        routingAnswers,
       });
       onConfirmed(confirmation);
     } catch (e) {

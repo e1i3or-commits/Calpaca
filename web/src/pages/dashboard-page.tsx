@@ -4,12 +4,15 @@ import {
   ApiError,
   addTeamMember,
   createEventType,
+  createRoutingForm,
   createSchedule,
   createTeam,
   deleteEventType,
+  deleteRoutingForm,
   deleteSchedule,
   getMyCalendars,
   listEventTypes,
+  listRoutingForms,
   listSchedules,
   listTeamMembers,
   listTeams,
@@ -17,11 +20,16 @@ import {
   removeTeamMember,
   signOut,
   updateEventType,
+  updateRoutingForm,
   updateSchedule,
   type AdminEventType,
   type CalendarEntry,
   type DirectoryUser,
   type EventTypeInput,
+  type RoutingCondition,
+  type RoutingField,
+  type RoutingForm,
+  type RoutingFormInput,
   type Schedule,
   type ScheduleInput,
   type ScheduleRule,
@@ -38,6 +46,7 @@ import { TimezoneSelect } from "@/pages/booking-page";
 const TABS = [
   { key: "event-types", label: "Event types" },
   { key: "schedules", label: "Schedules" },
+  { key: "routing", label: "Routing" },
   { key: "team", label: "Team" },
   { key: "calendars", label: "Calendars" },
 ] as const;
@@ -50,6 +59,7 @@ const ERROR_TEXT: Record<string, string> = {
   event_type_in_use: "This event type has bookings; it can't be deleted.",
   invalid_body: "Some fields are invalid — check the form.",
   team_not_found: "Team not found.",
+  form_not_found: "Routing form not found.",
 };
 
 function errorText(e: unknown): string {
@@ -112,6 +122,7 @@ export function DashboardPage() {
         <>
           {tab === "event-types" && <EventTypesTab users={users} />}
           {tab === "schedules" && <SchedulesTab />}
+          {tab === "routing" && <RoutingTab users={users} />}
           {tab === "team" && <TeamTab users={users} />}
           {tab === "calendars" && <CalendarsTab />}
         </>
@@ -704,6 +715,585 @@ function ScheduleForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+// ---- routing forms ----
+
+// The rule builder edits a flat ANDed clause list; anything richer (or/not/in,
+// nested and) was written via the API and is preserved untouched.
+type RoutingClause = { field: string; op: "eq" | "ne" | "contains"; value: string };
+
+function toClauses(c: RoutingCondition): RoutingClause[] | null {
+  if (c.kind === "always") return [];
+  if (c.kind === "eq" || c.kind === "ne" || c.kind === "contains") {
+    return [{ field: c.field, op: c.kind, value: c.value }];
+  }
+  if (c.kind === "and") {
+    const parts = c.all.map(toClauses);
+    if (parts.some((p) => p === null || p.length !== 1)) return null;
+    return parts.flatMap((p) => p ?? []);
+  }
+  return null;
+}
+
+function fromClauses(clauses: RoutingClause[]): RoutingCondition {
+  if (clauses.length === 0) return { kind: "always" };
+  const conds: RoutingCondition[] = clauses.map((cl) => ({
+    kind: cl.op,
+    field: cl.field,
+    value: cl.value,
+  }));
+  return conds.length === 1 && conds[0] ? conds[0] : { kind: "and", all: conds };
+}
+
+const DEFAULT_ROUTING_FORM: RoutingFormInput = {
+  slug: "",
+  teamId: null,
+  fields: [{ key: "", label: "", type: "text", required: true }],
+  rules: [],
+};
+
+function RoutingTab({ users }: { users: DirectoryUser[] }) {
+  const [forms, setForms] = useState<RoutingForm[] | null>(null);
+  const [eventTypes, setEventTypes] = useState<AdminEventType[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [editing, setEditing] = useState<{ id: string | null; form: RoutingFormInput } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const reload = useCallback(() => {
+    listRoutingForms()
+      .then((r) => setForms(r.forms))
+      .catch((e: unknown) => setError(errorText(e)));
+  }, []);
+
+  useEffect(() => {
+    reload();
+    listEventTypes().then((r) => setEventTypes(r.eventTypes)).catch(() => undefined);
+    listTeams().then((r) => setTeams(r.teams)).catch(() => undefined);
+  }, [reload]);
+
+  const save = async () => {
+    if (!editing) return;
+    setError(null);
+    try {
+      if (editing.id) await updateRoutingForm(editing.id, editing.form);
+      else await createRoutingForm(editing.form);
+      setEditing(null);
+      reload();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  const remove = async (id: string) => {
+    setError(null);
+    try {
+      await deleteRoutingForm(id);
+      reload();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  const copyLink = (slug: string) => {
+    const url = `${window.location.origin}/r/${slug}`;
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopied(slug);
+      setTimeout(() => setCopied(null), 1500);
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between">
+        <div className="flex flex-col gap-1.5">
+          <CardTitle className="text-xl">Routing forms</CardTitle>
+          <CardDescription>Ask invitees questions, send them to the right booking page.</CardDescription>
+        </div>
+        {!editing && (
+          <Button size="sm" onClick={() => setEditing({ id: null, form: DEFAULT_ROUTING_FORM })}>
+            <Plus className="mr-1 h-4 w-4" /> New
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {editing ? (
+          <RoutingFormEditor
+            form={editing.form}
+            users={users}
+            eventTypes={eventTypes}
+            teams={teams}
+            onChange={(form) => setEditing({ ...editing, form })}
+            onCancel={() => setEditing(null)}
+            onSave={() => void save()}
+          />
+        ) : !forms ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : forms.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No routing forms yet.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {forms.map((f) => (
+              <li
+                key={f.id}
+                className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+              >
+                <span className="flex-1">
+                  <span className="font-medium">/{f.slug}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {f.fields.length} field{f.fields.length === 1 ? "" : "s"} · {f.rules.length} rule
+                    {f.rules.length === 1 ? "" : "s"}
+                  </span>
+                </span>
+                <Button variant="ghost" size="sm" onClick={() => copyLink(f.slug)}>
+                  <Copy className="mr-1 h-3.5 w-3.5" />
+                  {copied === f.slug ? "Copied" : "Link"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Edit ${f.slug}`}
+                  onClick={() =>
+                    setEditing({
+                      id: f.id,
+                      form: {
+                        slug: f.slug,
+                        teamId: f.teamId,
+                        fields: f.fields,
+                        rules: f.rules.map(({ priority, condition, targetEventTypeId, targetHostUserId }) => ({
+                          priority,
+                          condition,
+                          targetEventTypeId,
+                          targetHostUserId,
+                        })),
+                      },
+                    })
+                  }
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Delete ${f.slug}`}
+                  onClick={() => void remove(f.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+const FIELD_TYPES: { value: RoutingField["type"]; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "email", label: "Email" },
+  { value: "select", label: "Select" },
+  { value: "multiselect", label: "Multi-select" },
+];
+
+function RoutingFormEditor({
+  form,
+  users,
+  eventTypes,
+  teams,
+  onChange,
+  onCancel,
+  onSave,
+}: {
+  form: RoutingFormInput;
+  users: DirectoryUser[];
+  eventTypes: AdminEventType[];
+  teams: Team[];
+  onChange: (form: RoutingFormInput) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const setField = (i: number, patch: Partial<RoutingField>) => {
+    onChange({
+      ...form,
+      fields: form.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)),
+    });
+  };
+
+  const setRule = (i: number, patch: Partial<RoutingFormInput["rules"][number]>) => {
+    onChange({
+      ...form,
+      rules: form.rules.map((r, j) => (j === i ? { ...r, ...patch } : r)),
+    });
+  };
+
+  const fieldKeys = form.fields.map((f) => f.key).filter((k) => k !== "");
+  const optionsOk = (f: RoutingField) =>
+    (f.type !== "select" && f.type !== "multiselect") || (f.options ?? []).length > 0;
+  const canSave =
+    /^[a-z0-9-]+$/.test(form.slug) &&
+    form.fields.length >= 1 &&
+    form.fields.every((f) => /^[a-z0-9_]+$/.test(f.key) && f.label.trim() !== "" && optionsOk(f)) &&
+    new Set(fieldKeys).size === form.fields.length &&
+    form.rules.every((r) => r.targetEventTypeId !== null || r.targetHostUserId !== null);
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave();
+      }}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="rf-slug">Slug</Label>
+          <Input
+            id="rf-slug"
+            value={form.slug}
+            onChange={(e) => onChange({ ...form, slug: e.target.value })}
+            placeholder="contact-sales"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="rf-team">Team</Label>
+          <select
+            id="rf-team"
+            className="flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+            value={form.teamId ?? ""}
+            onChange={(e) => onChange({ ...form, teamId: e.target.value === "" ? null : e.target.value })}
+          >
+            <option value="">Personal</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>Questions</Label>
+        {form.fields.map((field, i) => (
+          <div key={i} className="flex flex-col gap-2 rounded-md border border-border p-3">
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                aria-label={`Field ${i + 1} label`}
+                placeholder="Label (shown to invitees)"
+                value={field.label}
+                onChange={(e) => {
+                  const label = e.target.value;
+                  const keyWasDerived = field.key === snakeKey(field.label);
+                  setField(i, { label, ...(keyWasDerived ? { key: snakeKey(label) } : {}) });
+                }}
+              />
+              <Input
+                aria-label={`Field ${i + 1} key`}
+                placeholder="key_in_snake_case"
+                value={field.key}
+                onChange={(e) => setField(i, { key: e.target.value })}
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <select
+                aria-label={`Field ${i + 1} type`}
+                className="flex h-9 rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+                value={field.type}
+                onChange={(e) => {
+                  const type = e.target.value as RoutingField["type"];
+                  setField(i, {
+                    type,
+                    options: type === "select" || type === "multiselect" ? (field.options ?? []) : undefined,
+                  });
+                }}
+              >
+                {FIELD_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={field.required}
+                  onChange={(e) => setField(i, { required: e.target.checked })}
+                />
+                Required
+              </label>
+              <span className="flex-1" />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={`Remove field ${i + 1}`}
+                onClick={() => onChange({ ...form, fields: form.fields.filter((_, j) => j !== i) })}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            {(field.type === "select" || field.type === "multiselect") && (
+              <Input
+                aria-label={`Field ${i + 1} options`}
+                placeholder="Options, comma separated"
+                value={(field.options ?? []).join(", ")}
+                onChange={(e) =>
+                  setField(i, {
+                    options: e.target.value
+                      .split(",")
+                      .map((o) => o.trim())
+                      .filter((o) => o !== ""),
+                  })
+                }
+              />
+            )}
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          onClick={() =>
+            onChange({
+              ...form,
+              fields: [...form.fields, { key: "", label: "", type: "text", required: true }],
+            })
+          }
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" /> Add question
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>Rules (lowest priority number wins)</Label>
+        {form.rules.map((rule, i) => (
+          <RoutingRuleEditor
+            key={i}
+            rule={rule}
+            index={i}
+            fieldKeys={fieldKeys}
+            users={users}
+            eventTypes={eventTypes}
+            onChange={(patch) => setRule(i, patch)}
+            onRemove={() => onChange({ ...form, rules: form.rules.filter((_, j) => j !== i) })}
+          />
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          onClick={() =>
+            onChange({
+              ...form,
+              rules: [
+                ...form.rules,
+                {
+                  priority: (form.rules.length + 1) * 10,
+                  condition: { kind: "always" },
+                  targetEventTypeId: null,
+                  targetHostUserId: null,
+                },
+              ],
+            })
+          }
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" /> Add rule
+        </Button>
+      </div>
+
+      <div className="flex gap-2">
+        <Button type="submit" disabled={!canSave}>
+          Save
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function snakeKey(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+const CLAUSE_OPS: { value: RoutingClause["op"]; label: string }[] = [
+  { value: "eq", label: "is" },
+  { value: "ne", label: "is not" },
+  { value: "contains", label: "contains" },
+];
+
+function RoutingRuleEditor({
+  rule,
+  index,
+  fieldKeys,
+  users,
+  eventTypes,
+  onChange,
+  onRemove,
+}: {
+  rule: RoutingFormInput["rules"][number];
+  index: number;
+  fieldKeys: string[];
+  users: DirectoryUser[];
+  eventTypes: AdminEventType[];
+  onChange: (patch: Partial<RoutingFormInput["rules"][number]>) => void;
+  onRemove: () => void;
+}) {
+  const clauses = toClauses(rule.condition);
+
+  const setClauses = (next: RoutingClause[]) => onChange({ condition: fromClauses(next) });
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+      <div className="flex items-center gap-3">
+        <Label htmlFor={`rule-${index}-priority`} className="text-xs text-muted-foreground">
+          Priority
+        </Label>
+        <Input
+          id={`rule-${index}-priority`}
+          type="number"
+          min={0}
+          max={1000}
+          className="w-24"
+          value={rule.priority}
+          onChange={(e) => onChange({ priority: Number(e.target.value) })}
+        />
+        <span className="flex-1" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={`Remove rule ${index + 1}`}
+          onClick={onRemove}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {clauses === null ? (
+        <p className="text-xs text-muted-foreground">
+          Custom condition (edited via the API) — kept as is.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {clauses.length === 0 && (
+            <p className="text-xs text-muted-foreground">Always matches (catch-all).</p>
+          )}
+          {clauses.map((clause, ci) => (
+            <div key={ci} className="flex items-center gap-2">
+              <select
+                aria-label={`Rule ${index + 1} clause ${ci + 1} field`}
+                className="flex h-9 rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+                value={clause.field}
+                onChange={(e) =>
+                  setClauses(clauses.map((c, j) => (j === ci ? { ...c, field: e.target.value } : c)))
+                }
+              >
+                {!fieldKeys.includes(clause.field) && <option value={clause.field}>{clause.field || "—"}</option>}
+                {fieldKeys.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label={`Rule ${index + 1} clause ${ci + 1} operator`}
+                className="flex h-9 rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+                value={clause.op}
+                onChange={(e) =>
+                  setClauses(
+                    clauses.map((c, j) =>
+                      j === ci ? { ...c, op: e.target.value as RoutingClause["op"] } : c,
+                    ),
+                  )
+                }
+              >
+                {CLAUSE_OPS.map((op) => (
+                  <option key={op.value} value={op.value}>
+                    {op.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                aria-label={`Rule ${index + 1} clause ${ci + 1} value`}
+                className="flex-1"
+                value={clause.value}
+                onChange={(e) =>
+                  setClauses(clauses.map((c, j) => (j === ci ? { ...c, value: e.target.value } : c)))
+                }
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-label={`Remove rule ${index + 1} clause ${ci + 1}`}
+                onClick={() => setClauses(clauses.filter((_, j) => j !== ci))}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start"
+            onClick={() => setClauses([...clauses, { field: fieldKeys[0] ?? "", op: "eq", value: "" }])}
+          >
+            <Plus className="mr-1 h-3.5 w-3.5" /> Add condition
+          </Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`rule-${index}-target`} className="text-xs text-muted-foreground">
+            Send to event type
+          </Label>
+          <select
+            id={`rule-${index}-target`}
+            className="flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+            value={rule.targetEventTypeId ?? ""}
+            onChange={(e) => onChange({ targetEventTypeId: e.target.value === "" ? null : e.target.value })}
+          >
+            <option value="">—</option>
+            {eventTypes.map((et) => (
+              <option key={et.id} value={et.id}>
+                {et.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`rule-${index}-host`} className="text-xs text-muted-foreground">
+            Prefer host (optional)
+          </Label>
+          <select
+            id={`rule-${index}-host`}
+            className="flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+            value={rule.targetHostUserId ?? ""}
+            onChange={(e) => onChange({ targetHostUserId: e.target.value === "" ? null : e.target.value })}
+          >
+            <option value="">—</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </div>
   );
 }
 

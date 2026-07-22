@@ -1,5 +1,6 @@
 import type { Temporal } from "@js-temporal/polyfill";
 import { ok, err, type Result } from "../../lib/result";
+import type { RoutingAnswers } from "../routing/condition";
 
 /** Mirrors docs/SCHEMA.md `booking_event_kind`. Duplicated, not imported from
  * src/db/schema: core must not depend on the database layer. */
@@ -17,6 +18,8 @@ export interface CreatedPayload {
   readonly startsAt: Temporal.Instant;
   readonly endsAt: Temporal.Instant;
   readonly hostUserIds: readonly string[];
+  /** present when the invitee arrived via a routing form */
+  readonly routingAnswers?: RoutingAnswers;
 }
 
 export interface RescheduledPayload {

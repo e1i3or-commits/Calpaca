@@ -9,6 +9,7 @@ import { generateToken } from "../lib/id";
 import { appendEvent } from "./booking-repo";
 import { assign, type AssignmentCandidate, type BookingRecord } from "../core/assignment/round-robin";
 import type { BookingState, BookingStateError } from "../core/booking/state";
+import type { RoutingAnswers } from "../core/routing/condition";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -121,6 +122,7 @@ export async function confirmHold(
   invitee: Invitee,
   executor: Db = getDb(),
   assignment?: RoundRobinAssignment,
+  routingAnswers?: RoutingAnswers,
 ): Promise<Result<ConfirmedBooking, ConfirmHoldError>> {
   return executor.transaction(async (tx) => {
     const rows = await tx
@@ -178,11 +180,17 @@ export async function confirmHold(
         hostUserIds,
         rescheduleToken: generateToken(),
         cancelToken: generateToken(),
+        routingAnswers: routingAnswers ?? null,
       })
       .returning();
     if (!booking) throw new Error("booking insert returned no row");
 
-    const created = await appendEvent(booking.id, "created", { startsAt, endsAt, hostUserIds }, tx);
+    const created = await appendEvent(
+      booking.id,
+      "created",
+      { startsAt, endsAt, hostUserIds, ...(routingAnswers ? { routingAnswers } : {}) },
+      tx,
+    );
     if (!created.ok) throw new Error(`failed to append created event: ${created.error.reason}`);
 
     await tx.update(holds).set({ status: "confirmed" }).where(inArray(holds.id, holdIdsToConfirm));

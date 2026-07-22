@@ -4,6 +4,7 @@ import { adminRoutes } from "./routes/admin";
 import { availabilityRoutes } from "./routes/availability";
 import { bookingRoutes } from "./routes/bookings";
 import { meRoutes } from "./routes/me";
+import { routingRoutes } from "./routes/routing";
 import { webhookAdminRoutes } from "./routes/webhook-admin";
 import { webhookRoutes } from "./routes/webhooks";
 
@@ -16,5 +17,6 @@ app.route("/", availabilityRoutes);
 app.route("/", bookingRoutes);
 app.route("/", meRoutes);
 app.route("/", adminRoutes);
+app.route("/", routingRoutes);
 app.route("/", webhookAdminRoutes);
 app.route("/", webhookRoutes);
