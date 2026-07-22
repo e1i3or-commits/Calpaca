@@ -172,6 +172,121 @@ export async function watchEvents(args: {
   return ok({ resourceId: body.resourceId, expiration: new Date(Number(body.expiration)) });
 }
 
+// Booking write-through (docs/ARCHITECTURE.md: the calendar.events scope
+// exists for exactly this). sendUpdates=all makes Google send native invites
+// to attendees, which Gmail renders — unlike a third-party iTIP REQUEST whose
+// From does not match the ORGANIZER.
+
+export type CalendarEventInput = {
+  summary: string;
+  description?: string;
+  startIso: string; // RFC3339 UTC
+  endIso: string;
+  attendees: { email: string; displayName?: string }[];
+};
+
+export async function insertEvent(args: {
+  accessToken: string;
+  calendarId: string;
+  event: CalendarEventInput;
+}): Promise<Result<{ eventId: string }, GoogleApiError>> {
+  let res: Response;
+  try {
+    res = await fetch(
+      `${BASE}/calendars/${encodeURIComponent(args.calendarId)}/events?sendUpdates=all`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${args.accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          summary: args.event.summary,
+          description: args.event.description,
+          start: { dateTime: args.event.startIso },
+          end: { dateTime: args.event.endIso },
+          attendees: args.event.attendees,
+        }),
+      },
+    );
+  } catch (e) {
+    return err({ kind: "network_error", message: String(e) });
+  }
+  if (!res.ok) {
+    return err({
+      kind: "http_error",
+      status: res.status,
+      message: `events.insert returned ${res.status}`,
+    });
+  }
+  const body = (await res.json()) as { id?: string };
+  if (!body.id) {
+    return err({ kind: "http_error", status: res.status, message: "events.insert response missing id" });
+  }
+  return ok({ eventId: body.id });
+}
+
+export async function patchEventTime(args: {
+  accessToken: string;
+  calendarId: string;
+  eventId: string;
+  startIso: string;
+  endIso: string;
+}): Promise<Result<void, GoogleApiError>> {
+  let res: Response;
+  try {
+    res = await fetch(
+      `${BASE}/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(args.eventId)}?sendUpdates=all`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${args.accessToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          start: { dateTime: args.startIso },
+          end: { dateTime: args.endIso },
+        }),
+      },
+    );
+  } catch (e) {
+    return err({ kind: "network_error", message: String(e) });
+  }
+  if (!res.ok) {
+    return err({
+      kind: "http_error",
+      status: res.status,
+      message: `events.patch returned ${res.status}`,
+    });
+  }
+  return ok(undefined);
+}
+
+export async function deleteEvent(args: {
+  accessToken: string;
+  calendarId: string;
+  eventId: string;
+}): Promise<Result<void, GoogleApiError>> {
+  let res: Response;
+  try {
+    res = await fetch(
+      `${BASE}/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(args.eventId)}?sendUpdates=all`,
+      { method: "DELETE", headers: { Authorization: `Bearer ${args.accessToken}` } },
+    );
+  } catch (e) {
+    return err({ kind: "network_error", message: String(e) });
+  }
+  // 404/410 = already gone; treat as deleted
+  if (!res.ok && res.status !== 404 && res.status !== 410) {
+    return err({
+      kind: "http_error",
+      status: res.status,
+      message: `events.delete returned ${res.status}`,
+    });
+  }
+  return ok(undefined);
+}
+
 export async function stopChannel(args: {
   accessToken: string;
   channelId: string;

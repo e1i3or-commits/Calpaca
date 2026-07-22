@@ -187,6 +187,10 @@ export interface BookingRow {
   readonly inviteStatus?: string;
   readonly rescheduleToken: string;
   readonly cancelToken: string;
+  /** Google Calendar event id once written through to the organizer host's
+   * calendar; null/absent means the ICS email is the calendar artifact.
+   * Optional for the same fixture-compatibility reason as inviteStatus. */
+  readonly googleEventId?: string | null;
 }
 
 /** Loads a booking row for the booking endpoints (task 14): reschedule/cancel
@@ -209,7 +213,18 @@ export async function getBookingById(id: string, executor: Db = getDb()): Promis
     inviteStatus: row.inviteStatus,
     rescheduleToken: row.rescheduleToken,
     cancelToken: row.cancelToken,
+    googleEventId: row.googleEventId,
   };
+}
+
+/** Records the write-through: set after events.insert succeeds so retries of
+ * the invite job see the event already exists. */
+export async function setGoogleEventId(
+  bookingId: string,
+  eventId: string,
+  executor: Db = getDb(),
+): Promise<void> {
+  await executor.update(bookings).set({ googleEventId: eventId }).where(eq(bookings.id, bookingId));
 }
 
 export interface InviteHost {

@@ -18,6 +18,10 @@ export interface InviteEmailInput {
   readonly timezone: string;
   /** null when PUBLIC_URL is unset — the links are simply omitted. */
   readonly links: { readonly reschedule: string; readonly cancel: string } | null;
+  /** false when the booking was written to Google Calendar and Google sends
+   * the native invite — the "calendar file attached" line would be a lie.
+   * Defaults to true (the ICS fallback path). */
+  readonly icsAttached?: boolean;
 }
 
 export interface InviteEmail {
@@ -74,7 +78,12 @@ export function composeInviteEmail(input: InviteEmailInput): InviteEmail {
   ];
 
   if (input.kind !== "cancelled") {
-    lines.push("", "A calendar file is attached — add it if it doesn't appear automatically.");
+    lines.push(
+      "",
+      input.icsAttached === false
+        ? "A Google Calendar invite is on its way in a separate email."
+        : "A calendar file is attached — add it if it doesn't appear automatically.",
+    );
     if (input.links) {
       lines.push(
         "",

@@ -1,13 +1,24 @@
 import { Temporal } from "@js-temporal/polyfill";
+import { getAuth } from "../auth/index";
 import { buildIcs } from "../core/invite/ics";
 import { composeInviteEmail, type InviteKind } from "../core/invite/email";
-import { appendEvent, getInviteContext, type InviteContext } from "../db/booking-repo";
+import {
+  appendEvent,
+  getInviteContext,
+  setGoogleEventId,
+  type InviteContext,
+} from "../db/booking-repo";
+import { getWritableConnectionForUser } from "../db/sync-repo";
+import { deleteEvent, insertEvent, patchEventTime } from "../sync/google";
 import { isMailerConfigured, sendInviteMail } from "../notifications/mailer";
 
 /**
- * The invite-email job body. Sends ONE email per lifecycle change with the
- * invitee in To and every host in Cc — sync never writes to Google
- * calendars, so hosts need the ICS as much as invitees do.
+ * The invite-email job body. Best-effort write-through to the organizer
+ * host's Google calendar happens first (Google then sends native invites via
+ * sendUpdates=all — Gmail refuses to render third-party iTIP whose From does
+ * not match the ORGANIZER); the email follows with reschedule/cancel links,
+ * attaching the ICS only when no Google event exists so non-Google hosts and
+ * outage windows keep a calendar artifact. Invitee in To, every host in Cc.
  *
  * Event-log semantics (src/core/booking/state.ts): invite_sent records the
  * SMTP handoff for created/rescheduled invites; cancellation notices append
@@ -41,7 +52,8 @@ export async function sendInvite(bookingId: string, kind: InviteKind): Promise<v
     return;
   }
 
-  const mail = buildMail(ctx, kind, Temporal.Now.instant());
+  const hasGoogleEvent = await syncGoogleEvent(ctx, kind);
+  const mail = buildMail(ctx, kind, Temporal.Now.instant(), { includeIcs: !hasGoogleEvent });
   const result = await sendInviteMail(mail);
 
   if (kind !== "cancelled") {
@@ -53,6 +65,84 @@ export async function sendInvite(bookingId: string, kind: InviteKind): Promise<v
     await recordInviteeRejection(bookingId, mail.to, result.rejected);
   }
   console.log(`[jobs] invite ${kind} for ${bookingId} sent`);
+}
+
+/**
+ * Best-effort write-through to the organizer host's Google calendar. Returns
+ * whether a Google event exists for the booking after this call — the email
+ * attaches the ICS only when it does not. Never throws: a Google outage must
+ * not block the confirmation email, and the ICS fallback keeps a calendar
+ * artifact in that window. Retries of the job are safe: the event id is
+ * persisted before the email is sent, so a retry sees it and skips insert.
+ */
+async function syncGoogleEvent(ctx: InviteContext, kind: InviteKind): Promise<boolean> {
+  const { booking, hosts } = ctx;
+  const [organizer] = hosts;
+  if (!organizer) return false;
+  const existingId = booking.googleEventId ?? null;
+  if (kind === "reminder") return existingId !== null;
+
+  try {
+    const conn = await getWritableConnectionForUser(organizer.id);
+    if (!conn) return false;
+    const token = await getAuth().api.getAccessToken({
+      body: { providerId: "google", userId: organizer.id },
+    });
+    const accessToken = token.accessToken;
+    if (!accessToken) return existingId !== null;
+    const calendarId = conn.externalCalendarId;
+
+    if (kind === "cancelled") {
+      if (!existingId) return false;
+      const r = await deleteEvent({ accessToken, calendarId, eventId: existingId });
+      if (!r.ok) {
+        console.error(`[jobs] google event delete for ${booking.id} failed: ${r.error.message}`);
+        return false; // fall back to the iTIP CANCEL attachment
+      }
+      return true;
+    }
+
+    const startIso = booking.startsAt.toString({ smallestUnit: "second" });
+    const endIso = booking.endsAt.toString({ smallestUnit: "second" });
+
+    if (existingId) {
+      if (kind !== "rescheduled") return true;
+      const r = await patchEventTime({ accessToken, calendarId, eventId: existingId, startIso, endIso });
+      if (!r.ok) {
+        console.error(`[jobs] google event patch for ${booking.id} failed: ${r.error.message}`);
+        return false; // ICS REQUEST with bumped SEQUENCE covers the move
+      }
+      return true;
+    }
+
+    const links = buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken);
+    const r = await insertEvent({
+      accessToken,
+      calendarId,
+      event: {
+        summary: `${ctx.eventTypeTitle}: ${organizer.name} and ${booking.inviteeName}`,
+        description: links
+          ? `Reschedule: ${links.reschedule}\nCancel: ${links.cancel}`
+          : undefined,
+        startIso,
+        endIso,
+        attendees: [
+          { email: booking.inviteeEmail, displayName: booking.inviteeName },
+          ...hosts.slice(1).map((h) => ({ email: h.email, displayName: h.name })),
+        ],
+      },
+    });
+    if (!r.ok) {
+      console.error(`[jobs] google event insert for ${booking.id} failed: ${r.error.message}`);
+      return false;
+    }
+    await setGoogleEventId(booking.id, r.value.eventId);
+    console.log(`[jobs] google event created for ${booking.id}`);
+    return true;
+  } catch (e) {
+    console.error(`[jobs] google event write for ${booking.id} failed:`, e);
+    return existingId !== null;
+  }
 }
 
 /** The SMTP server refusing the invitee's address at handoff is a real
@@ -114,7 +204,8 @@ export async function sendReminder(bookingId: string): Promise<void> {
     return;
   }
 
-  const mail = buildMail(ctx, "reminder", now);
+  // no Google write for reminders — the event (if any) already exists
+  const mail = buildMail(ctx, "reminder", now, { includeIcs: !ctx.booking.googleEventId });
   const result = await sendInviteMail(mail);
 
   const recorded = await appendEvent(bookingId, "reminder_sent", {});
@@ -129,7 +220,13 @@ export async function sendReminder(bookingId: string): Promise<void> {
 
 /** Split out so the live SMTP test can exercise composition + transport
  * without a pg-boss round trip. */
-export function buildMail(ctx: InviteContext, kind: InviteKind, now: Temporal.Instant) {
+export function buildMail(
+  ctx: InviteContext,
+  kind: InviteKind,
+  now: Temporal.Instant,
+  opts?: { includeIcs?: boolean },
+) {
+  const includeIcs = opts?.includeIcs ?? true;
   const { booking, hosts } = ctx;
   const [organizer] = hosts;
   if (!organizer) throw new Error(`booking ${booking.id} has no hosts`);
@@ -143,22 +240,25 @@ export function buildMail(ctx: InviteContext, kind: InviteKind, now: Temporal.In
     end: booking.endsAt,
     timezone: booking.inviteeTimezone,
     links: kind === "cancelled" ? null : buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken),
+    icsAttached: includeIcs,
   });
 
-  const ics = buildIcs({
-    method: kind === "cancelled" ? "CANCEL" : "REQUEST",
-    uid: `${booking.id}@scheduling-platform`,
-    sequence: ctx.rescheduleCount,
-    dtStamp: now,
-    start: booking.startsAt,
-    end: booking.endsAt,
-    summary: `${ctx.eventTypeTitle}: ${organizer.name} and ${booking.inviteeName}`,
-    organizer: { name: organizer.name, email: organizer.email },
-    attendees: [
-      { name: booking.inviteeName, email: booking.inviteeEmail },
-      ...hosts.slice(1).map((h) => ({ name: h.name, email: h.email })),
-    ],
-  });
+  const ics = includeIcs
+    ? buildIcs({
+        method: kind === "cancelled" ? "CANCEL" : "REQUEST",
+        uid: `${booking.id}@scheduling-platform`,
+        sequence: ctx.rescheduleCount,
+        dtStamp: now,
+        start: booking.startsAt,
+        end: booking.endsAt,
+        summary: `${ctx.eventTypeTitle}: ${organizer.name} and ${booking.inviteeName}`,
+        organizer: { name: organizer.name, email: organizer.email },
+        attendees: [
+          { name: booking.inviteeName, email: booking.inviteeEmail },
+          ...hosts.slice(1).map((h) => ({ name: h.name, email: h.email })),
+        ],
+      })
+    : null;
 
   return {
     to: booking.inviteeEmail,
@@ -169,6 +269,8 @@ export function buildMail(ctx: InviteContext, kind: InviteKind, now: Temporal.In
     // original Message-ID in bounce/delivery notifications, which is how an
     // n8n flow correlates them back to POST /api/webhooks/email-delivery
     messageId: `<${crypto.randomUUID()}.${booking.id}@scheduling-platform>`,
-    ics: { method: kind === "cancelled" ? ("CANCEL" as const) : ("REQUEST" as const), content: ics },
+    ...(ics
+      ? { ics: { method: kind === "cancelled" ? ("CANCEL" as const) : ("REQUEST" as const), content: ics } }
+      : {}),
   };
 }

@@ -107,6 +107,22 @@ export async function listGoogleConnections(executor: Db = getDb()): Promise<Con
     .where(eq(calendarConnections.provider, "google"));
 }
 
+/** The connection booking write-through targets: the user's primary-alias
+ * connection when present (the sign-in seed), else their first google one. */
+export async function getWritableConnectionForUser(
+  userId: string,
+  executor: Db = getDb(),
+): Promise<ConnectionRow | null> {
+  const rows = await executor
+    .select()
+    .from(calendarConnections)
+    .where(and(
+      eq(calendarConnections.userId, userId),
+      eq(calendarConnections.provider, "google"),
+    ));
+  return rows.find((r) => r.externalCalendarId === "primary") ?? rows[0] ?? null;
+}
+
 /** Seeds a new busy-source. The caller enqueues the initial sync; the watch
  * channel follows via the hourly renewal job (channel columns start null). */
 export async function createConnection(

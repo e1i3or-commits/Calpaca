@@ -201,6 +201,9 @@ export const bookings = pgTable("bookings", {
   rescheduleToken: text("reschedule_token").notNull(),
   cancelToken: text("cancel_token").notNull(),
   routingAnswers: jsonb("routing_answers"),
+  // set once the booking is written to the organizer host's Google calendar;
+  // null means the ICS email is the only calendar artifact (fallback path)
+  googleEventId: text("google_event_id"),
 }, (t) => [index("bookings_time_idx").on(t.startsAt)]);
 
 export const bookingEvents = pgTable("booking_events", {
