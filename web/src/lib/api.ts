@@ -138,6 +138,116 @@ export function getMyCalendars(): Promise<{ calendars: CalendarEntry[] }> {
   return request("/api/me/calendars");
 }
 
+// ---- dashboard admin surface (/api/me/*) ----
+
+export type DirectoryUser = {
+  id: string;
+  name: string;
+  email: string;
+  timezone: string;
+};
+
+export type ScheduleRule = { dow: number; start: string; end: string };
+
+export type Schedule = {
+  id: string;
+  userId: string;
+  name: string;
+  timezone: string;
+  rules: ScheduleRule[];
+};
+
+export type ScheduleInput = Omit<Schedule, "id" | "userId">;
+
+export type Team = { id: string; name: string; slug: string };
+
+export type TeamMember = { userId: string; name: string; email: string; isAdmin: boolean };
+
+export type EventTypeHost = {
+  userId: string;
+  role: "member" | "required" | "optional";
+  weight: number;
+};
+
+export type AdminEventType = {
+  id: string;
+  ownerUserId: string | null;
+  teamId: string | null;
+  slug: string;
+  title: string;
+  durationMinutes: number;
+  bufferBeforeMin: number;
+  bufferAfterMin: number;
+  minimumNoticeMin: number;
+  rollingWindowDays: number;
+  mode: "solo" | "round_robin" | "group";
+  scheduleId: string | null;
+  hosts: (EventTypeHost & { name: string; email: string })[];
+};
+
+export type EventTypeInput = Omit<AdminEventType, "id" | "ownerUserId" | "hosts"> & {
+  hosts: EventTypeHost[];
+};
+
+export function listUsers(): Promise<{ users: DirectoryUser[] }> {
+  return request("/api/me/users");
+}
+
+export function listSchedules(): Promise<{ schedules: Schedule[] }> {
+  return request("/api/me/schedules");
+}
+
+export function createSchedule(input: ScheduleInput): Promise<Schedule> {
+  return request("/api/me/schedules", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateSchedule(id: string, input: ScheduleInput): Promise<Schedule> {
+  return request(`/api/me/schedules/${id}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function deleteSchedule(id: string): Promise<{ ok: true }> {
+  return request(`/api/me/schedules/${id}`, { method: "DELETE" });
+}
+
+export function listTeams(): Promise<{ teams: Team[] }> {
+  return request("/api/me/teams");
+}
+
+export function createTeam(input: { name: string; slug: string }): Promise<Team> {
+  return request("/api/me/teams", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function listTeamMembers(teamId: string): Promise<{ members: TeamMember[] }> {
+  return request(`/api/me/teams/${teamId}/members`);
+}
+
+export function addTeamMember(teamId: string, userId: string): Promise<{ ok: true }> {
+  return request(`/api/me/teams/${teamId}/members`, {
+    method: "POST",
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export function removeTeamMember(teamId: string, userId: string): Promise<{ ok: true }> {
+  return request(`/api/me/teams/${teamId}/members/${userId}`, { method: "DELETE" });
+}
+
+export function listEventTypes(): Promise<{ eventTypes: AdminEventType[] }> {
+  return request("/api/me/event-types");
+}
+
+export function createEventType(input: EventTypeInput): Promise<AdminEventType> {
+  return request("/api/me/event-types", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateEventType(id: string, input: EventTypeInput): Promise<AdminEventType> {
+  return request(`/api/me/event-types/${id}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function deleteEventType(id: string): Promise<{ ok: true }> {
+  return request(`/api/me/event-types/${id}`, { method: "DELETE" });
+}
+
 export async function signInWithGoogle(callbackURL: string): Promise<string> {
   const { url } = await request<{ url: string }>("/api/auth/sign-in/social", {
     method: "POST",
