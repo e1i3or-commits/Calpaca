@@ -110,6 +110,7 @@ async function writeProjection(tx: Db, bookingId: string, state: BookingState): 
     .update(bookings)
     .set({
       status: state.status,
+      inviteStatus: state.inviteStatus,
       startsAt: new Date(state.startsAt.epochMilliseconds),
       endsAt: new Date(state.endsAt.epochMilliseconds),
       hostUserIds: [...state.hostUserIds],
@@ -180,6 +181,10 @@ export interface BookingRow {
   readonly inviteeTimezone: string;
   readonly hostUserIds: readonly string[];
   readonly status: string;
+  /** invite lifecycle projection: none | sent | delivered | failed.
+   * Optional so BookingRow fixtures that predate the column stay valid;
+   * rows loaded from the database always carry it. */
+  readonly inviteStatus?: string;
   readonly rescheduleToken: string;
   readonly cancelToken: string;
 }
@@ -201,6 +206,7 @@ export async function getBookingById(id: string, executor: Db = getDb()): Promis
     inviteeTimezone: row.inviteeTimezone,
     hostUserIds: row.hostUserIds,
     status: row.status,
+    inviteStatus: row.inviteStatus,
     rescheduleToken: row.rescheduleToken,
     cancelToken: row.cancelToken,
   };

@@ -197,6 +197,7 @@ export const bookings = pgTable("bookings", {
   // all hosts on the meeting; solo/rr have one, group has many
   hostUserIds: jsonb("host_user_ids").$type<string[]>().notNull(),
   status: text("status").notNull().default("confirmed"), // projection only
+  inviteStatus: text("invite_status").notNull().default("none"), // projection only
   rescheduleToken: text("reschedule_token").notNull(),
   cancelToken: text("cancel_token").notNull(),
   routingAnswers: jsonb("routing_answers"),

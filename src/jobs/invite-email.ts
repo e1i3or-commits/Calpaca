@@ -41,7 +41,8 @@ export async function sendInvite(bookingId: string, kind: InviteKind): Promise<v
     return;
   }
 
-  await sendInviteMail(buildMail(ctx, kind, Temporal.Now.instant()));
+  const mail = buildMail(ctx, kind, Temporal.Now.instant());
+  const result = await sendInviteMail(mail);
 
   if (kind !== "cancelled") {
     const recorded = await appendEvent(bookingId, "invite_sent", {});
@@ -49,8 +50,39 @@ export async function sendInvite(bookingId: string, kind: InviteKind): Promise<v
       // e.g. cancelled between send and record — log, never retry the email
       console.error(`[jobs] invite_sent for ${bookingId} not recorded:`, recorded.error);
     }
+    await recordInviteeRejection(bookingId, mail.to, result.rejected);
   }
   console.log(`[jobs] invite ${kind} for ${bookingId} sent`);
+}
+
+/** The SMTP server refusing the invitee's address at handoff is a real
+ * delivery-failure signal (retrying would refuse the same way), so it is
+ * recorded as invite_failed. A refusal on a host's cc is only logged: the
+ * invitee-facing invite status should not flip on a host mailbox problem.
+ * Exported for the projection integration test. */
+export async function recordInviteeRejection(
+  bookingId: string,
+  inviteeEmail: string,
+  rejected: readonly string[],
+  executor?: Parameters<typeof appendEvent>[3],
+): Promise<void> {
+  if (rejected.length === 0) return;
+  const inviteeHit = rejected.some((r) => r.toLowerCase() === inviteeEmail.toLowerCase());
+  if (!inviteeHit) {
+    console.warn(`[jobs] invite for ${bookingId}: cc rejected (${rejected.join(", ")})`);
+    return;
+  }
+  const recorded = await appendEvent(
+    bookingId,
+    "invite_failed",
+    { reason: "recipient_rejected" },
+    executor,
+  );
+  if (!recorded.ok) {
+    console.error(`[jobs] invite_failed for ${bookingId} not recorded:`, recorded.error);
+  } else {
+    console.warn(`[jobs] invite for ${bookingId}: invitee address rejected at SMTP handoff`);
+  }
 }
 
 /**
@@ -82,13 +114,16 @@ export async function sendReminder(bookingId: string): Promise<void> {
     return;
   }
 
-  await sendInviteMail(buildMail(ctx, "reminder", now));
+  const mail = buildMail(ctx, "reminder", now);
+  const result = await sendInviteMail(mail);
 
   const recorded = await appendEvent(bookingId, "reminder_sent", {});
   if (!recorded.ok) {
     // e.g. cancelled between send and record — log; the log stays authoritative
     console.error(`[jobs] reminder_sent for ${bookingId} not recorded:`, recorded.error);
   }
+  // a refused invitee address is the same signal whichever mail surfaced it
+  await recordInviteeRejection(bookingId, mail.to, result.rejected);
   console.log(`[jobs] reminder for ${bookingId} sent`);
 }
 
@@ -130,6 +165,10 @@ export function buildMail(ctx: InviteContext, kind: InviteKind, now: Temporal.In
     cc: hosts.map((h) => h.email),
     subject: email.subject,
     text: email.text,
+    // unique per send, booking id parseable from it: providers echo the
+    // original Message-ID in bounce/delivery notifications, which is how an
+    // n8n flow correlates them back to POST /api/webhooks/email-delivery
+    messageId: `<${crypto.randomUUID()}.${booking.id}@scheduling-platform>`,
     ics: { method: kind === "cancelled" ? ("CANCEL" as const) : ("REQUEST" as const), content: ics },
   };
 }
