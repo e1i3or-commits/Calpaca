@@ -3,3 +3,9 @@
 [04:29:12] BLOCKED: 01-scaffold
 [04:29:12] 3 consecutive blocked tasks. Environment likely broken. Stopping.
 [04:29:12] Run finished. Summary at /work/logs/loop-summary.md
+[04:33:26] === Task 01-scaffold ===
+[04:33:26] Attempt 1/3
+[04:35:07] claude exited 0
+[04:35:13] PASS. Committed.
+[04:35:13] === Task 02-test-harness ===
+[04:35:13] Attempt 1/3

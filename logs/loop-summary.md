@@ -1,2 +1,2 @@
-- BLOCKED: 01-scaffold after 3 attempts (see logs)
-- STOPPED: 3 consecutive blocks
+# Overnight run 2026-07-22T04:33:26Z
+- PASS: 01-scaffold (attempt 1)
