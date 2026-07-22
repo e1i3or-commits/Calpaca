@@ -4,6 +4,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  Link,
   Outlet,
   RouterProvider,
 } from "@tanstack/react-router";
@@ -29,8 +30,19 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: () => (
-    <div className="mx-auto max-w-2xl px-4 py-24 text-center text-sm text-muted-foreground">
-      Nothing here — booking links look like /book/&lt;event-type&gt;.
+    <div className="mx-auto flex max-w-2xl flex-col items-center gap-6 px-4 py-24 text-center">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">TourScale Scheduling</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Invitees book through links like /book/&lt;event-type&gt;.
+        </p>
+      </div>
+      <Link
+        to="/sign-in"
+        className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90"
+      >
+        Host sign in
+      </Link>
     </div>
   ),
 });

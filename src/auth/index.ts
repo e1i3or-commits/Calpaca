@@ -54,11 +54,26 @@ function buildAuth() {
               ))
               .limit(1);
             if (existing.length > 0) return;
-            await db.insert(schema.calendarConnections).values({
-              userId: account.userId,
-              provider: "google",
-              externalCalendarId: "primary",
-            });
+            const [conn] = await db
+              .insert(schema.calendarConnections)
+              .values({
+                userId: account.userId,
+                provider: "google",
+                externalCalendarId: "primary",
+              })
+              .returning({ id: schema.calendarConnections.id });
+            // Kick the first sync now — the 15-min sweep is a fallback, and a
+            // new host's booking page must not show unblocked busy time until
+            // then. Dynamic import: jobs imports auth, so a static import here
+            // would be a cycle. Never fail sign-in on a failed enqueue.
+            if (conn) {
+              try {
+                const { enqueueSync } = await import("../jobs/index");
+                await enqueueSync(conn.id, { forceFull: true });
+              } catch (e) {
+                console.error("[auth] initial sync enqueue failed:", e);
+              }
+            }
           },
         },
       },
