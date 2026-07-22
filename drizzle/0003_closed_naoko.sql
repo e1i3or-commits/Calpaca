@@ -1,0 +1,1 @@
+ALTER TABLE "calendar_connections" ADD COLUMN "full_synced_at" timestamp with time zone;

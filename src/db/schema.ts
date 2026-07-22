@@ -98,11 +98,19 @@ export const calendarConnections = pgTable("calendar_connections", {
   userId: uuid("user_id").notNull().references(() => users.id),
   provider: text("provider").notNull().default("google"),
   externalCalendarId: text("external_calendar_id").notNull(),
-  // watch channel lifecycle
+  // watch channel lifecycle: channelToken authenticates inbound webhook
+  // pushes (x-goog-channel-token), channelResourceId is required to stop
+  // a channel. Both null until a watch is established.
   channelId: text("channel_id"),
+  channelResourceId: text("channel_resource_id"),
+  channelToken: text("channel_token"),
   channelExpiresAt: timestamp("channel_expires_at", { withTimezone: true }),
   syncToken: text("sync_token"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  // full syncs bound their window with timeMax (unbounded + singleEvents
+  // would expand recurring events forever); the sync token freezes that
+  // window, so the sweep re-baselines with a fresh full sync when this ages
+  fullSyncedAt: timestamp("full_synced_at", { withTimezone: true }),
   syncHealthy: boolean("sync_healthy").notNull().default(true),
 }, (t) => [index("cal_conn_user_idx").on(t.userId)]);
 
@@ -113,7 +121,13 @@ export const calendarBusyCache = pgTable("calendar_busy_cache", {
   startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
   endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
   externalEventId: text("external_event_id"),
-}, (t) => [index("busy_window_idx").on(t.connectionId, t.startsAt, t.endsAt)]);
+}, (t) => [
+  index("busy_window_idx").on(t.connectionId, t.startsAt, t.endsAt),
+  // incremental sync upserts by event id; rows without one (freeBusy blobs)
+  // are only ever bulk-replaced
+  uniqueIndex("busy_event_uq").on(t.connectionId, t.externalEventId)
+    .where(sql`external_event_id is not null`),
+]);
 
 export const schedules = pgTable("schedules", {
   id: uuid("id").primaryKey().defaultRandom(),
