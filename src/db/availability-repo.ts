@@ -3,7 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
 import * as schema from "./schema";
-import { calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, schedules } from "./schema";
+import { bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, schedules } from "./schema";
 import type { Interval } from "../core/availability/intervals";
 import type { WeeklyRule } from "../core/availability/rules";
 
@@ -143,10 +143,13 @@ export async function getSchedulesForUsers(
 }
 
 /**
- * Loads calendar-busy-cache intervals overlapping `window`, grouped by the
- * owning user (joined through calendar_connections since busy rows only
- * carry a connection id). Never reads Google directly, per the sync design
- * in docs/ARCHITECTURE.md — the cache is the only source on the request path.
+ * Loads busy intervals overlapping `window`, grouped by user, from two
+ * sources: the calendar busy cache (joined through calendar_connections
+ * since busy rows only carry a connection id — never Google directly, per
+ * docs/ARCHITECTURE.md) and confirmed platform bookings. Bookings must be
+ * here, not just in the holds index: a confirmed hold no longer conflicts
+ * under active_hold_uq, so without this a taken slot is offered — and
+ * re-verified as free — for a second booking.
  */
 export async function getBusyForUsers(
   userIds: readonly string[],
@@ -155,27 +158,53 @@ export async function getBusyForUsers(
 ): Promise<HostBusy[]> {
   if (userIds.length === 0) return [];
 
-  const rows = await executor
-    .select({
-      userId: calendarConnections.userId,
-      startsAt: calendarBusyCache.startsAt,
-      endsAt: calendarBusyCache.endsAt,
-    })
-    .from(calendarBusyCache)
-    .innerJoin(calendarConnections, eq(calendarBusyCache.connectionId, calendarConnections.id))
-    .where(
-      and(
-        inArray(calendarConnections.userId, [...userIds]),
-        lt(calendarBusyCache.startsAt, toDate(window.end)),
-        gte(calendarBusyCache.endsAt, toDate(window.start)),
+  const [cacheRows, bookingRows] = await Promise.all([
+    executor
+      .select({
+        userId: calendarConnections.userId,
+        startsAt: calendarBusyCache.startsAt,
+        endsAt: calendarBusyCache.endsAt,
+      })
+      .from(calendarBusyCache)
+      .innerJoin(calendarConnections, eq(calendarBusyCache.connectionId, calendarConnections.id))
+      .where(
+        and(
+          inArray(calendarConnections.userId, [...userIds]),
+          lt(calendarBusyCache.startsAt, toDate(window.end)),
+          gte(calendarBusyCache.endsAt, toDate(window.start)),
+        ),
       ),
-    );
+    executor
+      .select({
+        hostUserIds: bookings.hostUserIds,
+        startsAt: bookings.startsAt,
+        endsAt: bookings.endsAt,
+      })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.status, "confirmed"),
+          lt(bookings.startsAt, toDate(window.end)),
+          gte(bookings.endsAt, toDate(window.start)),
+        ),
+      ),
+  ]);
 
+  const wanted = new Set(userIds);
   const byUser = new Map<string, Interval[]>();
-  for (const row of rows) {
-    const list = byUser.get(row.userId) ?? [];
-    list.push({ start: toInstant(row.startsAt), end: toInstant(row.endsAt) });
-    byUser.set(row.userId, list);
+  const push = (userId: string, startsAt: Date, endsAt: Date) => {
+    const list = byUser.get(userId) ?? [];
+    list.push({ start: toInstant(startsAt), end: toInstant(endsAt) });
+    byUser.set(userId, list);
+  };
+
+  for (const row of cacheRows) push(row.userId, row.startsAt, row.endsAt);
+  // host_user_ids is jsonb, so membership is filtered here rather than in SQL;
+  // bookings overlapping the window are few and bookings_time_idx bounds the scan
+  for (const row of bookingRows) {
+    for (const hostId of row.hostUserIds) {
+      if (wanted.has(hostId)) push(hostId, row.startsAt, row.endsAt);
+    }
   }
 
   return [...byUser.entries()].map(([userId, intervals]) => ({ userId, intervals }));
