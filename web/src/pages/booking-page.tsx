@@ -113,7 +113,7 @@ export function BookingPage({
 export function TimezoneSelect({ value, onChange }: { value: string; onChange: (tz: string) => void }) {
   return (
     <select
-      className="bg-transparent text-sm text-muted-foreground focus:outline-none"
+      className="min-w-0 max-w-full bg-transparent text-sm text-muted-foreground focus:outline-none"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label="Timezone"

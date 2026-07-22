@@ -100,12 +100,12 @@ export function DashboardPage() {
         </Button>
       </div>
 
-      <nav className="mb-6 flex gap-1 border-b border-border" aria-label="Dashboard sections">
+      <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-border" aria-label="Dashboard sections">
         {TABS.map((t) => (
           <button
             key={t.key}
             type="button"
-            className={`-mb-px border-b-2 px-3 py-2 text-sm transition-colors ${
+            className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${
               tab === t.key
                 ? "border-primary font-medium text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
@@ -241,52 +241,58 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
             {eventTypes.map((et) => (
               <li
                 key={et.id}
-                className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
               >
-                <span className="flex-1">
+                <span className="min-w-0 grow basis-full sm:basis-0">
                   <span className="font-medium">{et.title}</span>
                   <span className="ml-2 text-xs text-muted-foreground">
                     /{et.slug} · {et.durationMinutes} min · {et.mode.replace("_", " ")}
                   </span>
                 </span>
-                <Button variant="ghost" size="sm" onClick={() => copyLink(et.slug)}>
-                  <Copy className="mr-1 h-3.5 w-3.5" />
-                  {copied === et.slug ? "Copied" : "Link"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={`Edit ${et.title}`}
-                  onClick={() =>
-                    setEditing({
-                      id: et.id,
-                      form: {
-                        slug: et.slug,
-                        title: et.title,
-                        durationMinutes: et.durationMinutes,
-                        bufferBeforeMin: et.bufferBeforeMin,
-                        bufferAfterMin: et.bufferAfterMin,
-                        minimumNoticeMin: et.minimumNoticeMin,
-                        rollingWindowDays: et.rollingWindowDays,
-                        mode: et.mode,
-                        scheduleId: et.scheduleId,
-                        teamId: et.teamId,
-                        theme: et.theme,
-                        hosts: et.hosts.map(({ userId, role, weight }) => ({ userId, role, weight })),
-                      },
-                    })
-                  }
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={`Delete ${et.title}`}
-                  onClick={() => void remove(et.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                <span className="flex shrink-0 items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => copyLink(et.slug)}>
+                    <Copy className="mr-1 h-3.5 w-3.5" />
+                    {copied === et.slug ? "Copied" : "Link"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Edit ${et.title}`}
+                    onClick={() =>
+                      setEditing({
+                        id: et.id,
+                        form: {
+                          slug: et.slug,
+                          title: et.title,
+                          durationMinutes: et.durationMinutes,
+                          bufferBeforeMin: et.bufferBeforeMin,
+                          bufferAfterMin: et.bufferAfterMin,
+                          minimumNoticeMin: et.minimumNoticeMin,
+                          rollingWindowDays: et.rollingWindowDays,
+                          mode: et.mode,
+                          scheduleId: et.scheduleId,
+                          teamId: et.teamId,
+                          theme: et.theme,
+                          hosts: et.hosts.map(({ userId, role, weight }) => ({
+                            userId,
+                            role,
+                            weight,
+                          })),
+                        },
+                      })
+                    }
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Delete ${et.title}`}
+                    onClick={() => void remove(et.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </span>
               </li>
             ))}
           </ul>
@@ -668,7 +674,7 @@ function ScheduleForm({
         onSave();
       }}
     >
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="sched-name">Name</Label>
           <Input
@@ -678,9 +684,9 @@ function ScheduleForm({
             placeholder="Working hours"
           />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col gap-1.5">
           <Label>Timezone</Label>
-          <div className="flex h-9 items-center rounded-md border border-border bg-card px-3">
+          <div className="flex h-9 min-w-0 items-center rounded-md border border-border bg-card px-3">
             <TimezoneSelect
               value={form.timezone}
               onChange={(timezone) => onChange({ ...form, timezone })}
@@ -693,8 +699,8 @@ function ScheduleForm({
         {DOW_LABELS.map((label, dow) => {
           const rule = ruleFor(dow);
           return (
-            <div key={label} className="flex items-center gap-3 text-sm">
-              <label className="flex w-16 items-center gap-2">
+            <div key={label} className="flex items-center gap-2 text-sm sm:gap-3">
+              <label className="flex w-14 shrink-0 items-center gap-2 sm:w-16">
                 <input type="checkbox" checked={!!rule} onChange={() => toggleDay(dow)} />
                 {label}
               </label>
@@ -702,7 +708,7 @@ function ScheduleForm({
                 <>
                   <Input
                     type="time"
-                    className="w-32"
+                    className="w-full min-w-0 sm:w-32"
                     value={rule.start}
                     aria-label={`${label} start`}
                     onChange={(e) => setTime(dow, "start", e.target.value)}
@@ -710,7 +716,7 @@ function ScheduleForm({
                   <span className="text-muted-foreground">–</span>
                   <Input
                     type="time"
-                    className="w-32"
+                    className="w-full min-w-0 sm:w-32"
                     value={rule.end}
                     aria-label={`${label} end`}
                     onChange={(e) => setTime(dow, "end", e.target.value)}
