@@ -19,11 +19,18 @@ export type AvailabilityResponse = {
   all: SlotDto[];
 };
 
+export type EventTypeProfile = {
+  teamName: string | null;
+  hosts: { name: string; image: string | null }[];
+};
+
 export type EventTypeMeta = {
   slug: string;
   title: string;
   durationMinutes: number;
   theme: string;
+  /** absent only from pre-profile servers */
+  profile?: EventTypeProfile;
 };
 
 export type HoldResponse = {

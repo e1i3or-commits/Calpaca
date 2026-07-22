@@ -3,7 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
 import * as schema from "./schema";
-import { bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, schedules } from "./schema";
+import { bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, schedules, teams, users } from "./schema";
 import type { Interval } from "../core/availability/intervals";
 import type { WeeklyRule } from "../core/availability/rules";
 
@@ -125,6 +125,33 @@ export async function getEventTypeForBookingById(
 ): Promise<BookingEventTypeConfig | null> {
   const [row] = await executor.select().from(eventTypes).where(eq(eventTypes.id, id));
   return row ? toBookingEventTypeConfig(row) : null;
+}
+
+/** Public identity of who the invitee is booking with: the team name when the
+ * event type belongs to one, and each host's display name + avatar. Emails
+ * stay out — this feeds an unauthenticated endpoint. */
+export interface EventTypeProfile {
+  readonly teamName: string | null;
+  readonly hosts: readonly { readonly name: string; readonly image: string | null }[];
+}
+
+export async function getEventTypeProfile(
+  eventTypeId: string,
+  executor: Db = getDb(),
+): Promise<EventTypeProfile> {
+  const [teamRows, hostRows] = await Promise.all([
+    executor
+      .select({ teamName: teams.name })
+      .from(eventTypes)
+      .leftJoin(teams, eq(eventTypes.teamId, teams.id))
+      .where(eq(eventTypes.id, eventTypeId)),
+    executor
+      .select({ name: users.name, image: users.image })
+      .from(eventTypeHosts)
+      .innerJoin(users, eq(eventTypeHosts.userId, users.id))
+      .where(eq(eventTypeHosts.eventTypeId, eventTypeId)),
+  ]);
+  return { teamName: teamRows[0]?.teamName ?? null, hosts: hostRows };
 }
 
 /** Loads every host assigned to an event type, with their round-robin/group role. */

@@ -4,10 +4,12 @@ import { Temporal } from "@js-temporal/polyfill";
 import {
   getEventTypeBySlug as dbGetEventTypeBySlug,
   getEventTypeHosts as dbGetEventTypeHosts,
+  getEventTypeProfile as dbGetEventTypeProfile,
   getSchedulesForUsers as dbGetSchedulesForUsers,
   getBusyForUsers as dbGetBusyForUsers,
   type EventTypeConfig,
   type EventTypeHostRecord,
+  type EventTypeProfile,
   type HostSchedule,
   type HostBusy,
 } from "../../db/availability-repo";
@@ -27,6 +29,9 @@ import { resolveTheme } from "../../core/theming/themes";
 export interface AvailabilityDeps {
   readonly getEventTypeBySlug: (slug: string) => Promise<EventTypeConfig | null>;
   readonly getEventTypeHosts: (eventTypeId: string) => Promise<EventTypeHostRecord[]>;
+  /** optional so injected test fixtures predating the booking-page profile
+   * stay valid; when absent the meta response simply omits `profile` */
+  readonly getEventTypeProfile?: (eventTypeId: string) => Promise<EventTypeProfile>;
   readonly getSchedulesForUsers: (userIds: readonly string[]) => Promise<HostSchedule[]>;
   readonly getBusyForUsers: (userIds: readonly string[], window: Interval) => Promise<HostBusy[]>;
   readonly now: () => Temporal.Instant;
@@ -35,6 +40,7 @@ export interface AvailabilityDeps {
 const defaultDeps: AvailabilityDeps = {
   getEventTypeBySlug: (slug) => dbGetEventTypeBySlug(slug),
   getEventTypeHosts: (eventTypeId) => dbGetEventTypeHosts(eventTypeId),
+  getEventTypeProfile: (eventTypeId) => dbGetEventTypeProfile(eventTypeId),
   getSchedulesForUsers: (userIds) => dbGetSchedulesForUsers(userIds),
   getBusyForUsers: (userIds, window) => dbGetBusyForUsers(userIds, window),
   now: () => Temporal.Now.instant(),
@@ -139,17 +145,23 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
   const router = new Hono();
 
   // Public identity of a booking link: what the booking page needs before it
-  // has any slots — the real title and the theme to render with. Config that
-  // could leak host behavior (buffers, notice, hosts) stays private.
+  // has any slots — the real title, the theme to render with, and who the
+  // invitee is meeting (host/team display names + avatars; emails stay out).
+  // Config that could leak host behavior (buffers, notice) stays private.
   router.get("/event-types/:slug", async (c) => {
     const eventType = await deps.getEventTypeBySlug(c.req.param("slug"));
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+
+    const profile = deps.getEventTypeProfile
+      ? await deps.getEventTypeProfile(eventType.id)
+      : undefined;
 
     return c.json({
       slug: eventType.slug,
       title: eventType.title ?? eventType.slug,
       durationMinutes: eventType.durationMinutes,
       theme: resolveTheme(eventType.theme),
+      ...(profile ? { profile } : {}),
     });
   });
 

@@ -7,6 +7,7 @@ import {
   getEventTypeMeta,
   type BookingConfirmation,
   type EventTypeMeta,
+  type EventTypeProfile,
   type RoutingAnswers,
   type SlotDto,
 } from "@/lib/api";
@@ -64,10 +65,19 @@ export function BookingPage({
     <div className="mx-auto max-w-2xl px-4 py-10">
       <Card>
         <CardHeader>
+          {meta?.profile && <ProfileHeader profile={meta.profile} />}
           <CardTitle className="text-xl">{meta?.title ?? slug.replace(/-/g, " ")}</CardTitle>
-          <CardDescription className="flex items-center gap-1.5">
-            <Globe className="h-3.5 w-3.5" />
-            <TimezoneSelect value={timezone} onChange={setTimezone} />
+          <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {meta && (
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" />
+                {meta.durationMinutes} min
+              </span>
+            )}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Globe className="h-3.5 w-3.5" />
+              <TimezoneSelect value={timezone} onChange={setTimezone} />
+            </span>
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -108,6 +118,56 @@ export function BookingPage({
       </Card>
     </div>
   );
+}
+
+/** Who the invitee is meeting: avatars + the team name (members beneath) or
+ * the host name(s). Rendered only when the meta response carries a profile. */
+function ProfileHeader({ profile }: { profile: EventTypeProfile }) {
+  if (!profile.teamName && profile.hosts.length === 0) return null;
+  const primary = profile.teamName ?? profile.hosts.map((h) => h.name).join(", ");
+  return (
+    <div className="mb-1 flex items-center gap-3">
+      {profile.hosts.length > 0 && (
+        <div className="flex shrink-0 -space-x-2">
+          {profile.hosts.slice(0, 3).map((h, i) =>
+            h.image ? (
+              <img
+                key={`${h.name}-${i}`}
+                src={h.image}
+                alt={h.name}
+                className="h-9 w-9 rounded-full border-2 border-card object-cover"
+              />
+            ) : (
+              <div
+                key={`${h.name}-${i}`}
+                aria-hidden
+                className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-card bg-muted text-xs font-medium"
+              >
+                {initials(h.name)}
+              </div>
+            ),
+          )}
+        </div>
+      )}
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{primary}</p>
+        {profile.teamName && profile.hosts.length > 0 && (
+          <p className="truncate text-xs text-muted-foreground">
+            {profile.hosts.map((h) => h.name).join(", ")}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
 }
 
 export function TimezoneSelect({ value, onChange }: { value: string; onChange: (tz: string) => void }) {

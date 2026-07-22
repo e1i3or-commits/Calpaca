@@ -1,39 +1,85 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import { getAvailability, type AvailabilityResponse, type SlotDto } from "@/lib/api";
+import { getAvailability, type SlotDto } from "@/lib/api";
 import { dayKey, formatDay, formatDayTime, formatTime } from "@/lib/time";
 import { Button } from "@/components/ui/button";
-
-const WINDOW_DAYS = 14;
+import { MonthCalendar } from "@/components/month-calendar";
 
 /**
- * Slot selection shared by the booking page and the reschedule page: loads
- * availability for (slug, timezone), shows the curated top-3 by default with
- * the full wall as fallback. Bump `reloadKey` to force a refetch (e.g. after
- * a 409 said the wall is stale).
+ * Slot selection shared by the booking page and the reschedule page: the
+ * curated "best times" up front, a month calendar below it, and tapping a day
+ * reveals that day's times. Availability is fetched one month at a time and
+ * cached per month; bump `reloadKey` to force a refetch (e.g. after a 409
+ * said a slot is stale).
  */
-export function SlotPicker({
-  slug,
-  timezone,
-  reloadKey = 0,
-  onPick,
-  onLoadError,
-}: {
+
+/** Months bookable beyond the current one. Server-side rollingWindowDays
+ * empties later months on its own; this just bounds the nav. */
+const MAX_MONTHS_AHEAD = 2;
+
+type Cursor = { year: number; month: number };
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const monthIndex = (c: Cursor) => c.year * 12 + (c.month - 1);
+const monthKey = (c: Cursor) => `${c.year}-${pad2(c.month)}`;
+
+function addMonths(c: Cursor, n: number): Cursor {
+  const i = monthIndex(c) + n;
+  return { year: Math.floor(i / 12), month: (i % 12) + 1 };
+}
+
+/** Today's month in the invitee's zone — the calendar's lower nav bound. */
+function currentCursor(timezone: string): Cursor {
+  const [y, m] = dayKey(new Date().toISOString(), timezone).split("-");
+  return { year: Number(y), month: Number(m) };
+}
+
+export function SlotPicker(props: {
   slug: string;
   timezone: string;
   reloadKey?: number;
   onPick: (slot: SlotDto) => void;
   onLoadError: (e: unknown) => void;
 }) {
-  const [availability, setAvailability] = useState<AvailabilityResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showAll, setShowAll] = useState(false);
+  // remount on identity change so every piece of state (month cache, curated
+  // capture, selected day) resets without effect-ordering choreography
+  return <SlotPickerInner key={`${props.slug}|${props.timezone}|${props.reloadKey ?? 0}`} {...props} />;
+}
+
+function SlotPickerInner({
+  slug,
+  timezone,
+  onPick,
+  onLoadError,
+}: {
+  slug: string;
+  timezone: string;
+  onPick: (slot: SlotDto) => void;
+  onLoadError: (e: unknown) => void;
+}) {
+  const [nowCursor] = useState(() => currentCursor(timezone));
+  const [cursor, setCursor] = useState(nowCursor);
+  const [months, setMonths] = useState<ReadonlyMap<string, readonly SlotDto[]>>(new Map());
+  const [curated, setCurated] = useState<readonly SlotDto[] | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  const key = monthKey(cursor);
+  const monthSlots = months.get(key);
 
   useEffect(() => {
+    if (months.has(key)) return;
     let cancelled = false;
-    setLoading(true);
-    const start = new Date();
-    const end = new Date(start.getTime() + WINDOW_DAYS * 86_400_000);
+    // month bounds padded a day each way so no invitee-zone offset can push a
+    // slot out of the fetch window; the dayKey filter below re-trims exactly
+    const rawStart = new Date(Date.UTC(cursor.year, cursor.month - 1, 1) - 86_400_000);
+    const end = new Date(Date.UTC(cursor.year, cursor.month, 1) + 86_400_000);
+    const now = new Date();
+    const start = rawStart < now ? now : rawStart;
+    if (end <= start) {
+      setMonths((m) => new Map(m).set(key, []));
+      return;
+    }
     getAvailability({
       eventTypeSlug: slug,
       start: start.toISOString(),
@@ -41,46 +87,58 @@ export function SlotPicker({
       inviteeTimezone: timezone,
     })
       .then((r) => {
-        if (!cancelled) setAvailability(r);
+        if (cancelled) return;
+        const prefix = `${key}-`;
+        const inMonth = r.all.filter((s) => dayKey(s.start.utc, timezone).startsWith(prefix));
+        setMonths((m) => new Map(m).set(key, inMonth));
+        // curated comes from the first month only: it's the server's top-N
+        // for the near window, not something to overwrite while browsing
+        setCurated((c) => c ?? r.curated);
       })
       .catch((e: unknown) => {
-        if (!cancelled) onLoadError(e);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setFailed(true);
+          onLoadError(e);
+        }
       });
     return () => {
       cancelled = true;
     };
     // onLoadError is deliberately not a dependency: parents pass fresh
-    // closures every render and only (slug, timezone, reloadKey) should refetch
-  }, [slug, timezone, reloadKey]);
+    // closures every render and only the month in view should refetch
+  }, [slug, timezone, key, months]);
 
   const byDay = useMemo(() => {
     const groups = new Map<string, SlotDto[]>();
-    for (const slot of availability?.all ?? []) {
-      const key = dayKey(slot.start.utc, timezone);
-      groups.set(key, [...(groups.get(key) ?? []), slot]);
+    for (const slot of monthSlots ?? []) {
+      const day = dayKey(slot.start.utc, timezone);
+      groups.set(day, [...(groups.get(day) ?? []), slot]);
     }
     for (const slots of groups.values()) {
       slots.sort((a, b) => a.start.utc.localeCompare(b.start.utc));
     }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [availability, timezone]);
+    return groups;
+  }, [monthSlots, timezone]);
 
-  if (loading) return <p className="text-sm text-muted-foreground">Loading times…</p>;
-  if (!availability) return null;
-  if (availability.all.length === 0) {
-    return <p className="text-sm text-muted-foreground">No times available in the next two weeks.</p>;
+  const availableDays = useMemo(() => new Set(byDay.keys()), [byDay]);
+  const firstAvailable = useMemo(() => [...availableDays].sort()[0] ?? null, [availableDays]);
+  // derived, not stored: a selection carries across month nav and comes back
+  // when its month does, while an empty or foreign month falls back cleanly
+  const effectiveDay = selectedDay && availableDays.has(selectedDay) ? selectedDay : firstAvailable;
+  const daySlots = effectiveDay ? (byDay.get(effectiveDay) ?? []) : [];
+
+  const loading = monthSlots === undefined;
+  if (failed) return null;
+  if (loading && curated === null) {
+    return <p className="text-sm text-muted-foreground">Loading times…</p>;
   }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* curated top-3 scored slots are the default; the wall is the fallback */}
-      {!showAll && (
+      {curated !== null && curated.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-sm text-muted-foreground">Suggested times</p>
-          {availability.curated.map((slot) => (
+          <p className="text-sm text-muted-foreground">Best times</p>
+          {curated.map((slot) => (
             <Button
               key={slot.start.utc}
               variant="outline"
@@ -95,27 +153,39 @@ export function SlotPicker({
         </div>
       )}
 
-      {showAll && (
-        <div className="flex flex-col gap-4">
-          {byDay.map(([key, slots]) => (
-            <div key={key}>
-              <p className="mb-2 text-sm font-medium">{formatDay(slots[0]!.start.utc, timezone)}</p>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {slots.map((slot) => (
+      <div className="grid gap-6 sm:grid-cols-2">
+        <MonthCalendar
+          year={cursor.year}
+          month={cursor.month}
+          availableDays={availableDays}
+          selectedDay={effectiveDay}
+          onSelectDay={setSelectedDay}
+          onPrev={() => setCursor((c) => addMonths(c, -1))}
+          onNext={() => setCursor((c) => addMonths(c, 1))}
+          canPrev={monthIndex(cursor) > monthIndex(nowCursor)}
+          canNext={monthIndex(cursor) < monthIndex(nowCursor) + MAX_MONTHS_AHEAD}
+        />
+
+        <div className="flex flex-col gap-2">
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading times…</p>
+          ) : effectiveDay ? (
+            <>
+              <p className="text-sm font-medium">{formatDay(daySlots[0]!.start.utc, timezone)}</p>
+              <div className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-2">
+                {daySlots.map((slot) => (
                   <Button key={slot.start.utc} variant="outline" size="sm" onClick={() => onPick(slot)}>
                     {formatTime(slot.start.utc, timezone)}
                     {slot.localHourWarning && <AlertTriangle className="h-3 w-3 text-warning" />}
                   </Button>
                 ))}
               </div>
-            </div>
-          ))}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">No times available this month.</p>
+          )}
         </div>
-      )}
-
-      <Button variant="ghost" size="sm" className="self-start" onClick={() => setShowAll((v) => !v)}>
-        {showAll ? "Show suggested times" : "Show all times"}
-      </Button>
+      </div>
     </div>
   );
 }
