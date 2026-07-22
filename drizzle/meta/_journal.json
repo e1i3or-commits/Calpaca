@@ -43,6 +43,13 @@
       "when": 1784741890071,
       "tag": "0005_stale_pride",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784743767222,
+      "tag": "0006_fearless_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }

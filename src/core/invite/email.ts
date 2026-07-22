@@ -6,7 +6,7 @@ import { Temporal } from "@js-temporal/polyfill";
  * first class: every time is rendered in the recipient's zone.
  */
 
-export type InviteKind = "created" | "rescheduled" | "cancelled";
+export type InviteKind = "created" | "rescheduled" | "cancelled" | "reminder";
 
 export interface InviteEmailInput {
   readonly kind: InviteKind;
@@ -49,6 +49,7 @@ const SUBJECT_PREFIX: Record<InviteKind, string> = {
   created: "Confirmed",
   rescheduled: "Rescheduled",
   cancelled: "Cancelled",
+  reminder: "Reminder",
 };
 
 export function composeInviteEmail(input: InviteEmailInput): InviteEmail {
@@ -60,7 +61,9 @@ export function composeInviteEmail(input: InviteEmailInput): InviteEmail {
       ? `Your ${input.eventTitle} with ${input.hostName} has been cancelled.`
       : input.kind === "rescheduled"
         ? `Your ${input.eventTitle} with ${input.hostName} has been rescheduled.`
-        : `You're booked: ${input.eventTitle} with ${input.hostName}.`;
+        : input.kind === "reminder"
+          ? `A reminder: your ${input.eventTitle} with ${input.hostName} is coming up.`
+          : `You're booked: ${input.eventTitle} with ${input.hostName}.`;
 
   const lines = [
     `Hi ${input.inviteeName},`,

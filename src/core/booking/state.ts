@@ -12,7 +12,8 @@ export type BookingEventKind =
   | "no_show"
   | "invite_sent"
   | "invite_delivered"
-  | "invite_failed";
+  | "invite_failed"
+  | "reminder_sent";
 
 export interface CreatedPayload {
   readonly startsAt: Temporal.Instant;
@@ -38,6 +39,7 @@ export interface ReassignedPayload {
 export type NoShowPayload = Record<string, never>;
 export type InviteSentPayload = Record<string, never>;
 export type InviteDeliveredPayload = Record<string, never>;
+export type ReminderSentPayload = Record<string, never>;
 
 export interface InviteFailedPayload {
   readonly reason?: string;
@@ -51,7 +53,8 @@ export type BookingEvent =
   | { readonly kind: "no_show"; readonly payload: NoShowPayload }
   | { readonly kind: "invite_sent"; readonly payload: InviteSentPayload }
   | { readonly kind: "invite_delivered"; readonly payload: InviteDeliveredPayload }
-  | { readonly kind: "invite_failed"; readonly payload: InviteFailedPayload };
+  | { readonly kind: "invite_failed"; readonly payload: InviteFailedPayload }
+  | { readonly kind: "reminder_sent"; readonly payload: ReminderSentPayload };
 
 /** Extracts the payload type for a given event kind, for callers that build
  * one event at a time (e.g. a db-layer appendEvent(bookingId, kind, payload)). */
@@ -153,6 +156,16 @@ export function applyEvent(
       if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
       if (state.inviteStatus !== "sent") return illegal(event.kind, "invite_not_sent");
       return ok({ ...state, inviteStatus: "failed" });
+    }
+
+    case "reminder_sent": {
+      // Deliberately state-neutral: "was a reminder sent since the last
+      // reschedule" is answered by the event log itself (the reminder sweep's
+      // NOT EXISTS), not by a projection field — so BookingState keeps its
+      // shape and the log stays the single source of truth.
+      if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
+      return ok(state);
     }
   }
 }

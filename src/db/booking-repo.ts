@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
@@ -41,6 +41,7 @@ function serializePayload(event: BookingEvent): StoredPayload {
     case "no_show":
     case "invite_sent":
     case "invite_delivered":
+    case "reminder_sent":
       return {};
     case "invite_failed":
       return { reason: event.payload.reason };
@@ -85,6 +86,8 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
       return { kind: "invite_delivered", payload: {} };
     case "invite_failed":
       return { kind: "invite_failed", payload: { reason: payload["reason"] as string | undefined } };
+    case "reminder_sent":
+      return { kind: "reminder_sent", payload: {} };
   }
 }
 
@@ -260,6 +263,49 @@ export async function getInviteContext(
     hosts,
     rescheduleCount: rescheduled.length,
   };
+}
+
+/**
+ * Confirmed bookings due a reminder: starting within `lead` of `now`, where
+ * the current time slot was set (created or last rescheduled) before the
+ * reminder point — a booking made or moved inside the window just received a
+ * confirmation email and gets no extra nudge — and where no reminder has been
+ * sent since the last reschedule, so moving a meeting re-arms its reminder.
+ * Dedup lives here, in the log, not in a projection flag (see the
+ * reminder_sent case in src/core/booking/state.ts).
+ */
+export async function listBookingsNeedingReminder(
+  now: Temporal.Instant,
+  lead: Temporal.Duration,
+  executor: Db = getDb(),
+): Promise<string[]> {
+  const nowDate = new Date(now.epochMilliseconds);
+  const windowEnd = new Date(now.add(lead).epochMilliseconds);
+  const leadMs = lead.total({ unit: "milliseconds" });
+
+  const result = await executor.execute<{ id: string }>(sql`
+    select b.id
+    from ${bookings} b
+    where b.status = 'confirmed'
+      and b.starts_at > ${nowDate}
+      and b.starts_at <= ${windowEnd}
+      and (
+        select max(e.created_at) from ${bookingEvents} e
+        where e.booking_id = b.id and e.kind in ('created', 'rescheduled')
+      ) <= b.starts_at - make_interval(secs => ${leadMs / 1000})
+      and not exists (
+        select 1 from ${bookingEvents} r
+        where r.booking_id = b.id
+          and r.kind = 'reminder_sent'
+          and r.created_at > coalesce(
+            (select max(e2.created_at) from ${bookingEvents} e2
+             where e2.booking_id = b.id and e2.kind = 'rescheduled'),
+            'epoch'::timestamptz
+          )
+      )
+  `);
+
+  return result.rows.map((row) => row.id);
 }
 
 /**

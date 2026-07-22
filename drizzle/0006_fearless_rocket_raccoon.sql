@@ -1,0 +1,1 @@
+ALTER TYPE "public"."booking_event_kind" ADD VALUE 'reminder_sent';

@@ -16,6 +16,10 @@ import { isMailerConfigured, sendInviteMail } from "../notifications/mailer";
  * retries via pg-boss and the invite status stays "none" — visibly unsent.
  */
 
+/** One reminder, 24h before start. The sweep query and the send-time guard
+ * both measure against this same lead. */
+export const REMINDER_LEAD = Temporal.Duration.from({ hours: 24 });
+
 function buildLinks(bookingId: string, rescheduleToken: string, cancelToken: string) {
   const base = process.env.PUBLIC_URL?.replace(/\/$/, "");
   if (!base) return null;
@@ -47,6 +51,45 @@ export async function sendInvite(bookingId: string, kind: InviteKind): Promise<v
     }
   }
   console.log(`[jobs] invite ${kind} for ${bookingId} sent`);
+}
+
+/**
+ * The reminder-sweep job body. Re-checks the window at send time: between
+ * enqueue and send the booking may have been cancelled or moved, and a skip
+ * here appends nothing, so a rescheduled booking's reminder re-arms on the
+ * next sweep instead of firing at the wrong time.
+ */
+export async function sendReminder(bookingId: string): Promise<void> {
+  if (!isMailerConfigured()) {
+    console.log(`[jobs] reminder for ${bookingId} skipped: SMTP not configured`);
+    return;
+  }
+
+  const ctx = await getInviteContext(bookingId);
+  if (!ctx) {
+    console.error(`[jobs] reminder for ${bookingId}: booking or event type missing`);
+    return;
+  }
+
+  const now = Temporal.Now.instant();
+  const { startsAt } = ctx.booking;
+  if (
+    ctx.booking.status !== "confirmed" ||
+    Temporal.Instant.compare(startsAt, now) <= 0 ||
+    Temporal.Instant.compare(startsAt, now.add(REMINDER_LEAD)) > 0
+  ) {
+    console.log(`[jobs] reminder for ${bookingId} skipped: no longer due`);
+    return;
+  }
+
+  await sendInviteMail(buildMail(ctx, "reminder", now));
+
+  const recorded = await appendEvent(bookingId, "reminder_sent", {});
+  if (!recorded.ok) {
+    // e.g. cancelled between send and record — log; the log stays authoritative
+    console.error(`[jobs] reminder_sent for ${bookingId} not recorded:`, recorded.error);
+  }
+  console.log(`[jobs] reminder for ${bookingId} sent`);
 }
 
 /** Split out so the live SMTP test can exercise composition + transport

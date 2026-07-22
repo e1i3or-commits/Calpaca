@@ -1,9 +1,12 @@
 import PgBoss from "pg-boss";
+import { Temporal } from "@js-temporal/polyfill";
 import { getAuth } from "../auth/index";
 import { syncConnection } from "../sync/engine";
 import { listEvents, watchEvents } from "../sync/google";
-import { sendInvite } from "./invite-email";
+import { REMINDER_LEAD, sendInvite, sendReminder } from "./invite-email";
 import type { InviteKind } from "../core/invite/email";
+import { listBookingsNeedingReminder } from "../db/booking-repo";
+import { expireHolds } from "../db/holds-repo";
 import {
   deliverWebhook,
   fanOutBookingWebhooks,
@@ -35,6 +38,10 @@ import {
 //                  job per active matching endpoint
 // webhook-delivery one POST per endpoint per event; per-endpoint retries so
 //                  a dead consumer never delays another
+// reminder-sweep   5-min poll: enqueues one invite-email "reminder" per
+//                  confirmed booking entering the 24h-before window
+// hold-expiry      5-min poll: releases expired active holds (confirmation
+//                  re-checks expiry itself; this is hygiene, not correctness)
 
 export const SYNC_QUEUE = "calendar-sync";
 const SWEEP_QUEUE = "sync-sweep";
@@ -42,6 +49,8 @@ const RENEWAL_QUEUE = "channel-renewal";
 const INVITE_QUEUE = "invite-email";
 const WEBHOOK_FANOUT_QUEUE = "webhook-fanout";
 const WEBHOOK_DELIVERY_QUEUE = "webhook-delivery";
+const REMINDER_SWEEP_QUEUE = "reminder-sweep";
+const HOLD_EXPIRY_QUEUE = "hold-expiry";
 
 const CHANNEL_RENEW_AHEAD_MS = 24 * 60 * 60 * 1000;
 
@@ -167,7 +176,9 @@ export async function startJobs(): Promise<void> {
   });
 
   await b.work<{ bookingId: string; kind: InviteKind }>(INVITE_QUEUE, async ([job]) => {
-    if (job) await sendInvite(job.data.bookingId, job.data.kind);
+    if (!job) return;
+    if (job.data.kind === "reminder") await sendReminder(job.data.bookingId);
+    else await sendInvite(job.data.bookingId, job.data.kind);
   });
 
   await b.createQueue(WEBHOOK_FANOUT_QUEUE);
@@ -193,6 +204,32 @@ export async function startJobs(): Promise<void> {
   await b.work<DeliveryJob>(WEBHOOK_DELIVERY_QUEUE, async ([job]) => {
     if (job) await deliverWebhook(job.data);
   });
+
+  await b.createQueue(REMINDER_SWEEP_QUEUE);
+  await b.work(REMINDER_SWEEP_QUEUE, async () => {
+    for (const bookingId of await listBookingsNeedingReminder(Temporal.Now.instant(), REMINDER_LEAD)) {
+      await b.send(
+        INVITE_QUEUE,
+        { bookingId, kind: "reminder" satisfies InviteKind },
+        {
+          retryLimit: 5,
+          retryDelay: 60,
+          retryBackoff: true,
+          // one queued reminder per booking even when sweeps overlap; once it
+          // completes, the reminder_sent event keeps later sweeps away
+          singletonKey: `reminder:${bookingId}`,
+        },
+      );
+    }
+  });
+  await b.schedule(REMINDER_SWEEP_QUEUE, "*/5 * * * *");
+
+  await b.createQueue(HOLD_EXPIRY_QUEUE);
+  await b.work(HOLD_EXPIRY_QUEUE, async () => {
+    const released = await expireHolds(Temporal.Now.instant());
+    if (released > 0) console.log(`[jobs] hold-expiry: released ${released} hold(s)`);
+  });
+  await b.schedule(HOLD_EXPIRY_QUEUE, "*/5 * * * *");
 
   await b.work(SWEEP_QUEUE, async () => {
     const staleBefore = Date.now() - FULL_RESYNC_AFTER_MS;
@@ -220,7 +257,9 @@ export async function startJobs(): Promise<void> {
     console.log("[jobs] PUBLIC_URL unset: watch channels disabled, relying on 15-min sweep");
   }
 
-  // initial sweep so a fresh boot syncs immediately
+  // initial sweeps so a fresh boot syncs, reminds, and expires immediately
   await b.send(SWEEP_QUEUE, {});
+  await b.send(REMINDER_SWEEP_QUEUE, {});
+  await b.send(HOLD_EXPIRY_QUEUE, {});
   console.log("[jobs] pg-boss started");
 }
