@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowLeft, Check, Clock, Globe, UserPlus, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Clock, Globe, Phone, UserPlus, Video, X } from "lucide-react";
 import {
   ApiError,
   confirmBooking,
@@ -94,8 +94,16 @@ export function BookingPage({
     <div className="booking-shell mx-auto px-4 py-10" data-booking-layout={layout}>
       <Card className="booking-card">
         <CardHeader className="booking-header">
+          {meta?.logoUrl && (
+            <img src={meta.logoUrl} alt="" className="mb-3 max-h-9 max-w-44 object-contain object-left" />
+          )}
           {meta?.profile && <ProfileHeader profile={meta.profile} />}
           <CardTitle className="text-xl">{meta?.title ?? slug.replace(/-/g, " ")}</CardTitle>
+          {meta?.description && (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+              {meta.description}
+            </p>
+          )}
           <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1">
             {meta && (
               <span className="flex items-center gap-1.5">
@@ -163,6 +171,7 @@ export function BookingPage({
               hosts={step.hosts}
               optionalHosts={step.optionalHosts}
               routingAnswers={routingAnswers}
+              meetingFormats={meta?.meetingFormats ?? ["google_meet"]}
               onBack={() => setStep({ name: "pick" })}
               onError={(e) => {
                 setError(errorMessage(e));
@@ -379,6 +388,7 @@ function DetailsStep({
   hosts,
   optionalHosts,
   routingAnswers,
+  meetingFormats,
   onBack,
   onError,
   onConfirmed,
@@ -389,6 +399,7 @@ function DetailsStep({
   hosts?: string[];
   optionalHosts?: string[];
   routingAnswers?: RoutingAnswers;
+  meetingFormats: ("phone" | "google_meet")[];
   onBack: () => void;
   onError: (e: unknown) => void;
   onConfirmed: (confirmation: BookingConfirmation) => void;
@@ -396,6 +407,10 @@ function DetailsStep({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
+  const [meetingFormat, setMeetingFormat] = useState<"phone" | "google_meet">(
+    meetingFormats[0] ?? "google_meet",
+  );
+  const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function submit() {
@@ -416,6 +431,8 @@ function DetailsStep({
         invitee: { email, name, timezone, ...(notes.trim() ? { notes: notes.trim() } : {}) },
         routingAnswers,
         hosts,
+        meetingFormat,
+        ...(meetingFormat === "phone" ? { inviteePhone: phone.trim() } : {}),
       });
       onConfirmed(confirmation);
     } catch (e) {
@@ -462,6 +479,42 @@ function DetailsStep({
           <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
+          <Label>Meeting format</Label>
+          <div className="grid grid-cols-2 gap-2">
+            {meetingFormats.map((format) => {
+              const active = meetingFormat === format;
+              const Icon = format === "phone" ? Phone : Video;
+              return (
+                <button
+                  key={format}
+                  type="button"
+                  aria-pressed={active}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm ${
+                    active ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
+                  }`}
+                  onClick={() => setMeetingFormat(format)}
+                >
+                  <Icon className="h-4 w-4" />
+                  {format === "phone" ? "Phone call" : "Google Meet"}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {meetingFormat === "phone" && (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="phone">Phone number</Label>
+            <Input
+              id="phone"
+              type="tel"
+              required
+              value={phone}
+              placeholder="+1 555 123 4567"
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
+        )}
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="notes">
             Notes <span className="font-normal text-muted-foreground">(optional)</span>
           </Label>
@@ -473,7 +526,7 @@ function DetailsStep({
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
-        <Button type="submit" disabled={submitting || !name || !email}>
+        <Button type="submit" disabled={submitting || !name || !email || (meetingFormat === "phone" && !phone.trim())}>
           {submitting ? "Booking…" : "Confirm booking"}
         </Button>
       </form>

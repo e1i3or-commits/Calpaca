@@ -201,6 +201,8 @@ export interface BookingRow {
   /** booking-form notes; optional for the same fixture-compatibility reason
    * as inviteStatus below */
   readonly inviteeNotes?: string | null;
+  readonly meetingFormat?: string | null;
+  readonly inviteePhone?: string | null;
   readonly hostUserIds: readonly string[];
   readonly status: string;
   /** invite lifecycle projection: none | sent | delivered | failed.
@@ -232,6 +234,8 @@ export async function getBookingById(id: string, executor: Db = getDb()): Promis
     inviteeName: row.inviteeName,
     inviteeTimezone: row.inviteeTimezone,
     inviteeNotes: row.inviteeNotes,
+    meetingFormat: row.meetingFormat,
+    inviteePhone: row.inviteePhone,
     hostUserIds: row.hostUserIds,
     status: row.status,
     inviteStatus: row.inviteStatus,
@@ -436,6 +440,8 @@ export interface AdminBookingRow {
 export interface AdminBookingDetail extends AdminBookingRow {
   readonly inviteeTimezone: string;
   readonly inviteeNotes: string | null;
+  readonly meetingFormat?: string | null;
+  readonly inviteePhone?: string | null;
   readonly routingAnswers: Record<string, string | string[]> | null;
   readonly hasGoogleEvent: boolean;
   readonly events: readonly {
@@ -556,6 +562,8 @@ export async function getBookingDetailForUser(
       inviteeEmail: bookings.inviteeEmail,
       inviteeTimezone: bookings.inviteeTimezone,
       inviteeNotes: bookings.inviteeNotes,
+      meetingFormat: bookings.meetingFormat,
+      inviteePhone: bookings.inviteePhone,
       hostUserIds: bookings.hostUserIds,
       status: bookings.status,
       inviteStatus: bookings.inviteStatus,
@@ -585,6 +593,8 @@ export async function getBookingDetailForUser(
     ...adminBookingRow(row),
     inviteeTimezone: row.inviteeTimezone,
     inviteeNotes: row.inviteeNotes,
+    meetingFormat: row.meetingFormat,
+    inviteePhone: row.inviteePhone,
     routingAnswers: row.routingAnswers as Record<string, string | string[]> | null,
     hasGoogleEvent: row.googleEventId !== null,
     events: events.map((event) => ({

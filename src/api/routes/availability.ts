@@ -177,6 +177,11 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       title: eventType.title ?? eventType.slug,
       durationMinutes: eventType.durationMinutes,
       theme: resolveTheme(eventType.theme),
+      ...(eventType.description ? { description: eventType.description } : {}),
+      ...((eventType.logoUrl || resolveTheme(eventType.theme) === "tourscale")
+        ? { logoUrl: eventType.logoUrl ?? "/brand/tourscale-logo-color.svg" }
+        : {}),
+      ...(eventType.meetingFormats ? { meetingFormats: eventType.meetingFormats } : {}),
       ...(eventType.layout ? { layout: resolveBookingLayout(eventType.layout) } : {}),
       ...(profile ? { profile } : {}),
       ...(eventType.agentPolicy

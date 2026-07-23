@@ -21,6 +21,7 @@ import {
   type Slot,
   type HoldRecord,
   type Invitee,
+  type MeetingDetails,
   type CreateHoldError,
   type ConfirmHoldError,
   type ConfirmedBooking,
@@ -69,6 +70,7 @@ export interface BookingDeps {
     invitee: Invitee,
     assignment?: RoundRobinAssignment,
     routingAnswers?: RoutingAnswers,
+    meeting?: MeetingDetails,
   ) => Promise<Result<ConfirmedBooking, ConfirmHoldError>>;
   readonly confirmReschedule: (
     bookingId: string,
@@ -109,8 +111,8 @@ const defaultDeps: BookingDeps = {
   getSchedulesForUsers: (userIds) => dbGetSchedulesForUsers(userIds),
   getBusyForUsers: (userIds, window) => dbGetBusyForUsers(userIds, window),
   createHold: (eventTypeId, hostUserIds, slot, ttl) => dbCreateHold(eventTypeId, hostUserIds, slot, ttl),
-  confirmHold: (holdIds, invitee, assignment, routingAnswers) =>
-    dbConfirmHold(holdIds, invitee, undefined, assignment, routingAnswers),
+  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting) =>
+    dbConfirmHold(holdIds, invitee, undefined, assignment, routingAnswers, meeting),
   confirmReschedule: (bookingId, holdIds) => dbConfirmReschedule(bookingId, holdIds),
   cancelBooking: async (bookingId, reason) => {
     const result = await appendEvent(bookingId, "cancelled", { reason });
@@ -157,6 +159,8 @@ const bookingBodySchema = z.object({
       .optional()
       .transform((s) => (s?.trim() ? s.trim() : undefined)),
   }),
+  meetingFormat: z.enum(["phone", "google_meet"]).optional(),
+  inviteePhone: z.string().trim().min(7).max(40).optional(),
   // present when the booking came through a routing form (/routing/evaluate)
   routingAnswers: z
     .record(z.string(), z.union([z.string().max(1000), z.array(z.string().max(200)).max(50)]))
@@ -401,12 +405,20 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     const body = await c.req.json().catch(() => null);
     const parsed = bookingBodySchema.safeParse(body);
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
-    const { eventTypeSlug, holdIds, invitee, routingAnswers, agent } = parsed.data;
+    const { eventTypeSlug, holdIds, invitee, routingAnswers, agent, inviteePhone } = parsed.data;
 
     const eventType = await deps.getEventTypeForBooking(eventTypeSlug);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
     if (agent && !eventType.agentPolicy?.enabled) {
       return c.json({ error: "agent_not_allowed" }, 403);
+    }
+    const allowedFormats = eventType.meetingFormats ?? ["google_meet"];
+    const meetingFormat = parsed.data.meetingFormat ?? allowedFormats[0];
+    if (!meetingFormat || !allowedFormats.includes(meetingFormat)) {
+      return c.json({ error: "meeting_format_not_allowed" }, 400);
+    }
+    if (meetingFormat === "phone" && !inviteePhone) {
+      return c.json({ error: "phone_required" }, 400);
     }
 
     let assignment: RoundRobinAssignment | undefined;
@@ -419,7 +431,13 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       assignment = { candidates, history };
     }
 
-    const confirmed = await deps.confirmHold(holdIds, invitee, assignment, routingAnswers);
+    const confirmed = await deps.confirmHold(
+      holdIds,
+      invitee,
+      assignment,
+      routingAnswers,
+      { format: meetingFormat, ...(inviteePhone ? { phone: inviteePhone } : {}) },
+    );
     if (!confirmed.ok) {
       return c.json({ error: confirmed.error.kind }, confirmHoldErrorStatus(confirmed.error.kind));
     }

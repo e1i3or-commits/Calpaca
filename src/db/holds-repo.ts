@@ -38,6 +38,11 @@ export interface Invitee {
   readonly notes?: string;
 }
 
+export interface MeetingDetails {
+  readonly format: "phone" | "google_meet";
+  readonly phone?: string;
+}
+
 export type ConfirmHoldError =
   | { readonly kind: "not_found" }
   | { readonly kind: "expired" }
@@ -149,6 +154,7 @@ export async function confirmHold(
   executor: Db = getDb(),
   assignment?: RoundRobinAssignment,
   routingAnswers?: RoutingAnswers,
+  meeting?: MeetingDetails,
 ): Promise<Result<ConfirmedBooking, ConfirmHoldError>> {
   return executor.transaction(async (tx) => {
     const rows = await tx
@@ -212,6 +218,8 @@ export async function confirmHold(
         inviteeName: invitee.name,
         inviteeTimezone: invitee.timezone,
         inviteeNotes: invitee.notes ?? null,
+        meetingFormat: meeting?.format ?? null,
+        inviteePhone: meeting?.phone ?? null,
         hostUserIds,
         rescheduleToken: generateToken(),
         cancelToken: generateToken(),
@@ -228,6 +236,7 @@ export async function confirmHold(
         endsAt,
         hostUserIds,
         ...(routingAnswers ? { routingAnswers } : {}),
+        ...(meeting ? { meeting } : {}),
         ...(assignmentExplanation ? { assignment: assignmentExplanation } : {}),
       },
       tx,

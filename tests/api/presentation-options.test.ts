@@ -82,8 +82,11 @@ describe("presentation options", () => {
         id: USER_ID,
         slug: "intro",
         title: "Intro",
+        description: "A quick planning conversation.",
         theme: "juniper",
         layout: "split",
+        logoUrl: "https://example.com/logo.svg",
+        meetingFormats: ["phone", "google_meet"],
         mode: "solo",
         durationMinutes: 30,
         bufferBeforeMin: 0,
@@ -100,6 +103,40 @@ describe("presentation options", () => {
       now: () => Temporal.Instant.from("2027-01-01T00:00:00Z"),
     };
     const response = await createAvailabilityRoutes(deps).request("/event-types/intro");
-    expect(await response.json()).toMatchObject({ theme: "juniper", layout: "split" });
+    expect(await response.json()).toMatchObject({
+      theme: "juniper",
+      layout: "split",
+      description: "A quick planning conversation.",
+      logoUrl: "https://example.com/logo.svg",
+      meetingFormats: ["phone", "google_meet"],
+    });
+  });
+
+  test("TourScale metadata supplies its bundled logo when none is configured", async () => {
+    const deps: AvailabilityDeps = {
+      getEventTypeBySlug: async () => ({
+        id: USER_ID,
+        slug: "tour",
+        title: "Tour",
+        theme: "tourscale",
+        mode: "solo",
+        durationMinutes: 30,
+        bufferBeforeMin: 0,
+        bufferAfterMin: 0,
+        minimumNoticeMin: 0,
+        rollingWindowDays: 14,
+        maxPerDay: null,
+        curatedSlotCount: 3,
+        publicSelectableHostIds: [],
+      }),
+      getEventTypeHosts: async () => [],
+      getSchedulesForUsers: async () => [],
+      getBusyForUsers: async () => [],
+      now: () => Temporal.Instant.from("2027-01-01T00:00:00Z"),
+    };
+    const response = await createAvailabilityRoutes(deps).request("/event-types/tour");
+    expect(await response.json()).toMatchObject({
+      logoUrl: "/brand/tourscale-logo-color.svg",
+    });
   });
 });

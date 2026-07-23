@@ -146,6 +146,7 @@ export const eventTypes = pgTable("event_types", {
   teamId: uuid("team_id").references(() => teams.id),
   slug: text("slug").notNull(),
   title: text("title").notNull(),
+  description: text("description"),
   durationMinutes: integer("duration_minutes").notNull(),
   bufferBeforeMin: integer("buffer_before_min").notNull().default(0),
   bufferAfterMin: integer("buffer_after_min").notNull().default(0),
@@ -158,6 +159,9 @@ export const eventTypes = pgTable("event_types", {
   // bundled theme name (src/core/theming/themes.ts); public pages render with it
   theme: text("theme").notNull().default("default"),
   layout: text("layout").notNull().default("focus"),
+  logoUrl: text("logo_url"),
+  meetingFormats: jsonb("meeting_formats").$type<("phone" | "google_meet")[]>()
+    .notNull().default(["google_meet"]),
   // group booking on public links: explicit allowlist, empty = auth-only
   publicSelectableHostIds: jsonb("public_selectable_host_ids")
     .$type<string[]>().notNull().default([]),
@@ -198,6 +202,8 @@ export const bookings = pgTable("bookings", {
   // free-text "anything that will help prepare" from the booking form;
   // surfaces in the invite email, the ICS, and the Google event description
   inviteeNotes: text("invitee_notes"),
+  meetingFormat: text("meeting_format"),
+  inviteePhone: text("invitee_phone"),
   // all hosts on the meeting; solo/rr have one, group has many
   hostUserIds: jsonb("host_user_ids").$type<string[]>().notNull(),
   status: text("status").notNull().default("confirmed"), // projection only

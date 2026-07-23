@@ -176,6 +176,7 @@ export interface AdminEventType {
   readonly teamId: string | null;
   readonly slug: string;
   readonly title: string;
+  readonly description?: string | null;
   readonly durationMinutes: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -186,6 +187,8 @@ export interface AdminEventType {
   /** optional so pre-theming test fixtures stay valid; reads always set it */
   readonly theme?: string;
   readonly layout?: string;
+  readonly logoUrl?: string | null;
+  readonly meetingFormats?: ("phone" | "google_meet")[];
   readonly agentPolicy?: {
     readonly enabled: boolean;
     readonly autoExpireHoldsMin?: number;
@@ -227,6 +230,7 @@ function toAdminEventType(
     teamId: row.teamId,
     slug: row.slug,
     title: row.title,
+    description: row.description,
     durationMinutes: row.durationMinutes,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
@@ -236,6 +240,8 @@ function toAdminEventType(
     scheduleId: row.scheduleId,
     theme: row.theme,
     layout: row.layout,
+    logoUrl: row.logoUrl,
+    meetingFormats: row.meetingFormats,
     agentPolicy: row.agentPolicy,
     hosts,
   };
@@ -273,6 +279,7 @@ export async function getEventTypeForAdmin(
 export interface EventTypeInput {
   readonly slug: string;
   readonly title: string;
+  readonly description?: string | null;
   readonly durationMinutes: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -284,6 +291,8 @@ export interface EventTypeInput {
   /** undefined keeps the column default (create) or leaves it unchanged (update) */
   readonly theme?: string;
   readonly layout?: string;
+  readonly logoUrl?: string | null;
+  readonly meetingFormats?: ("phone" | "google_meet")[];
   /** Same compatibility behavior as theme for dashboard clients predating agent policy. */
   readonly agentPolicy?: {
     readonly enabled: boolean;
@@ -329,6 +338,7 @@ export async function updateEventType(
       .set({
         slug: input.slug,
         title: input.title,
+        description: input.description,
         durationMinutes: input.durationMinutes,
         bufferBeforeMin: input.bufferBeforeMin,
         bufferAfterMin: input.bufferAfterMin,
@@ -339,6 +349,8 @@ export async function updateEventType(
         teamId: input.teamId,
         theme: input.theme,
         layout: input.layout,
+        logoUrl: input.logoUrl,
+        meetingFormats: input.meetingFormats,
         agentPolicy: input.agentPolicy,
       })
       .where(eq(eventTypes.id, id))

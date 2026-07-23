@@ -31,9 +31,12 @@ export type EventTypeProfile = {
 export type EventTypeMeta = {
   slug: string;
   title: string;
+  description?: string;
   durationMinutes: number;
   theme: string;
   layout?: "focus" | "split" | "compact";
+  logoUrl?: string;
+  meetingFormats?: ("phone" | "google_meet")[];
   /** absent only from pre-profile servers */
   profile?: EventTypeProfile;
   selectableHosts?: {
@@ -135,6 +138,8 @@ export function confirmBooking(args: {
   invitee: { email: string; name: string; timezone: string; notes?: string };
   routingAnswers?: RoutingAnswers;
   hosts?: string[];
+  meetingFormat: "phone" | "google_meet";
+  inviteePhone?: string;
 }): Promise<BookingConfirmation> {
   return request("/bookings", { method: "POST", body: JSON.stringify(args) });
 }
@@ -232,6 +237,7 @@ export type AdminEventType = {
   teamId: string | null;
   slug: string;
   title: string;
+  description?: string | null;
   durationMinutes: number;
   bufferBeforeMin: number;
   bufferAfterMin: number;
@@ -241,6 +247,8 @@ export type AdminEventType = {
   scheduleId: string | null;
   theme: string;
   layout?: "focus" | "split" | "compact";
+  logoUrl?: string | null;
+  meetingFormats?: ("phone" | "google_meet")[];
   hosts: (EventTypeHost & { name: string; email: string })[];
 };
 
@@ -334,6 +342,8 @@ export type AdminBooking = {
 export type AdminBookingDetail = AdminBooking & {
   inviteeTimezone: string;
   inviteeNotes: string | null;
+  meetingFormat: "phone" | "google_meet" | null;
+  inviteePhone: string | null;
   routingAnswers: RoutingAnswers | null;
   hasGoogleEvent: boolean;
   events: {

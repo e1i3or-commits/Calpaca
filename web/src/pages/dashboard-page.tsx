@@ -67,6 +67,7 @@ import { themeOptions } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { PeoplePicker } from "@/components/people-picker";
 import { TimezoneSelect } from "@/pages/booking-page";
@@ -586,6 +587,10 @@ function BookingDetailPanel({
 
             <DetailSection title="Invitee">
               <p className="text-sm">{booking.inviteeEmail}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {booking.meetingFormat === "phone" ? "Phone call" : "Google Meet"}
+                {booking.inviteePhone ? ` · ${booking.inviteePhone}` : ""}
+              </p>
               {booking.inviteeNotes && <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm">{booking.inviteeNotes}</p>}
             </DetailSection>
 
@@ -674,6 +679,7 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
 const DEFAULT_EVENT_TYPE: EventTypeInput = {
   slug: "",
   title: "",
+  description: null,
   durationMinutes: 30,
   bufferBeforeMin: 0,
   bufferAfterMin: 0,
@@ -684,6 +690,8 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   teamId: null,
   theme: "default",
   layout: "focus",
+  logoUrl: null,
+  meetingFormats: ["google_meet"],
   hosts: [],
 };
 
@@ -814,6 +822,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                         form: {
                           slug: et.slug,
                           title: et.title,
+                          description: et.description ?? null,
                           durationMinutes: et.durationMinutes,
                           bufferBeforeMin: et.bufferBeforeMin,
                           bufferAfterMin: et.bufferAfterMin,
@@ -824,6 +833,8 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                           teamId: et.teamId,
                           theme: et.theme,
                           layout: et.layout ?? "focus",
+                          logoUrl: et.logoUrl ?? null,
+                          meetingFormats: et.meetingFormats ?? ["google_meet"],
                           hosts: et.hosts.map(({ userId, role, weight }) => ({
                             userId,
                             role,
@@ -913,6 +924,16 @@ function EventTypeForm({
               const slugWasDerived = form.slug === slugify(form.title);
               onChange({ ...form, title, slug: slugWasDerived ? slugify(title) : form.slug });
             }}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <Label htmlFor="et-description">Meeting description</Label>
+          <Textarea
+            id="et-description"
+            maxLength={2000}
+            value={form.description ?? ""}
+            placeholder="Tell invitees what to expect and how to prepare."
+            onChange={(e) => set("description", e.target.value || null)}
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -1043,6 +1064,46 @@ function EventTypeForm({
               );
             })}
           </div>
+        </div>
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <Label>Booker can choose</Label>
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["google_meet", "Google Meet"],
+              ["phone", "Phone call"],
+            ] as const).map(([value, label]) => {
+              const selected = (form.meetingFormats ?? ["google_meet"]).includes(value);
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={selected}
+                  className={`rounded-lg border px-3 py-2 text-sm ${
+                    selected ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground"
+                  }`}
+                  onClick={() => {
+                    const current = form.meetingFormats ?? ["google_meet"];
+                    const next = selected ? current.filter((item) => item !== value) : [...current, value];
+                    if (next.length > 0) set("meetingFormats", next);
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">Invitees choose one of the enabled formats when they book.</p>
+        </div>
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <Label htmlFor="et-logo">Whitelabel logo URL</Label>
+          <Input
+            id="et-logo"
+            type="url"
+            value={form.logoUrl ?? ""}
+            placeholder="https://example.com/logo.svg"
+            onChange={(e) => set("logoUrl", e.target.value || null)}
+          />
+          <p className="text-xs text-muted-foreground">Optional. TourScale uses its private brand logo automatically.</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-team">Team</Label>

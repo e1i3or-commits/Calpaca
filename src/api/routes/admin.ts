@@ -201,6 +201,7 @@ const eventTypeBodySchema = z
   .object({
     slug: z.string().min(1).max(80).regex(SLUG_RE, "kebab-case only"),
     title: z.string().min(1).max(200),
+    description: z.string().max(2000).nullable().default(null),
     durationMinutes: z.number().int().min(5).max(480),
     bufferBeforeMin: z.number().int().min(0).max(240),
     bufferAfterMin: z.number().int().min(0).max(240),
@@ -211,6 +212,9 @@ const eventTypeBodySchema = z
     teamId: z.string().uuid().nullable(),
     theme: z.enum(themeNames).default("default"),
     layout: z.enum(bookingLayoutNames).default("focus"),
+    logoUrl: z.string().url().max(2048).nullable().default(null),
+    meetingFormats: z.array(z.enum(["phone", "google_meet"])).min(1).max(2)
+      .default(["google_meet"]),
     agentPolicy: z
       .object({
         enabled: z.boolean(),
@@ -303,6 +307,8 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
       ...renderAdminBooking(detail, timezone),
       inviteeTimezone: detail.inviteeTimezone,
       inviteeNotes: detail.inviteeNotes,
+      meetingFormat: detail.meetingFormat,
+      inviteePhone: detail.inviteePhone,
       routingAnswers: detail.routingAnswers,
       hasGoogleEvent: detail.hasGoogleEvent,
       events: detail.events.map((event) => ({

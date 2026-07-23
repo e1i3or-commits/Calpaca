@@ -180,6 +180,8 @@ export async function watchEvents(args: {
 export type CalendarEventInput = {
   summary: string;
   description?: string;
+  location?: string;
+  createGoogleMeet?: boolean;
   startIso: string; // RFC3339 UTC
   endIso: string;
   attendees: { email: string; displayName?: string }[];
@@ -193,7 +195,9 @@ export async function insertEvent(args: {
   let res: Response;
   try {
     res = await fetch(
-      `${BASE}/calendars/${encodeURIComponent(args.calendarId)}/events?sendUpdates=all`,
+      `${BASE}/calendars/${encodeURIComponent(args.calendarId)}/events?sendUpdates=all${
+        args.event.createGoogleMeet ? "&conferenceDataVersion=1" : ""
+      }`,
       {
         method: "POST",
         headers: {
@@ -203,9 +207,20 @@ export async function insertEvent(args: {
         body: JSON.stringify({
           summary: args.event.summary,
           description: args.event.description,
+          location: args.event.location,
           start: { dateTime: args.event.startIso },
           end: { dateTime: args.event.endIso },
           attendees: args.event.attendees,
+          ...(args.event.createGoogleMeet
+            ? {
+                conferenceData: {
+                  createRequest: {
+                    requestId: crypto.randomUUID(),
+                    conferenceSolutionKey: { type: "hangoutsMeet" },
+                  },
+                },
+              }
+            : {}),
         }),
       },
     );

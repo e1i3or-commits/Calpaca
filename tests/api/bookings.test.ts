@@ -50,16 +50,25 @@ const roundRobinEventType: BookingEventTypeConfig = {
   publicSelectableHostIds: [],
 };
 
+const phoneEventType: BookingEventTypeConfig = {
+  ...soloEventType,
+  id: "et-phone",
+  slug: "phone-30",
+  meetingFormats: ["phone"],
+};
+
 const eventTypesBySlug: Record<string, BookingEventTypeConfig> = {
   "solo-30": soloEventType,
   "group-60": groupEventType,
   "rr-30": roundRobinEventType,
+  "phone-30": phoneEventType,
 };
 
 const eventTypesById: Record<string, BookingEventTypeConfig> = {
   "et-solo": soloEventType,
   "et-group": groupEventType,
   "et-rr": roundRobinEventType,
+  "et-phone": phoneEventType,
 };
 
 const hostsByEventType: Record<string, EventTypeHostRecord[]> = {
@@ -72,6 +81,7 @@ const hostsByEventType: Record<string, EventTypeHostRecord[]> = {
     { userId: "host-x", role: "member", weight: 200 },
     { userId: "host-y", role: "member", weight: 100 },
   ],
+  "et-phone": [{ userId: "host-a", role: "member", weight: 100 }],
 };
 
 const workingHours: HostSchedule["rules"] = [{ dow: 1, start: "09:00", end: "17:00" }];
@@ -283,6 +293,35 @@ describe("POST /holds", () => {
 });
 
 describe("POST /bookings", () => {
+  test("enforces organizer meeting-format choices and phone details", async () => {
+    const router = createBookingRoutes(makeDeps({
+      bookingsById: { "booking-1": makeBooking({ eventTypeId: "et-phone" }) },
+    }));
+    const base = {
+      eventTypeSlug: "phone-30",
+      holdIds: ["hold-host-a"],
+      invitee: { email: "invitee@example.com", name: "Invitee", timezone: "UTC" },
+    };
+
+    const disallowed = await post(router, "/bookings", {
+      ...base,
+      meetingFormat: "google_meet",
+    });
+    expect(disallowed.status).toBe(400);
+    expect(await disallowed.json()).toEqual({ error: "meeting_format_not_allowed" });
+
+    const missingPhone = await post(router, "/bookings", { ...base, meetingFormat: "phone" });
+    expect(missingPhone.status).toBe(400);
+    expect(await missingPhone.json()).toEqual({ error: "phone_required" });
+
+    const confirmed = await post(router, "/bookings", {
+      ...base,
+      meetingFormat: "phone",
+      inviteePhone: "+1 555 123 4567",
+    });
+    expect(confirmed.status).toBe(201);
+  });
+
   test("confirms a hold and returns tokens plus both-timezone times", async () => {
     const bookingsById = {
       "booking-1": makeBooking({

@@ -138,6 +138,10 @@ async function syncGoogleEvent(ctx: InviteContext, kind: InviteKind): Promise<bo
       event: {
         summary: `${ctx.eventTypeTitle}: ${organizer.name} and ${booking.inviteeName}`,
         description: descriptionParts.length ? descriptionParts.join("\n\n") : undefined,
+        ...(booking.meetingFormat === "phone" && booking.inviteePhone
+          ? { location: `Phone: ${booking.inviteePhone}` }
+          : {}),
+        createGoogleMeet: booking.meetingFormat === "google_meet",
         startIso,
         endIso,
         attendees: [

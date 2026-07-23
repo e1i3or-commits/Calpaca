@@ -15,8 +15,11 @@ export interface EventTypeConfig {
   // optional so injected test fixtures predating theming stay valid;
   // the repo always populates both
   readonly title?: string;
+  readonly description?: string | null;
   readonly theme?: string;
   readonly layout?: string;
+  readonly logoUrl?: string | null;
+  readonly meetingFormats?: readonly ("phone" | "google_meet")[];
   readonly mode?: AssignmentMode;
   readonly durationMinutes: number;
   readonly bufferBeforeMin: number;
@@ -42,6 +45,7 @@ export interface BookingEventTypeConfig {
   /** optional for the same fixture-compatibility reason as EventTypeConfig */
   readonly theme?: string;
   readonly layout?: string;
+  readonly meetingFormats?: readonly ("phone" | "google_meet")[];
   readonly durationMinutes: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -60,6 +64,7 @@ function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingE
     slug: row.slug,
     theme: row.theme,
     layout: row.layout,
+    meetingFormats: row.meetingFormats,
     durationMinutes: row.durationMinutes,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
@@ -110,8 +115,11 @@ export async function getEventTypeBySlug(
     id: row.id,
     slug: row.slug,
     title: row.title,
+    description: row.description,
     theme: row.theme,
     layout: row.layout,
+    logoUrl: row.logoUrl,
+    meetingFormats: row.meetingFormats,
     mode: row.mode,
     durationMinutes: row.durationMinutes,
     bufferBeforeMin: row.bufferBeforeMin,

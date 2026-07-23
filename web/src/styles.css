@@ -98,14 +98,6 @@ body {
   border-bottom: 1px solid #e2e8f0;
 }
 
-[data-theme="tourscale"] .booking-header::before {
-  position: absolute;
-  inset: 0 0 auto;
-  height: 0.35rem;
-  content: "";
-  background: linear-gradient(90deg, #f86e4f, #1edee4 50%, #35acef);
-}
-
 [data-theme="tourscale"] .booking-header [class*="text-xl"] {
   font-family: var(--theme-font-heading);
   letter-spacing: 0.05em;
