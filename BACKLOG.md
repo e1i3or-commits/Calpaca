@@ -1,61 +1,96 @@
 # Backlog
 
-Phase 1 tasks exist as individual files in `tasks/queue/` for the overnight
-loop. Phases 0 and 2+ are listed here for planning; convert to task files when
-their phase starts.
+Phase 3A/3B tasks exist as individual files: overnight-safe ones in
+`tasks/queue/` (the loop pulls the lowest number), interactive-only ones in
+`tasks/interactive/` (human present, visual review — the loop never reads
+this directory). Numbering is one sequence across both. Phase 3C is listed
+here; convert to task files when it starts.
 
-## Phase 0: Recon (human + interactive Claude Code, ~1 week)
+## Phase 0: Recon — DONE
 
-- Deploy Cal.diy and Easy!Appointments on the Hetzner box. Book against them.
-- Document every availability edge case they handle or fumble: DST
-  transitions, overlapping calendars, buffer collisions, minimum notice at
-  midnight boundaries, rolling window ends mid-day.
-- Output: `docs/EDGE-CASES.md`. This document seeds the Phase 1 test suites.
-- Decide the license (AGPL vs MIT) and the project name. Record rationale.
+`docs/EDGE-CASES.md` seeded the Phase 1 test suites. License and name still
+undecided (see Phase 3C open decisions).
 
-## Phase 1: Core engine (overnight loop, tasks/queue/)
+## Phase 1: Core engine — SHIPPED (tasks/done/01–14)
 
-01. Repo scaffold: Bun + TypeScript + Hono skeleton, verify script wiring
-02. Test harness and DST fixture library
-03. Result type and core utilities
-04. Drizzle schema + first migration
-05. Interval math: merge, subtract, intersect (pure)
-06. Rule expansion: working hours to open intervals, timezone-correct (pure)
-07. Slot generation: discretize, buffers, minimum notice, rolling window (pure)
-08. Scoring engine: fragmentation, adjacency, time-of-day, focus blocks (pure)
-09. Group availability: N-host intersection, required/optional, quorum fallback (pure)
-10. Round robin assignment: weighted least-recently-booked, OOO handling (pure)
-11. Booking event log: append, project, reschedule/cancel state machine
-12. Transactional hold + confirm flow against Postgres
-13. Availability API endpoint wiring (GET /availability with hosts[])
-14. Hold + booking API endpoints with signed reschedule/cancel tokens
+Scaffold, DST fixtures, Result type, schema, interval math, rule expansion,
+slot generation, scoring, group availability with quorum fallback, weighted
+round robin, event-log booking lifecycle, transactional holds, availability
+and booking endpoints with signed tokens.
 
-## Phase 2: Surfaces (interactive sessions, human eyes required)
+## Phase 2: Surfaces — SHIPPED (live at cal.tourscale.com, 809cb3b)
 
 - Google OAuth via BetterAuth; calendar connection flow
-- Google sync worker: watch channels, renewal job, invalidated-token full
-  resync, busy cache maintenance
-- Booking page: curated top-3 scored slots, "show all times," invitee-local
-  time everywhere, outside-reasonable-hours warning, email typo detection
-- ICS generation and email send; invite delivered status; webhook emission
-- Host dashboard: event types, schedules, team management, people picker
-- Routing forms UI + rules evaluation endpoint
-- Theming: token file system, 2-3 bundled themes
+- Google sync: watch channels + renewal, busy cache, full-resync path;
+  write-through — bookings create real Google events (native invites via
+  sendUpdates), reschedule patches, cancel cancels, ICS email fallback
+- Booking page: profile header, scored "Best times" top-3, month calendar,
+  invitee-local time, off-hours warning, email typo detection, invitee notes
+- Invite/reminder emails (SES); ICS on the fallback path; delivery-status
+  ingestion (normalized via n8n → invite_delivered/invite_failed)
+- Outbound webhooks for created/rescheduled/cancelled: HMAC signatures,
+  pg-boss retries, admin CRUD
+- Host dashboard: event types, schedules, teams, people picker, routing
+  form builder, calendar connections
+- Routing forms (condition AST) + public /r/<slug> flow
+- Theming tokens + per-event-type themes
 - pg-boss jobs: reminders, hold expiry, channel renewal
 
-## Phase 3: Reach
+## Phase 3A: Differentiators (tasks 15–20)
 
-- MCP server package (tools over the existing API; agent policy enforcement)
-- Embeds (script tag + iframe modes)
-- Analytics SQL views documented; optional Metabase recipe
-- Public API docs; OpenAPI generation from Hono/Zod
-- Docker Compose release artifact; README with the two-container pitch
-- Repo hygiene for OSS launch: CONTRIBUTING.md with dependency ceiling and
-  512MB RAM target stated as policy, issue templates, license file
+15. Agent policy enforcement in the existing API (queue)
+16. MCP server package: scaffold + read tools (queue)
+17. MCP server: write tools + policy conformance + docs/MCP.md (queue)
+18. Group booking public API: selectableHosts meta + quorum in availability
+    response (queue)
+19. Group booking invitee UI: people picker, required/optional, quorum
+    surface (interactive)
+20. Round-robin transparency: persist explainAssignment at confirm, admin
+    endpoint (queue)
+
+## Phase 3B: Production trust and safety (tasks 21–28)
+
+21. Webhooks on every booking event kind + webhook_deliveries log table +
+    admin delivery listing (queue)
+22. Rate limiting POST /holds + /bookings, per-event-type active-holds
+    ceiling, hold-expiry reaping under load (queue)
+23. Admin bookings endpoints (list/detail with event timeline and invite
+    delivery status) + no-show action (queue)
+24. ICS always attached on created/rescheduled emails (queue)
+25. "Suggest a different time": public endpoint, host email, webhook event
+    — not mutual mode (queue)
+26. Analytics SQL views: outcomes, no-show rate, lead time, round-robin
+    distribution + docs/ANALYTICS.md (queue)
+27. Admin bookings dashboard view: list/detail, delivery badge, no-show,
+    assignment panel, webhook deliveries (interactive)
+28. Suggest-a-time invitee form on the booking page (interactive)
+
+## Phase 3C: OSS launch readiness (convert to task files when 3A/3B land)
+
+- Analytics exposure: read-only admin page over the task-26 views
+  (interactive). Funnel stays blocked on the open decision about
+  page/slot-view tracking — no impression events exist.
+- Theming system: document the token file, extract remaining hardcoded
+  styles into it, ship two additional bundled themes as proof.
+- Repo split preparation: move TourScale-specific deployment config
+  (domains, Infisical paths, compose production values) out of the product
+  tree; generic docker-compose.example.yml + .env.example; README
+  quickstart targeting "first booking page in under a minute."
+- CONTRIBUTING.md stating the hard budget as policy: Postgres-only,
+  dependency ceiling, 512MB RAM target, webhooks + n8n as the only
+  extension boundary. Issue templates. License file (decision pending:
+  AGPL vs MIT) and project name.
+- Embeds (script tag + iframe modes); OpenAPI generation from Hono/Zod.
+
+## Explicitly out of scope (budget defense — reject drift toward these)
+
+Mutual mode / invitee calendar OAuth, Microsoft Graph, CalDAV, payments,
+native video, CRM integrations, plugin system, integration marketplace,
+Redis or any non-Postgres infrastructure, multi-database support.
 
 ## v2 candidates (explicitly deferred)
 
 - Mutual mode (invitee OAuth, consent flow, second sync surface)
 - Microsoft Graph, CalDAV
 - Weighted routing beyond rules AST (skill tags, load-aware)
-- Analytics UI
+- Booking-funnel impression tracking (prerequisite for the funnel view)
