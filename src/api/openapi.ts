@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { CALPACA_VERSION } from "../version";
 
 type Method = "get" | "post" | "put" | "patch" | "delete";
 type Operation = readonly [
@@ -11,6 +12,7 @@ type Operation = readonly [
 
 export const openApiOperations: readonly Operation[] = [
   ["get", "/health", "System", "Check service health"],
+  ["get", "/version", "System", "Get the running Calpaca version"],
   ["get", "/openapi.json", "System", "Download the OpenAPI document"],
   ["get", "/event-types/{slug}", "Booking", "Get public event type metadata"],
   ["get", "/availability", "Booking", "List available and recommended slots"],
@@ -169,7 +171,7 @@ export function generateOpenApiDocument() {
     openapi: "3.1.0",
     info: {
       title: "Calpaca API",
-      version: "1.0.0",
+      version: CALPACA_VERSION,
       description: "Public booking, organizer administration, analytics, and webhook contracts.",
       license: {
         name: "GNU Affero General Public License v3.0",

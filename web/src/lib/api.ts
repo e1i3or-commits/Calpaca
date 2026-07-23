@@ -53,7 +53,7 @@ export type MeetingPoll = {
 
 export type EventTypeProfile = {
   teamName: string | null;
-  hosts: { name: string; image: string | null }[];
+  hosts: { name: string; title?: string | null; image: string | null }[];
 };
 
 export type EventTypeMeta = {
@@ -409,6 +409,7 @@ export type UserManagementDirectory = {
 export type UserProfile = {
   id: string;
   name: string;
+  title?: string | null;
   email: string;
   timezone: string;
   image: string | null;
@@ -491,6 +492,7 @@ export function getProfile(): Promise<{ profile: UserProfile }> {
 
 export function updateProfile(input: {
   name: string;
+  title: string | null;
   timezone: string;
   image: string | null;
 }): Promise<{ profile: UserProfile }> {

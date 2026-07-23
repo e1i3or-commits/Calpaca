@@ -211,6 +211,13 @@
       "when": 1784828400430,
       "tag": "0029_modern_morph",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1784829296747,
+      "tag": "0030_thick_tag",
+      "breakpoints": true
     }
   ]
 }

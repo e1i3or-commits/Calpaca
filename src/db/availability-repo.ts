@@ -171,7 +171,11 @@ export async function getEventTypeForBookingById(
  * stay out — this feeds an unauthenticated endpoint. */
 export interface EventTypeProfile {
   readonly teamName: string | null;
-  readonly hosts: readonly { readonly name: string; readonly image: string | null }[];
+  readonly hosts: readonly {
+    readonly name: string;
+    readonly title?: string | null;
+    readonly image: string | null;
+  }[];
 }
 
 export async function getEventTypeProfile(
@@ -185,7 +189,7 @@ export async function getEventTypeProfile(
       .leftJoin(teams, eq(eventTypes.teamId, teams.id))
       .where(eq(eventTypes.id, eventTypeId)),
     executor
-      .select({ name: users.name, image: users.image })
+      .select({ name: users.name, title: users.title, image: users.image })
       .from(eventTypeHosts)
       .innerJoin(users, eq(eventTypeHosts.userId, users.id))
       .where(eq(eventTypeHosts.eventTypeId, eventTypeId)),

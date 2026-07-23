@@ -343,6 +343,7 @@ export function BookingPage({
 function ProfileHeader({ profile }: { profile: EventTypeProfile }) {
   if (!profile.teamName && profile.hosts.length === 0) return null;
   const primary = profile.teamName ?? profile.hosts.map((h) => h.name).join(", ");
+  const titles = [...new Set(profile.hosts.flatMap((host) => host.title ? [host.title] : []))];
   return (
     <div className="mb-1 flex items-center gap-3">
       {profile.hosts.length > 0 && (
@@ -372,6 +373,11 @@ function ProfileHeader({ profile }: { profile: EventTypeProfile }) {
         {profile.teamName && profile.hosts.length > 0 && (
           <p className="truncate text-xs text-muted-foreground">
             {profile.hosts.map((h) => h.name).join(", ")}
+          </p>
+        )}
+        {titles.length > 0 && (
+          <p className="truncate text-xs text-muted-foreground">
+            {titles.join(" · ")}
           </p>
         )}
       </div>

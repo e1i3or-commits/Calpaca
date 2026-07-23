@@ -39,6 +39,7 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
+  title: text("title"),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
   timezone: text("timezone").notNull().default("UTC"), // IANA

@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { CALPACA_VERSION } from "../version";
 
 export interface SchedulerMcpDeps {
   readonly baseUrl: string;
@@ -153,7 +154,7 @@ async function enabledEventType(
 export function createSchedulerMcpServer(deps: SchedulerMcpDeps): McpServer {
   const server = new McpServer({
     name: "calpaca",
-    version: "0.0.1",
+    version: CALPACA_VERSION,
   });
   // SDK 1.29's Zod 3 compatibility type recursively expands under TS 5.7.
   // Runtime validation is unaffected; handlers parse with the same schema.

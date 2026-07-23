@@ -16,6 +16,7 @@ export async function getProfile(userId: string, executor: Db = getDb()) {
     .select({
       id: users.id,
       name: users.name,
+      title: users.title,
       email: users.email,
       timezone: users.timezone,
       image: users.image,
@@ -27,7 +28,7 @@ export async function getProfile(userId: string, executor: Db = getDb()) {
 
 export async function updateProfile(
   userId: string,
-  patch: { name: string; timezone: string; image: string | null },
+  patch: { name: string; title: string | null; timezone: string; image: string | null },
   executor: Db = getDb(),
 ) {
   const [row] = await executor
@@ -37,6 +38,7 @@ export async function updateProfile(
     .returning({
       id: users.id,
       name: users.name,
+      title: users.title,
       email: users.email,
       timezone: users.timezone,
       image: users.image,

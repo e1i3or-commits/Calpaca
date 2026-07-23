@@ -13,6 +13,12 @@ availability, Google Calendar sync, and an MCP server for AI-assisted booking.
 [Self-hosting](docs/SELF-HOSTING.md) ·
 [Roadmap](docs/FEATURE-PARITY-ROADMAP.md)
 
+## Releases
+
+Calpaca uses Semantic Versioning. The package version is the source of truth,
+release notes live in [CHANGELOG.md](CHANGELOG.md), and releases are tagged
+`v<version>`. A running installation reports its version at `GET /version`.
+
 ## Why Calpaca
 
 - **One small stack:** Bun application + PostgreSQL. No Redis, message broker,

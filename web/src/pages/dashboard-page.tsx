@@ -186,6 +186,9 @@ export function DashboardPage() {
             >
               <LogOut className="h-4 w-4" /> Sign out
             </button>
+            <p className="px-3 pt-2 text-[10px] text-muted-foreground">
+              Calpaca v{__CALPACA_VERSION__}
+            </p>
           </div>
         </nav>
       </aside>
@@ -894,7 +897,8 @@ function PollsTab() {
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [options, setOptions] = useState([{ start: "", end: "" }, { start: "", end: "" }]);
+  const [durationMinutes, setDurationMinutes] = useState(30);
+  const [options, setOptions] = useState([{ start: "" }, { start: "" }]);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
@@ -913,13 +917,14 @@ function PollsTab() {
         timezone: viewerTimezone(),
         options: options.map((option) => ({
           start: new Date(option.start).toISOString(),
-          end: new Date(option.end).toISOString(),
+          end: new Date(new Date(option.start).getTime() + durationMinutes * 60_000).toISOString(),
         })),
       });
       setCreating(false);
       setTitle("");
       setDescription("");
-      setOptions([{ start: "", end: "" }, { start: "", end: "" }]);
+      setDurationMinutes(30);
+      setOptions([{ start: "" }, { start: "" }]);
       reload();
     } catch (cause) {
       setError(errorText(cause));
@@ -950,18 +955,39 @@ function PollsTab() {
           <CardContent className="space-y-4">
             <div><Label htmlFor="poll-title">Title</Label><Input id="poll-title" className="mt-1.5" value={title} onChange={(event) => setTitle(event.target.value)} /></div>
             <div><Label htmlFor="poll-description">Description</Label><Textarea id="poll-description" className="mt-1.5" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
+            <div>
+              <Label>Meeting duration</Label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[15, 30, 45, 60, 90, 120].map((minutes) => (
+                  <button
+                    key={minutes}
+                    type="button"
+                    className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                      durationMinutes === minutes
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() => setDurationMinutes(minutes)}
+                  >
+                    {minutes < 60 ? `${minutes} min` : minutes === 60 ? "1 hour" : `${minutes / 60} hours`}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="space-y-3">
               {options.map((option, index) => (
-                <div key={index} className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[1fr_1fr_auto]">
-                  <div><Label>Starts</Label><Input type="datetime-local" className="mt-1" value={option.start} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, start: event.target.value } : item))} /></div>
-                  <div><Label>Ends</Label><Input type="datetime-local" className="mt-1" value={option.end} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, end: event.target.value } : item))} /></div>
+                <div key={index} className="grid items-end gap-3 rounded-lg border border-border p-3 sm:grid-cols-[1fr_auto]">
+                  <div>
+                    <Label htmlFor={`poll-option-${index}`}>Option {index + 1}</Label>
+                    <Input id={`poll-option-${index}`} type="datetime-local" className="mt-1" value={option.start} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { start: event.target.value } : item))} />
+                  </div>
                   <Button type="button" variant="ghost" className="self-end px-3" disabled={options.length <= 2} onClick={() => setOptions((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => setOptions((current) => [...current, { start: "", end: "" }])}><Plus className="h-4 w-4" /> Add time</Button>
-              <Button disabled={!title.trim() || options.some((option) => !option.start || !option.end)} onClick={() => void create()}>Create poll</Button>
+              <Button type="button" variant="outline" onClick={() => setOptions((current) => [...current, { start: "" }])}><Plus className="h-4 w-4" /> Add another time</Button>
+              <Button disabled={!title.trim() || options.some((option) => !option.start)} onClick={() => void create()}>Create poll</Button>
             </div>
           </CardContent>
         </Card>
@@ -1601,6 +1627,7 @@ function ProfileTab() {
     try {
       const result = await updateProfile({
         name: profile.name,
+        title: profile.title ?? null,
         timezone: profile.timezone,
         image: profile.image,
       });
@@ -1692,6 +1719,21 @@ function ProfileTab() {
               <div className="flex flex-col gap-1.5">
                 <Label>Email</Label>
                 <Input value={profile.email} disabled />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="profile-title">Professional title</Label>
+                <Input
+                  id="profile-title"
+                  placeholder="Founder, Customer Success, Designer…"
+                  value={profile.title ?? ""}
+                  onChange={(event) => setProfile({
+                    ...profile,
+                    title: event.target.value || null,
+                  })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Displayed with your name on public booking pages.
+                </p>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label>Timezone</Label>

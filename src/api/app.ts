@@ -16,6 +16,7 @@ import { workspaceRoutes } from "./routes/workspace";
 import { inviteeCalendarRoutes } from "./routes/invitee-calendar";
 import { requestHostname } from "./public-workspace";
 import { pollRoutes } from "./routes/polls";
+import { CALPACA_VERSION } from "../version";
 
 export const app = new Hono();
 
@@ -40,6 +41,7 @@ app.use("/book/*", async (c, next) => {
 });
 
 app.get("/health", (c) => c.json({ ok: true }));
+app.get("/version", (c) => c.json({ version: CALPACA_VERSION }));
 
 app.on(["GET", "POST"], "/api/auth/*", (c) => getAuth().handler(c.req.raw));
 app.route("/", availabilityRoutes);

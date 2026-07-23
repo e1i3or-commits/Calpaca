@@ -15,6 +15,7 @@ const DATA_IMAGE_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
 
 const profileSchema = z.object({
   name: z.string().trim().min(1).max(100),
+  title: z.string().trim().max(100).nullable().default(null),
   timezone: z.string().refine(isIanaZone, "must be an IANA timezone"),
   image: z.string().max(700_000).refine(
     (value) => value.startsWith("https://") || DATA_IMAGE_RE.test(value),
@@ -42,8 +43,25 @@ function serializeToken<T extends {
 
 export interface ProfileDeps {
   readonly requireAuth: MiddlewareHandler<AuthEnv>;
-  readonly getProfile: typeof getProfile;
-  readonly updateProfile: typeof updateProfile;
+  readonly getProfile: (userId: string) => Promise<{
+    id: string;
+    name: string;
+    title?: string | null;
+    email: string;
+    timezone: string;
+    image: string | null;
+  } | null>;
+  readonly updateProfile: (
+    userId: string,
+    patch: z.infer<typeof profileSchema>,
+  ) => Promise<{
+    id: string;
+    name: string;
+    title?: string | null;
+    email: string;
+    timezone: string;
+    image: string | null;
+  } | null>;
   readonly listApiTokens: typeof listApiTokens;
   readonly createApiToken: typeof createApiToken;
   readonly revokeApiToken: typeof revokeApiToken;
