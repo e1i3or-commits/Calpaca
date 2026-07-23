@@ -64,6 +64,7 @@ import {
   markBookingNoShow,
   finalizeMeetingPoll,
   signOut,
+  suggestMeetingPollTimes,
   updateEventType,
   updateManagedUser,
   updateCalendarConnection,
@@ -349,6 +350,33 @@ function formatBookingTime(utc: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(utc));
+}
+
+function localDateValue(date: Date, timezone = viewerTimezone()): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date).map((part) => [part.type, part.value]),
+  );
+  return `${parts["year"]}-${parts["month"]}-${parts["day"]}`;
+}
+
+function localDateTimeValue(utc: string, timezone = viewerTimezone()): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(utc)).map((part) => [part.type, part.value]),
+  );
+  return `${parts["year"]}-${parts["month"]}-${parts["day"]}T${parts["hour"]}:${parts["minute"]}`;
 }
 
 function HomeTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
@@ -893,12 +921,21 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
 }
 
 function PollsTab() {
+  const timezone = viewerTimezone();
+  const today = localDateValue(new Date(), timezone);
+  const nextWeek = localDateValue(new Date(Date.now() + 7 * 24 * 60 * 60_000), timezone);
   const [polls, setPolls] = useState<MeetingPoll[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [options, setOptions] = useState([{ start: "" }, { start: "" }]);
+  const [windowStartDate, setWindowStartDate] = useState(today);
+  const [windowEndDate, setWindowEndDate] = useState(nextWeek);
+  const [dailyStart, setDailyStart] = useState("09:00");
+  const [dailyEnd, setDailyEnd] = useState("17:00");
+  const [suggestionCount, setSuggestionCount] = useState(10);
+  const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
@@ -928,6 +965,33 @@ function PollsTab() {
       reload();
     } catch (cause) {
       setError(errorText(cause));
+    }
+  };
+
+  const suggest = async () => {
+    setError(null);
+    setSuggesting(true);
+    try {
+      const result = await suggestMeetingPollTimes({
+        timezone,
+        startDate: windowStartDate,
+        endDate: windowEndDate,
+        dailyStart,
+        dailyEnd,
+        durationMinutes,
+        count: suggestionCount,
+      });
+      if (result.suggestions.length < 2) {
+        setError("Not enough open times were found in that window. Try a wider date or time range.");
+        return;
+      }
+      setOptions(result.suggestions.map((option) => ({
+        start: localDateTimeValue(option.start, timezone),
+      })));
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setSuggesting(false);
     }
   };
 
@@ -974,12 +1038,37 @@ function PollsTab() {
                 ))}
               </div>
             </div>
+            <div className="rounded-xl border border-border bg-muted/30 p-4">
+              <div>
+                <p className="text-sm font-medium">Suggest times from my calendar</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  We’ll use your working hours and avoid conflicts across connected calendars.
+                </p>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div><Label htmlFor="poll-window-start">From</Label><Input id="poll-window-start" type="date" min={today} className="mt-1" value={windowStartDate} onChange={(event) => setWindowStartDate(event.target.value)} /></div>
+                <div><Label htmlFor="poll-window-end">Through</Label><Input id="poll-window-end" type="date" min={windowStartDate} className="mt-1" value={windowEndDate} onChange={(event) => setWindowEndDate(event.target.value)} /></div>
+                <div><Label htmlFor="poll-daily-start">Earliest start</Label><Input id="poll-daily-start" type="time" step={900} className="mt-1" value={dailyStart} onChange={(event) => setDailyStart(event.target.value)} /></div>
+                <div><Label htmlFor="poll-daily-end">Latest end</Label><Input id="poll-daily-end" type="time" step={900} className="mt-1" value={dailyEnd} onChange={(event) => setDailyEnd(event.target.value)} /></div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-end gap-3">
+                <div>
+                  <Label htmlFor="poll-suggestion-count">Number of options</Label>
+                  <select id="poll-suggestion-count" className="mt-1 block h-9 rounded-md border border-border bg-card px-3 text-sm" value={suggestionCount} onChange={(event) => setSuggestionCount(Number(event.target.value))}>
+                    {[5, 10, 15, 20].map((count) => <option key={count} value={count}>{count}</option>)}
+                  </select>
+                </div>
+                <Button type="button" onClick={() => void suggest()} disabled={suggesting || !windowStartDate || !windowEndDate || !dailyStart || !dailyEnd}>
+                  <CalendarRange className="h-4 w-4" /> {suggesting ? "Finding times…" : "Suggest open times"}
+                </Button>
+              </div>
+            </div>
             <div className="space-y-3">
               {options.map((option, index) => (
                 <div key={index} className="grid items-end gap-3 rounded-lg border border-border p-3 sm:grid-cols-[1fr_auto]">
                   <div>
                     <Label htmlFor={`poll-option-${index}`}>Option {index + 1}</Label>
-                    <Input id={`poll-option-${index}`} type="datetime-local" className="mt-1" value={option.start} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { start: event.target.value } : item))} />
+                    <Input id={`poll-option-${index}`} type="datetime-local" step={900} className="mt-1" value={option.start} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { start: event.target.value } : item))} />
                   </div>
                   <Button type="button" variant="ghost" className="self-end px-3" disabled={options.length <= 2} onClick={() => setOptions((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button>
                 </div>

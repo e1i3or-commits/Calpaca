@@ -211,6 +211,21 @@ export function createMeetingPoll(input: {
   return request("/api/me/polls", { method: "POST", body: JSON.stringify(input) });
 }
 
+export function suggestMeetingPollTimes(input: {
+  timezone: string;
+  startDate: string;
+  endDate: string;
+  dailyStart: string;
+  dailyEnd: string;
+  durationMinutes: number;
+  count: number;
+}): Promise<{ suggestions: { start: string; end: string }[] }> {
+  return request("/api/me/polls/suggestions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function finalizeMeetingPoll(id: string, optionId: string): Promise<MeetingPoll> {
   return request(`/api/me/polls/${id}/finalize`, {
     method: "POST",

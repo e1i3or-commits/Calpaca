@@ -17,6 +17,16 @@ import { isIanaZone } from "../../lib/timezone";
 import { createRateLimitMiddleware } from "../rate-limit";
 import { bucketStart, decide } from "../../core/ratelimit/window";
 import { incrementRateLimit } from "../../db/rate-limit-repo";
+import {
+  getBusyForUsers,
+  getSchedulesForUsers,
+  type HostBusy,
+  type HostSchedule,
+} from "../../db/availability-repo";
+import { effectiveOpenIntervals } from "../../core/availability/overrides";
+import { intersectMany, subtract, type Interval } from "../../core/availability/intervals";
+import { generateSlots } from "../../core/availability/slots";
+import { scoreSlots } from "../../core/availability/scoring";
 
 const optionSchema = z.object({
   start: z.string().min(1),
@@ -38,6 +48,27 @@ const voteSchema = z.object({
   })).min(1).max(20),
 });
 const finalizeSchema = z.object({ optionId: z.string().uuid() });
+const suggestionSchema = z.object({
+  timezone: z.string().refine(isIanaZone),
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  dailyStart: z.string().regex(/^\d{2}:\d{2}$/),
+  dailyEnd: z.string().regex(/^\d{2}:\d{2}$/),
+  durationMinutes: z.number().int().min(15).max(480),
+  count: z.number().int().min(2).max(20),
+});
+
+export interface PollSuggestionDeps {
+  readonly getSchedulesForUsers: (userIds: readonly string[]) => Promise<HostSchedule[]>;
+  readonly getBusyForUsers: (userIds: readonly string[], window: Interval) => Promise<HostBusy[]>;
+  readonly now: () => Temporal.Instant;
+}
+
+const defaultSuggestionDeps: PollSuggestionDeps = {
+  getSchedulesForUsers,
+  getBusyForUsers,
+  now: () => Temporal.Now.instant(),
+};
 
 function renderPoll(poll: PollRecord) {
   return {
@@ -70,12 +101,50 @@ function parseOptions(options: z.infer<typeof optionSchema>[]) {
     if (
       Temporal.Instant.compare(start, now) <= 0
       || Temporal.Instant.compare(start, end) >= 0
+      || start.epochMilliseconds % (15 * 60_000) !== 0
     ) throw new RangeError("invalid option");
     return { startsAt: new Date(start.epochMilliseconds), endsAt: new Date(end.epochMilliseconds) };
   });
 }
 
-export function createPollRoutes(): Hono<AuthEnv> {
+function suggestionWindow(
+  input: z.infer<typeof suggestionSchema>,
+): { window: Interval; dailyWindows: Interval[] } {
+  const startDate = Temporal.PlainDate.from(input.startDate);
+  const endDate = Temporal.PlainDate.from(input.endDate);
+  if (Temporal.PlainDate.compare(startDate, endDate) > 0) throw new RangeError("invalid date range");
+  if (startDate.until(endDate, { largestUnit: "day" }).days > 30) {
+    throw new RangeError("date range too large");
+  }
+  const dailyStart = Temporal.PlainTime.from(input.dailyStart);
+  const dailyEnd = Temporal.PlainTime.from(input.dailyEnd);
+  if (Temporal.PlainTime.compare(dailyStart, dailyEnd) >= 0) throw new RangeError("invalid daily window");
+
+  const dailyWindows: Interval[] = [];
+  for (
+    let date = startDate;
+    Temporal.PlainDate.compare(date, endDate) <= 0;
+    date = date.add({ days: 1 })
+  ) {
+    dailyWindows.push({
+      start: date.toPlainDateTime(dailyStart)
+        .toZonedDateTime(input.timezone, { disambiguation: "compatible" }).toInstant(),
+      end: date.toPlainDateTime(dailyEnd)
+        .toZonedDateTime(input.timezone, { disambiguation: "compatible" }).toInstant(),
+    });
+  }
+  return {
+    window: {
+      start: dailyWindows[0]!.start,
+      end: dailyWindows[dailyWindows.length - 1]!.end,
+    },
+    dailyWindows,
+  };
+}
+
+export function createPollRoutes(
+  suggestionDeps: PollSuggestionDeps = defaultSuggestionDeps,
+): Hono<AuthEnv> {
   const routes = new Hono<AuthEnv>();
   routes.use("/api/me/polls", requireSession);
   routes.use("/api/me/polls/*", requireSession);
@@ -100,6 +169,56 @@ export function createPollRoutes(): Hono<AuthEnv> {
     const workspaceId = c.get("user").workspaceId;
     if (!workspaceId) return c.json({ error: "workspace_not_found" }, 404);
     return c.json({ polls: (await listMeetingPolls(workspaceId)).map(renderPoll) });
+  });
+
+  routes.post("/api/me/polls/suggestions", async (c) => {
+    const parsed = suggestionSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+    let requested;
+    try {
+      requested = suggestionWindow(parsed.data);
+    } catch {
+      return c.json({ error: "invalid_window" }, 400);
+    }
+    const userId = c.get("user").id;
+    const [schedule] = await suggestionDeps.getSchedulesForUsers([userId]);
+    if (!schedule) return c.json({ suggestions: [] });
+    const [busy] = await suggestionDeps.getBusyForUsers([userId], requested.window);
+    const open = intersectMany([
+      subtract(
+        effectiveOpenIntervals(
+          schedule.rules,
+          schedule.overrides ?? [],
+          schedule.timezone,
+          requested.window,
+        ),
+        busy?.intervals ?? [],
+      ),
+      requested.dailyWindows,
+    ]);
+    const candidates = generateSlots(open, {
+      durationMinutes: parsed.data.durationMinutes,
+      bufferBeforeMin: 0,
+      bufferAfterMin: 0,
+      minimumNoticeMin: 0,
+      rollingWindowDays: 366,
+      slotIncrementMin: 15,
+      timezone: parsed.data.timezone,
+    }, suggestionDeps.now());
+    const ranked = scoreSlots(candidates, {
+      busy: busy?.intervals ?? [],
+      open,
+      prefs: {},
+      timezone: schedule.timezone,
+    }).slice(0, parsed.data.count);
+
+    return c.json({
+      suggestions: ranked.map(({ slot }) => ({
+        start: slot.start.toString(),
+        end: slot.end.toString(),
+      })),
+    });
   });
 
   routes.post("/api/me/polls", async (c) => {

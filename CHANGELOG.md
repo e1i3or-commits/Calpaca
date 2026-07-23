@@ -3,6 +3,16 @@
 Calpaca follows [Semantic Versioning](https://semver.org/). Releases are
 tracked with annotated Git tags named `v<version>`.
 
+## [Unreleased]
+
+## [0.2.0] - 2026-07-23
+
+### Added
+
+- Calendar-aware meeting poll suggestions from an organizer-selected date and
+  daily time window.
+- Fifteen-minute start grids for suggested and manually entered poll options.
+
 ## [0.1.0] - 2026-07-23
 
 First tracked public release.
@@ -22,3 +32,4 @@ First tracked public release.
 - Optional professional titles on organizer profiles and public booking pages.
 
 [0.1.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.1.0
+[0.2.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.2.0
