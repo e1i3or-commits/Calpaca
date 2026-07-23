@@ -5,6 +5,18 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-23
+
+### Added
+
+- Organizer controls to add, remove, and resend poll invitations after poll
+  creation, with delivery and reminder status in the dashboard.
+
+### Changed
+
+- Removing an invitation stops future reminders without deleting that person's
+  submitted poll response.
+
 ## [0.6.0] - 2026-07-23
 
 ### Added
@@ -81,3 +93,4 @@ First tracked public release.
 [0.4.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.4.0
 [0.5.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.5.0
 [0.6.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.6.0
+[0.7.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.7.0

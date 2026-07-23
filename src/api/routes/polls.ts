@@ -4,6 +4,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { requireSession, type AuthEnv } from "../../auth/session";
 import { getPublicWorkspaceEntitlements } from "../../db/workspace-repo";
 import {
+  addMeetingPollInvitees,
   createMeetingPoll,
   finalizeMeetingPoll,
   getMeetingPollForOwner,
@@ -11,6 +12,8 @@ import {
   getMeetingPollWorkspaceId,
   getPublicMeetingPoll,
   listMeetingPolls,
+  removeMeetingPollInvite,
+  resetMeetingPollInvitation,
   saveMeetingPollVotes,
   resetPollFinalizationDelivery,
   setMeetingPollOpenState,
@@ -64,6 +67,9 @@ const voteSchema = z.object({
   })).min(1).max(20),
 });
 const finalizeSchema = z.object({ optionId: z.string().uuid() });
+const inviteesSchema = z.object({
+  emails: z.array(z.string().email()).min(1).max(100),
+});
 const suggestionSchema = z.object({
   timezone: z.string().refine(isIanaZone),
   startDate: z.string().date(),
@@ -341,6 +347,52 @@ export function createPollRoutes(
     if (!workspaceId) return c.json({ error: "poll_not_found" }, 404);
     const poll = await getMeetingPollForOwner(c.req.param("id"), workspaceId);
     return poll ? c.json(renderPoll(poll)) : c.json({ error: "poll_not_found" }, 404);
+  });
+
+  routes.post("/api/me/polls/:id/invites", async (c) => {
+    const parsed = inviteesSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body" }, 400);
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "poll_not_found" }, 404);
+    const result = await addMeetingPollInvitees(
+      c.req.param("id"),
+      workspaceId,
+      parsed.data.emails,
+    );
+    if (result === "not_found") return c.json({ error: "poll_not_found" }, 404);
+    if (result === "closed") return c.json({ error: "poll_closed" }, 409);
+    if (result === "invite_limit_reached") {
+      return c.json({ error: "invite_limit_reached" }, 409);
+    }
+    await suggestionDeps.enqueueInvitations?.(result.id);
+    return c.json(renderPoll(result));
+  });
+
+  routes.delete("/api/me/polls/:id/invites/:inviteId", async (c) => {
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "invite_not_found" }, 404);
+    const removed = await removeMeetingPollInvite(
+      c.req.param("id"),
+      workspaceId,
+      c.req.param("inviteId"),
+    );
+    return removed
+      ? c.json({ status: "removed" as const })
+      : c.json({ error: "invite_not_found" }, 404);
+  });
+
+  routes.post("/api/me/polls/:id/invites/:inviteId/resend", async (c) => {
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "invite_not_found" }, 404);
+    const reset = await resetMeetingPollInvitation(
+      c.req.param("id"),
+      workspaceId,
+      c.req.param("inviteId"),
+    );
+    if (reset === "not_found") return c.json({ error: "invite_not_found" }, 404);
+    if (reset === "closed") return c.json({ error: "poll_closed" }, 409);
+    await suggestionDeps.enqueueInvitations?.(c.req.param("id"));
+    return c.json({ status: "pending" as const });
   });
 
   routes.post("/api/me/polls/:id/finalize", async (c) => {

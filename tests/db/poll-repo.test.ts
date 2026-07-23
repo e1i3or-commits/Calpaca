@@ -5,12 +5,15 @@ import { Pool } from "pg";
 import { sql } from "drizzle-orm";
 import * as schema from "../../src/db/schema";
 import {
+  addMeetingPollInvitees,
   createMeetingPoll,
   finalizeMeetingPoll,
   getMeetingPollResponse,
   getPublicMeetingPoll,
   listDuePollReminderJobs,
   listMeetingPolls,
+  removeMeetingPollInvite,
+  resetMeetingPollInvitation,
   saveMeetingPollVotes,
 } from "../../src/db/poll-repo";
 
@@ -76,6 +79,33 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("meeting poll repository", () =>
           inviteId: waitingInvite.id,
           kind: "reminder_24h",
         },
+      ]);
+      expect(await resetMeetingPollInvitation(
+        poll.id,
+        workspace!.id,
+        waitingInvite.id,
+        db,
+      )).toBe("reset");
+      expect(await removeMeetingPollInvite(
+        poll.id,
+        workspace!.id,
+        waitingInvite.id,
+        db,
+      )).toBe(true);
+      const withAddedInvite = await addMeetingPollInvitees(
+        poll.id,
+        workspace!.id,
+        ["new@example.test", "person@example.test"],
+        db,
+      );
+      expect(typeof withAddedInvite).toBe("object");
+      if (typeof withAddedInvite !== "object") throw new Error("invite add failed");
+      expect(withAddedInvite.invites?.map((invite) => invite.email)).toEqual([
+        "new@example.test",
+        "person@example.test",
+      ]);
+      expect(withAddedInvite.responses?.map((response) => response.email)).toEqual([
+        "person@example.test",
       ]);
       expect(await getMeetingPollResponse(poll.publicId, first.editToken, db))
         .toMatchObject({ name: "Participant", email: "person@example.test" });

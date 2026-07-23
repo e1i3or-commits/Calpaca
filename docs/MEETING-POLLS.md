@@ -18,5 +18,7 @@ returned in organizer results.
 Organizers can set privacy controls, a voting deadline, participant limits,
 and an optional invite list. Invited people receive the poll link, and
 unanswered invitees can receive deduplicated reminders 24 hours and one hour
-before the deadline. Calendar-aware voting and multi-recipient finalization
+before the deadline. Organizers can add or remove invitees after creation and
+resend an invitation; removing an invite stops its reminders but retains any
+submitted response. Calendar-aware voting and multi-recipient finalization
 notifications are also supported.

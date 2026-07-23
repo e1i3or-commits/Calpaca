@@ -280,6 +280,32 @@ export function resendPollFinalization(
   });
 }
 
+export function addPollInvitees(pollId: string, emails: string[]): Promise<MeetingPoll> {
+  return request(`/api/me/polls/${pollId}/invites`, {
+    method: "POST",
+    body: JSON.stringify({ emails }),
+  });
+}
+
+export function removePollInvite(
+  pollId: string,
+  inviteId: string,
+): Promise<{ status: "removed" }> {
+  return request(`/api/me/polls/${pollId}/invites/${inviteId}`, {
+    method: "DELETE",
+  });
+}
+
+export function resendPollInvitation(
+  pollId: string,
+  inviteId: string,
+): Promise<{ status: "pending" }> {
+  return request(`/api/me/polls/${pollId}/invites/${inviteId}/resend`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 export function getPublicMeetingPoll(publicId: string, editToken?: string): Promise<MeetingPoll> {
   const query = editToken ? `?token=${encodeURIComponent(editToken)}` : "";
   return request(`/polls/${encodeURIComponent(publicId)}${query}`);

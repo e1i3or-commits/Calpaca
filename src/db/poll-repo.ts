@@ -321,6 +321,95 @@ export async function recordPollInviteDelivery(
     .where(eq(meetingPollInvites.id, inviteId));
 }
 
+export async function addMeetingPollInvitees(
+  pollId: string,
+  workspaceId: string,
+  emails: string[],
+  executor: Db = getDb(),
+): Promise<PollRecord | "not_found" | "closed" | "invite_limit_reached"> {
+  return executor.transaction(async (tx) => {
+    const [poll] = await tx.select().from(meetingPolls).where(and(
+      eq(meetingPolls.id, pollId),
+      eq(meetingPolls.workspaceId, workspaceId),
+    )).for("update");
+    if (!poll) return "not_found";
+    if (
+      poll.status !== "open"
+      || (poll.deadline && poll.deadline.getTime() <= Date.now())
+    ) return "closed";
+    const existing = await tx.select({ email: meetingPollInvites.email })
+      .from(meetingPollInvites)
+      .where(eq(meetingPollInvites.pollId, poll.id));
+    const existingEmails = new Set(existing.map((invite) => invite.email));
+    const additions = [...new Set(emails.map((email) => email.trim().toLowerCase()))]
+      .filter((email) => !existingEmails.has(email));
+    if (existing.length + additions.length > 100) return "invite_limit_reached";
+    if (additions.length > 0) {
+      await tx.insert(meetingPollInvites).values(additions.map((email) => ({
+        pollId: poll.id,
+        email,
+      })));
+    }
+    return hydratePoll(poll, tx, true);
+  });
+}
+
+export async function removeMeetingPollInvite(
+  pollId: string,
+  workspaceId: string,
+  inviteId: string,
+  executor: Db = getDb(),
+): Promise<boolean> {
+  const removed = await executor.delete(meetingPollInvites)
+    .where(and(
+      eq(meetingPollInvites.id, inviteId),
+      eq(meetingPollInvites.pollId, pollId),
+      inArray(
+        meetingPollInvites.pollId,
+        executor.select({ id: meetingPolls.id }).from(meetingPolls)
+          .where(eq(meetingPolls.workspaceId, workspaceId)),
+      ),
+    ))
+    .returning({ id: meetingPollInvites.id });
+  return removed.length > 0;
+}
+
+export async function resetMeetingPollInvitation(
+  pollId: string,
+  workspaceId: string,
+  inviteId: string,
+  executor: Db = getDb(),
+): Promise<"reset" | "not_found" | "closed"> {
+  const [poll] = await executor.select({
+    status: meetingPolls.status,
+    deadline: meetingPolls.deadline,
+  }).from(meetingPollInvites)
+    .innerJoin(meetingPolls, eq(meetingPollInvites.pollId, meetingPolls.id))
+    .where(and(
+      eq(meetingPollInvites.id, inviteId),
+      eq(meetingPollInvites.pollId, pollId),
+      eq(meetingPolls.workspaceId, workspaceId),
+    ));
+  if (!poll) return "not_found";
+  if (
+    poll.status !== "open"
+    || (poll.deadline && poll.deadline.getTime() <= Date.now())
+  ) return "closed";
+  const updated = await executor.update(meetingPollInvites).set({
+    invitationSentAt: null,
+    lastError: null,
+  }).where(and(
+    eq(meetingPollInvites.id, inviteId),
+    eq(meetingPollInvites.pollId, pollId),
+    inArray(
+      meetingPollInvites.pollId,
+      executor.select({ id: meetingPolls.id }).from(meetingPolls)
+        .where(eq(meetingPolls.workspaceId, workspaceId)),
+    ),
+  )).returning({ id: meetingPollInvites.id });
+  return updated.length > 0 ? "reset" : "not_found";
+}
+
 export async function listMeetingPolls(
   workspaceId: string,
   executor: Db = getDb(),

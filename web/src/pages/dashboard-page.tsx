@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import {
   ApiError,
+  addPollInvitees,
   addTeamMember,
   addWorkspaceDomain,
   analyticsCsvUrl,
@@ -58,10 +59,12 @@ import {
   listTeams,
   listUsers,
   removeTeamMember,
+  removePollInvite,
   revokeUserInvitation,
   revokeApiToken,
   removeWorkspaceDomain,
   resendPollFinalization,
+  resendPollInvitation,
   markBookingNoShow,
   finalizeMeetingPoll,
   signOut,
@@ -945,6 +948,7 @@ function PollsTab() {
   const [inviteeEmails, setInviteeEmails] = useState("");
   const [reminder24Hours, setReminder24Hours] = useState(false);
   const [reminder1Hour, setReminder1Hour] = useState(false);
+  const [inviteDrafts, setInviteDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
@@ -1049,6 +1053,47 @@ function PollsTab() {
   const resendFinalization = async (pollId: string, participantId: string) => {
     try {
       await resendPollFinalization(pollId, participantId);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  const addInvitees = async (pollId: string) => {
+    const emails = [...new Set((inviteDrafts[pollId] ?? "")
+      .split(/[\s,;]+/)
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean))];
+    if (emails.length === 0) return;
+    try {
+      await addPollInvitees(pollId, emails);
+      setInviteDrafts((current) => ({ ...current, [pollId]: "" }));
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  const removeInvite = async (
+    pollId: string,
+    inviteId: string,
+    responded: boolean,
+  ) => {
+    const message = responded
+      ? "Remove this invitation? Their submitted response will remain in the poll."
+      : "Remove this invitation? They will no longer receive reminders.";
+    if (!window.confirm(message)) return;
+    try {
+      await removePollInvite(pollId, inviteId);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  const resendInvitation = async (pollId: string, inviteId: string) => {
+    try {
+      await resendPollInvitation(pollId, inviteId);
       reload();
     } catch (cause) {
       setError(errorText(cause));
@@ -1260,24 +1305,77 @@ function PollsTab() {
                 </table>
               </div>
             )}
-            {poll.invites && poll.invites.length > 0 && (
-              <div className="mt-4 border-t border-border pt-4">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Invitations</p>
-                <div className="flex flex-wrap gap-2">
-                  {poll.invites.map((invite) => (
-                    <span key={invite.id} className={`rounded-full px-2.5 py-1 text-xs ${
-                      invite.responded
-                        ? "bg-emerald-500/15 text-emerald-700"
-                        : invite.lastError
-                          ? "bg-red-500/15 text-red-700"
-                          : "bg-muted text-muted-foreground"
-                    }`}>
-                      {invite.email} · {invite.responded ? "responded" : invite.invitationSentAt ? "invited" : "pending"}
-                    </span>
-                  ))}
+            <div className="mt-4 space-y-3 border-t border-border pt-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Invitations</p>
+              {poll.invites && poll.invites.length > 0 && (
+                <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                  {poll.invites.map((invite) => {
+                    const status = invite.responded
+                      ? "Responded"
+                      : invite.lastError
+                        ? "Delivery failed"
+                        : invite.invitationSentAt
+                          ? "Invited"
+                          : "Pending";
+                    const reminders = [
+                      invite.reminder24SentAt ? "24-hour reminder sent" : null,
+                      invite.reminder1SentAt ? "1-hour reminder sent" : null,
+                    ].filter(Boolean).join(" · ");
+                    return (
+                      <div key={invite.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{invite.email}</p>
+                          <p className={`text-xs ${
+                            invite.responded
+                              ? "text-emerald-700"
+                              : invite.lastError
+                                ? "text-red-700"
+                                : "text-muted-foreground"
+                          }`}>
+                            {status}{reminders ? ` · ${reminders}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex gap-1">
+                          {!invite.responded && poll.votingOpen && (
+                            <Button size="sm" variant="ghost" onClick={() => void resendInvitation(poll.id, invite.id)}>
+                              Resend
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            aria-label={`Remove ${invite.email}`}
+                            onClick={() => void removeInvite(poll.id, invite.id, invite.responded)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-            )}
+              )}
+              {poll.votingOpen && (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    aria-label={`Add invitees to ${poll.title}`}
+                    placeholder="alex@example.com, sam@example.com"
+                    value={inviteDrafts[poll.id] ?? ""}
+                    onChange={(event) => setInviteDrafts((current) => ({
+                      ...current,
+                      [poll.id]: event.target.value,
+                    }))}
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={!(inviteDrafts[poll.id] ?? "").trim()}
+                    onClick={() => void addInvitees(poll.id)}
+                  >
+                    <UserPlus className="h-4 w-4" /> Add
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       ))}
