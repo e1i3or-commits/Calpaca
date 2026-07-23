@@ -40,6 +40,7 @@ export async function getAnalyticsReport(
   from: Date,
   to: Date,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<AnalyticsReport> {
   const scope = sql`
     (
@@ -53,6 +54,7 @@ export async function getAnalyticsReport(
         WHERE visible_host.event_type_id = et.id AND visible_host.user_id = ${userId}
       )
     )
+    ${workspaceId ? sql`AND et.workspace_id = ${workspaceId}` : sql``}
   `;
   const [outcomes, leadTime, noShowRates, roundRobin] = await Promise.all([
     executor.execute<{

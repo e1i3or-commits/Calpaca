@@ -207,4 +207,22 @@ describe("GET /availability", () => {
 
     expect(res.status).toBe(403);
   });
+
+  test("hosted namespace resolves the workspace before looking up the event slug", async () => {
+    let lookupWorkspaceId: string | undefined;
+    const params = baseParams("solo-30");
+    params.set("workspaceSlug", "alpha");
+    const router = createAvailabilityRoutes({
+      ...makeDeps(),
+      resolveWorkspaceId: async (_context, slug) =>
+        slug === "alpha" ? "workspace-alpha" : undefined,
+      getEventTypeBySlug: async (slug, workspaceId) => {
+        lookupWorkspaceId = workspaceId;
+        return eventTypesBySlug[slug] ?? null;
+      },
+    });
+    const response = await router.request(`/availability?${params.toString()}`);
+    expect(response.status).toBe(200);
+    expect(lookupWorkspaceId).toBe("workspace-alpha");
+  });
 });

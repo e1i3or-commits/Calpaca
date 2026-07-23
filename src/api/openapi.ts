@@ -31,6 +31,7 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/api/me/workspace", "Workspace", "Get workspace plan, entitlements, and domains", "personal"],
   ["patch", "/api/me/workspace", "Workspace", "Update workspace settings", "personal"],
   ["post", "/api/me/workspace/domains", "Workspace", "Add a custom domain", "personal"],
+  ["post", "/api/me/workspace/domains/{id}/verify", "Workspace", "Verify and provision a custom domain", "personal"],
   ["delete", "/api/me/workspace/domains/{id}", "Workspace", "Remove a custom domain", "personal"],
   ["get", "/api/me/bookings", "Organizer", "List organizer bookings", "session"],
   ["get", "/api/me/bookings/{id}", "Organizer", "Get booking detail and timeline", "session"],

@@ -11,9 +11,14 @@ import {
 } from "../../db/suggestion-repo";
 import { emitSuggestionWebhook, enqueueSuggestionEmail } from "../../jobs/index";
 import { createRateLimitMiddleware } from "../rate-limit";
+import { publicWorkspaceId } from "../public-workspace";
 
 export interface SuggestionDeps {
-  getEventTypeBySlug: (slug: string) => Promise<SuggestionEventType | null>;
+  getEventTypeBySlug: (slug: string, workspaceId?: string) => Promise<SuggestionEventType | null>;
+  resolveWorkspaceId?: (
+    context: Parameters<typeof publicWorkspaceId>[0],
+    workspaceSlug?: string,
+  ) => Promise<string | undefined>;
   createSuggestion: (eventTypeId: string, input: TimeSuggestionInput) => Promise<string>;
   enqueueEmail?: (suggestionId: string) => Promise<void>;
   emitWebhook?: (suggestionId: string) => Promise<void>;
@@ -24,7 +29,9 @@ export interface SuggestionDeps {
 }
 
 const defaults: SuggestionDeps = {
-  getEventTypeBySlug: (slug) => getSuggestionEventTypeBySlug(slug),
+  getEventTypeBySlug: (slug, workspaceId) =>
+    getSuggestionEventTypeBySlug(slug, undefined, workspaceId),
+  resolveWorkspaceId: publicWorkspaceId,
   createSuggestion: (eventTypeId, input) => createTimeSuggestion(eventTypeId, input),
   enqueueEmail: (id) => enqueueSuggestionEmail(id),
   emitWebhook: (id) => emitSuggestionWebhook(id),
@@ -37,6 +44,7 @@ const defaults: SuggestionDeps = {
 };
 
 const bodySchema = z.object({
+  workspaceSlug: z.string().min(1).optional(),
   invitee: z.object({
     email: z.string().email(),
     name: z.string().trim().min(1).max(200),
@@ -82,7 +90,13 @@ export function createSuggestionRoutes(deps: SuggestionDeps = defaults): Hono {
     } catch {
       return c.json({ error: "invalid_slots" }, 400);
     }
-    const eventType = await deps.getEventTypeBySlug(c.req.param("slug"));
+    const workspaceId = deps.resolveWorkspaceId
+      ? await deps.resolveWorkspaceId(c, parsed.data.workspaceSlug)
+      : undefined;
+    if (process.env.CALPACA_DEPLOYMENT_MODE === "hosted" && !workspaceId) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    const eventType = await deps.getEventTypeBySlug(c.req.param("slug"), workspaceId);
     if (!eventType) return c.json({ error: "not_found" }, 404);
     const message = parsed.data.message?.trim();
     const id = await deps.createSuggestion(eventType.id, {

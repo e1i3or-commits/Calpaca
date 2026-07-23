@@ -7,6 +7,7 @@ import {
   addWorkspaceDomain,
   ensureWorkspaceForUser,
   getWorkspaceContext,
+  resolvePublicWorkspace,
   resolveWorkspaceByHostname,
 } from "../../src/db/workspace-repo";
 import * as schema from "../../src/db/schema";
@@ -50,6 +51,19 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("workspace repository", () => {
         .where(sql`${schema.workspaceDomains.id} = ${domain.id}`);
       expect(await resolveWorkspaceByHostname("CAL.EXAMPLE.COM.", db))
         .toBe(ownerWorkspace.workspaceId);
+      expect(await resolvePublicWorkspace({
+        hostname: "cal.example.com",
+      }, db)).toEqual({
+        id: ownerWorkspace.workspaceId,
+        slug: "default",
+      });
+      expect(await resolvePublicWorkspace({
+        hostname: "calpaca.io",
+        workspaceSlug: "default",
+      }, db)).toEqual({
+        id: ownerWorkspace.workspaceId,
+        slug: "default",
+      });
     } finally {
       await pool.end();
     }

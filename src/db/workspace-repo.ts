@@ -167,6 +167,57 @@ export async function removeWorkspaceDomain(
   return rows.length > 0;
 }
 
+export async function getWorkspaceDomainForVerification(
+  workspaceId: string,
+  id: string,
+  executor: Db = getDb(),
+) {
+  const [row] = await executor
+    .select({
+      id: workspaceDomains.id,
+      hostname: workspaceDomains.hostname,
+      status: workspaceDomains.status,
+      verificationToken: workspaceDomains.verificationToken,
+      isPrimary: workspaceDomains.isPrimary,
+    })
+    .from(workspaceDomains)
+    .where(and(
+      eq(workspaceDomains.workspaceId, workspaceId),
+      eq(workspaceDomains.id, id),
+    ));
+  return row ?? null;
+}
+
+export async function markWorkspaceDomainVerified(
+  workspaceId: string,
+  id: string,
+  executor: Db = getDb(),
+) {
+  return executor.transaction(async (tx) => {
+    const [primary] = await tx
+      .select({ id: workspaceDomains.id })
+      .from(workspaceDomains)
+      .where(and(
+        eq(workspaceDomains.workspaceId, workspaceId),
+        eq(workspaceDomains.isPrimary, true),
+      ));
+    const [row] = await tx
+      .update(workspaceDomains)
+      .set({ status: "verified", isPrimary: primary === undefined })
+      .where(and(
+        eq(workspaceDomains.workspaceId, workspaceId),
+        eq(workspaceDomains.id, id),
+      ))
+      .returning({
+        id: workspaceDomains.id,
+        hostname: workspaceDomains.hostname,
+        status: workspaceDomains.status,
+        isPrimary: workspaceDomains.isPrimary,
+      });
+    return row ?? null;
+  });
+}
+
 export async function resolveWorkspaceByHostname(hostname: string, executor: Db = getDb()) {
   const normalized = hostname.toLowerCase().replace(/\.$/, "");
   const [row] = await executor
@@ -177,4 +228,34 @@ export async function resolveWorkspaceByHostname(hostname: string, executor: Db 
       eq(workspaceDomains.status, "verified"),
     ));
   return row?.workspaceId ?? null;
+}
+
+export async function resolvePublicWorkspace(
+  input: { hostname: string; workspaceSlug?: string },
+  executor: Db = getDb(),
+) {
+  const hostname = input.hostname.toLowerCase().replace(/:\d+$/, "").replace(/\.$/, "");
+  const customDomainWorkspaceId = await resolveWorkspaceByHostname(hostname, executor);
+  if (customDomainWorkspaceId) {
+    const [workspace] = await executor
+      .select({ id: workspaces.id, slug: workspaces.slug })
+      .from(workspaces)
+      .where(eq(workspaces.id, customDomainWorkspaceId));
+    return workspace ?? null;
+  }
+
+  if (input.workspaceSlug) {
+    const [workspace] = await executor
+      .select({ id: workspaces.id, slug: workspaces.slug })
+      .from(workspaces)
+      .where(eq(workspaces.slug, input.workspaceSlug));
+    return workspace ?? null;
+  }
+
+  if (process.env.CALPACA_DEPLOYMENT_MODE === "hosted") return null;
+  const [workspace] = await executor
+    .select({ id: workspaces.id, slug: workspaces.slug })
+    .from(workspaces)
+    .where(eq(workspaces.slug, DEFAULT_WORKSPACE_SLUG));
+  return workspace ?? null;
 }

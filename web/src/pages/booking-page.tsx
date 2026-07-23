@@ -54,9 +54,11 @@ export function errorMessage(e: unknown): string {
 
 export function BookingPage({
   slug,
+  workspaceSlug,
   routingAnswers,
 }: {
   slug: string;
+  workspaceSlug?: string;
   /** present when the invitee arrived via a routing form (/r/<form>) */
   routingAnswers?: RoutingAnswers;
 }) {
@@ -84,8 +86,8 @@ export function BookingPage({
   // real title + theme; a failure here is cosmetic (the slug stands in and
   // the availability load reports the 404), so it's deliberately swallowed
   useEffect(() => {
-    getEventTypeMeta(slug).then(setMeta, () => {});
-  }, [slug]);
+    getEventTypeMeta(slug, workspaceSlug).then(setMeta, () => {});
+  }, [slug, workspaceSlug]);
   useEffect(() => {
     if (!meta?.selectableHosts) return;
     setHostRoles(
@@ -173,6 +175,7 @@ export function BookingPage({
               {!meta?.selectableHosts || selectedHostIds.length > 0 ? (
                 <SlotPicker
                   slug={slug}
+                  workspaceSlug={workspaceSlug}
                   timezone={timezone}
                   hosts={meta?.selectableHosts ? selectedHostIds : undefined}
                   optionalHosts={meta?.selectableHosts ? optionalHostIds : undefined}
@@ -217,6 +220,7 @@ export function BookingPage({
           {step.name === "suggest" && (
             <SuggestionStep
               slug={slug}
+              workspaceSlug={workspaceSlug}
               timezone={timezone}
               durationMinutes={meta?.durationMinutes ?? 30}
               onBack={() => setStep({ name: "pick" })}
@@ -228,6 +232,7 @@ export function BookingPage({
             <DetailsStep
               slot={step.slot}
               slug={slug}
+              workspaceSlug={workspaceSlug}
               timezone={timezone}
               hosts={step.hosts}
               optionalHosts={step.optionalHosts}
@@ -445,6 +450,7 @@ export function TimezoneSelect({ value, onChange }: { value: string; onChange: (
 function DetailsStep({
   slot,
   slug,
+  workspaceSlug,
   timezone,
   hosts,
   optionalHosts,
@@ -456,6 +462,7 @@ function DetailsStep({
 }: {
   slot: SlotDto;
   slug: string;
+  workspaceSlug?: string;
   timezone: string;
   hosts?: string[];
   optionalHosts?: string[];
@@ -481,6 +488,7 @@ function DetailsStep({
       // hold transaction, the client never wins a race by itself
       const hold = await createHold({
         eventTypeSlug: slug,
+        workspaceSlug,
         start: slot.start.utc,
         end: slot.end.utc,
         hosts,
@@ -488,6 +496,7 @@ function DetailsStep({
       });
       const confirmation = await confirmBooking({
         eventTypeSlug: slug,
+        workspaceSlug,
         holdIds: hold.holdIds,
         invitee: { email, name, timezone, ...(notes.trim() ? { notes: notes.trim() } : {}) },
         routingAnswers,
@@ -599,12 +608,14 @@ type ProposedWindow = { date: string; time: string };
 
 function SuggestionStep({
   slug,
+  workspaceSlug,
   timezone,
   durationMinutes,
   onBack,
   onSent,
 }: {
   slug: string;
+  workspaceSlug?: string;
   timezone: string;
   durationMinutes: number;
   onBack: () => void;
@@ -647,6 +658,7 @@ function SuggestionStep({
     try {
       await suggestTimes({
         eventTypeSlug: slug,
+        workspaceSlug,
         invitee: { name, email, timezone },
         proposedSlots,
         ...(message.trim() ? { message: message.trim() } : {}),

@@ -52,6 +52,25 @@ function deps(overrides: Partial<WorkspaceDeps> = {}): WorkspaceDeps {
     }),
     removeDomain: async (_workspaceId, id) => id === DOMAIN_ID,
     updateName: async (_workspaceId, name) => ({ id: WORKSPACE_ID, name }),
+    getDomainForVerification: async (_workspaceId, id) => id === DOMAIN_ID
+      ? {
+          id: DOMAIN_ID,
+          hostname: "cal.example.com",
+          status: "pending",
+          verificationToken: "verify",
+          isPrimary: false,
+        }
+      : null,
+    markDomainVerified: async (_workspaceId, id) => id === DOMAIN_ID
+      ? {
+          id: DOMAIN_ID,
+          hostname: "cal.example.com",
+          status: "verified",
+          isPrimary: true,
+        }
+      : null,
+    resolveTxt: async () => [["verify"]],
+    provisionDomain: async () => "provisioned",
     ...overrides,
   };
 }
@@ -126,5 +145,37 @@ describe("workspace routes", () => {
       method: "PATCH",
       body: JSON.stringify({ name: "Nope" }),
     })).status).toBe(403);
+  });
+
+  test("verifies the TXT proof before provisioning the hostname", async () => {
+    const response = await createWorkspaceRoutes(deps()).request(
+      `/api/me/workspace/domains/${DOMAIN_ID}/verify`,
+      { method: "POST" },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      domain: {
+        id: DOMAIN_ID,
+        hostname: "cal.example.com",
+        status: "verified",
+        isPrimary: true,
+      },
+      provisioning: "provisioned",
+    });
+  });
+
+  test("does not provision when the TXT proof does not match", async () => {
+    let provisioned = false;
+    const response = await createWorkspaceRoutes(deps({
+      resolveTxt: async () => [["wrong"]],
+      provisionDomain: async () => {
+        provisioned = true;
+        return "provisioned";
+      },
+    })).request(`/api/me/workspace/domains/${DOMAIN_ID}/verify`, {
+      method: "POST",
+    });
+    expect(response.status).toBe(409);
+    expect(provisioned).toBe(false);
   });
 });

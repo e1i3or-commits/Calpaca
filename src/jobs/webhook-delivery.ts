@@ -58,10 +58,11 @@ export async function fanOutSuggestionWebhooks(
   deps: FanOutDeps = defaultFanOutDeps,
 ): Promise<DeliveryJob[]> {
   const event = "suggestion.created" as const;
-  const hooks = (await deps.listActiveWebhooks()).filter((h) => matchesSubscription(h.events, event));
-  if (hooks.length === 0) return [];
   const ctx = await getTimeSuggestionContext(suggestionId);
   if (!ctx) return [];
+  const hooks = (await deps.listActiveWebhooks(ctx.workspaceId))
+    .filter((h) => matchesSubscription(h.events, event));
+  if (hooks.length === 0) return [];
   const occurredAt = deps.now();
   return Promise.all(hooks.map(async (hook) => {
     const deliveryId = deps.deliveryId();
@@ -89,7 +90,7 @@ export async function fanOutSuggestionWebhooks(
 }
 
 export interface FanOutDeps {
-  readonly listActiveWebhooks: () => Promise<WebhookRow[]>;
+  readonly listActiveWebhooks: (workspaceId?: string) => Promise<WebhookRow[]>;
   readonly getInviteContext: typeof getInviteContext;
   readonly createWebhookDelivery: typeof createWebhookDelivery;
   readonly now: () => Temporal.Instant;
@@ -97,7 +98,7 @@ export interface FanOutDeps {
 }
 
 const defaultFanOutDeps: FanOutDeps = {
-  listActiveWebhooks: () => listActiveWebhooks(),
+  listActiveWebhooks: (workspaceId) => listActiveWebhooks(undefined, workspaceId),
   getInviteContext: (bookingId) => getInviteContext(bookingId),
   createWebhookDelivery: (input) => createWebhookDelivery(input),
   now: () => Temporal.Now.instant(),
@@ -113,14 +114,14 @@ export async function fanOutBookingWebhooks(
   deps: FanOutDeps = defaultFanOutDeps,
 ): Promise<DeliveryJob[]> {
   const event = EVENT_NAME[kind];
-  const hooks = (await deps.listActiveWebhooks()).filter((h) => matchesSubscription(h.events, event));
-  if (hooks.length === 0) return [];
-
   const ctx = await deps.getInviteContext(bookingId);
   if (!ctx) {
     console.error(`[jobs] webhook fan-out: booking ${bookingId} not found`);
     return [];
   }
+  const hooks = (await deps.listActiveWebhooks(ctx.workspaceId))
+    .filter((h) => matchesSubscription(h.events, event));
+  if (hooks.length === 0) return [];
 
   const occurredAt = deps.now();
   return Promise.all(hooks.map(async (hook) => {

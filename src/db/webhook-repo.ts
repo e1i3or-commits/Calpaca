@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
 import * as schema from "./schema";
@@ -34,13 +34,23 @@ function toRow(row: typeof webhooks.$inferSelect): WebhookRow {
   return { id: row.id, url: row.url, events: row.events, secret: row.secret, active: row.active };
 }
 
-export async function listActiveWebhooks(executor: Db = getDb()): Promise<WebhookRow[]> {
-  const rows = await executor.select().from(webhooks).where(eq(webhooks.active, true));
+export async function listActiveWebhooks(
+  executor: Db = getDb(),
+  workspaceId?: string,
+): Promise<WebhookRow[]> {
+  const rows = await executor.select().from(webhooks).where(
+    workspaceId
+      ? and(eq(webhooks.active, true), eq(webhooks.workspaceId, workspaceId))
+      : eq(webhooks.active, true),
+  );
   return rows.map(toRow);
 }
 
-export async function listWebhooks(executor: Db = getDb()): Promise<WebhookRow[]> {
-  return (await executor.select().from(webhooks)).map(toRow);
+export async function listWebhooks(executor: Db = getDb(), workspaceId?: string): Promise<WebhookRow[]> {
+  const rows = workspaceId
+    ? await executor.select().from(webhooks).where(eq(webhooks.workspaceId, workspaceId))
+    : await executor.select().from(webhooks);
+  return rows.map(toRow);
 }
 
 export async function getWebhook(id: string, executor: Db = getDb()): Promise<WebhookRow | null> {
@@ -53,11 +63,17 @@ export async function getWebhook(id: string, executor: Db = getDb()): Promise<We
 export async function createWebhook(
   input: { url: string; events: string[] },
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<WebhookRow> {
   const secret = `whsec_${randomBytes(24).toString("base64url")}`;
   const [row] = await executor
     .insert(webhooks)
-    .values({ url: input.url, events: input.events, secret })
+    .values({
+      ...(workspaceId ? { workspaceId } : {}),
+      url: input.url,
+      events: input.events,
+      secret,
+    })
     .returning();
   return toRow(row!);
 }
@@ -66,13 +82,26 @@ export async function setWebhookActive(
   id: string,
   active: boolean,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<WebhookRow | null> {
-  const [row] = await executor.update(webhooks).set({ active }).where(eq(webhooks.id, id)).returning();
+  const [row] = await executor.update(webhooks).set({ active }).where(
+    workspaceId
+      ? and(eq(webhooks.id, id), eq(webhooks.workspaceId, workspaceId))
+      : eq(webhooks.id, id),
+  ).returning();
   return row ? toRow(row) : null;
 }
 
-export async function deleteWebhook(id: string, executor: Db = getDb()): Promise<boolean> {
-  const rows = await executor.delete(webhooks).where(eq(webhooks.id, id)).returning({ id: webhooks.id });
+export async function deleteWebhook(
+  id: string,
+  executor: Db = getDb(),
+  workspaceId?: string,
+): Promise<boolean> {
+  const rows = await executor.delete(webhooks).where(
+    workspaceId
+      ? and(eq(webhooks.id, id), eq(webhooks.workspaceId, workspaceId))
+      : eq(webhooks.id, id),
+  ).returning({ id: webhooks.id });
   return rows.length > 0;
 }
 
@@ -110,12 +139,19 @@ export async function listWebhookDeliveries(
   webhookId: string,
   limit: number,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<WebhookDeliveryRow[]> {
   const rows = await executor
     .select()
     .from(webhookDeliveries)
-    .where(eq(webhookDeliveries.webhookId, webhookId))
+    .innerJoin(webhooks, eq(webhooks.id, webhookDeliveries.webhookId))
+    .where(workspaceId
+      ? and(
+          eq(webhookDeliveries.webhookId, webhookId),
+          eq(webhooks.workspaceId, workspaceId),
+        )
+      : eq(webhookDeliveries.webhookId, webhookId))
     .orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id))
     .limit(limit);
-  return rows as WebhookDeliveryRow[];
+  return rows.map((row) => row.webhook_deliveries) as WebhookDeliveryRow[];
 }

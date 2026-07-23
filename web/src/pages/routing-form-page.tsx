@@ -20,7 +20,13 @@ const ISSUE_TEXT: Record<string, string> = {
   unknown_field: "Unexpected answer — reload and try again.",
 };
 
-export function RoutingFormPage({ slug }: { slug: string }) {
+export function RoutingFormPage({
+  slug,
+  workspaceSlug,
+}: {
+  slug: string;
+  workspaceSlug?: string;
+}) {
   const navigate = useNavigate();
   const [fields, setFields] = useState<RoutingField[] | null>(null);
   const [answers, setAnswers] = useState<RoutingAnswers>({});
@@ -30,7 +36,7 @@ export function RoutingFormPage({ slug }: { slug: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    getRoutingForm(slug)
+    getRoutingForm(slug, workspaceSlug)
       .then((form) => {
         if (!cancelled) setFields(form.fields);
       })
@@ -45,7 +51,7 @@ export function RoutingFormPage({ slug }: { slug: string }) {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, workspaceSlug]);
 
   function setAnswer(key: string, value: string | string[]) {
     setAnswers((a) => ({ ...a, [key]: value }));
@@ -62,14 +68,20 @@ export function RoutingFormPage({ slug }: { slug: string }) {
     setError(null);
     setIssues({});
     try {
-      const result = await evaluateRouting(slug, answers);
+      const result = await evaluateRouting(slug, answers, workspaceSlug);
       if (result.matched && result.eventTypeSlug) {
         // carry the normalized answers into the booking so they land on the row
-        void navigate({
-          to: "/book/$slug",
-          params: { slug: result.eventTypeSlug },
-          search: { answers: result.answers },
-        });
+        void navigate(workspaceSlug
+          ? {
+              to: "/book/$workspaceSlug/$slug",
+              params: { workspaceSlug, slug: result.eventTypeSlug },
+              search: { answers: result.answers },
+            }
+          : {
+              to: "/book/$slug",
+              params: { slug: result.eventTypeSlug },
+              search: { answers: result.answers },
+            });
         return;
       }
       setError("No booking page matches those answers. Reach out to us directly instead.");

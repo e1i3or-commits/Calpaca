@@ -8,7 +8,9 @@ import {
   getManagementDirectory,
   updateManagedUser,
 } from "../../src/db/user-management-repo";
-import { listTeamsForUser } from "../../src/db/admin-repo";
+import { listEventTypesForUser, listTeamsForUser } from "../../src/db/admin-repo";
+import { listRoutingFormsForUser } from "../../src/db/routing-repo";
+import { listWebhooks } from "../../src/db/webhook-repo";
 import * as schema from "../../src/db/schema";
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)("workspace user isolation", () => {
@@ -34,9 +36,57 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("workspace user isolation", () =
         { workspaceId: alpha!.id, userId: alphaOwner!.id, role: "owner" },
         { workspaceId: beta!.id, userId: betaOwner!.id, role: "owner" },
       ]);
-      await db.insert(schema.teams).values([
+      const [alphaTeam, betaTeam] = await db.insert(schema.teams).values([
         { workspaceId: alpha!.id, name: "Alpha Team", slug: "team" },
         { workspaceId: beta!.id, name: "Beta Team", slug: "team" },
+      ]).returning();
+      await db.insert(schema.teamMembers).values([
+        { teamId: alphaTeam!.id, userId: alphaOwner!.id, isAdmin: true },
+        { teamId: betaTeam!.id, userId: betaOwner!.id, isAdmin: true },
+      ]);
+      await db.insert(schema.eventTypes).values([
+        {
+          workspaceId: alpha!.id,
+          ownerUserId: alphaOwner!.id,
+          slug: "intro",
+          title: "Alpha intro",
+          durationMinutes: 30,
+        },
+        {
+          workspaceId: beta!.id,
+          ownerUserId: betaOwner!.id,
+          slug: "intro",
+          title: "Beta intro",
+          durationMinutes: 30,
+        },
+      ]);
+      await db.insert(schema.routingForms).values([
+        {
+          workspaceId: alpha!.id,
+          ownerUserId: alphaOwner!.id,
+          slug: "lead",
+          fields: [],
+        },
+        {
+          workspaceId: beta!.id,
+          ownerUserId: betaOwner!.id,
+          slug: "lead",
+          fields: [],
+        },
+      ]);
+      await db.insert(schema.webhooks).values([
+        {
+          workspaceId: alpha!.id,
+          url: "https://alpha.example.test/hook",
+          events: ["*"],
+          secret: "alpha-secret",
+        },
+        {
+          workspaceId: beta!.id,
+          url: "https://beta.example.test/hook",
+          events: ["*"],
+          secret: "beta-secret",
+        },
       ]);
 
       const directory = await getManagementDirectory(alphaOwner!.id, alpha!.id, db);
@@ -46,6 +96,18 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("workspace user isolation", () =
         db,
         alpha!.id,
       )).map((team) => team.name)).toEqual(["Alpha Team"]);
+      expect((await listEventTypesForUser(
+        alphaOwner!.id,
+        db,
+        alpha!.id,
+      )).map((eventType) => eventType.title)).toEqual(["Alpha intro"]);
+      expect((await listRoutingFormsForUser(
+        alphaOwner!.id,
+        db,
+        alpha!.id,
+      )).map((form) => form.slug)).toEqual(["lead"]);
+      expect((await listWebhooks(db, alpha!.id)).map((hook) => hook.url))
+        .toEqual(["https://alpha.example.test/hook"]);
       expect(await updateManagedUser(
         alphaOwner!.id,
         betaOwner!.id,

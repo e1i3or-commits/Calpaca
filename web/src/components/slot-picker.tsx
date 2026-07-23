@@ -36,6 +36,7 @@ function currentCursor(timezone: string): Cursor {
 
 export function SlotPicker(props: {
   slug: string;
+  workspaceSlug?: string;
   timezone: string;
   hosts?: string[];
   optionalHosts?: string[];
@@ -47,7 +48,7 @@ export function SlotPicker(props: {
   // capture, selected day) resets without effect-ordering choreography
   return (
     <SlotPickerInner
-      key={`${props.slug}|${props.timezone}|${props.hosts?.join(",") ?? ""}|${props.optionalHosts?.join(",") ?? ""}|${props.reloadKey ?? 0}`}
+      key={`${props.workspaceSlug ?? ""}|${props.slug}|${props.timezone}|${props.hosts?.join(",") ?? ""}|${props.optionalHosts?.join(",") ?? ""}|${props.reloadKey ?? 0}`}
       {...props}
     />
   );
@@ -55,6 +56,7 @@ export function SlotPicker(props: {
 
 function SlotPickerInner({
   slug,
+  workspaceSlug,
   timezone,
   hosts,
   optionalHosts,
@@ -62,6 +64,7 @@ function SlotPickerInner({
   onLoadError,
 }: {
   slug: string;
+  workspaceSlug?: string;
   timezone: string;
   hosts?: string[];
   optionalHosts?: string[];
@@ -97,6 +100,7 @@ function SlotPickerInner({
     }
     getAvailability({
       eventTypeSlug: slug,
+      workspaceSlug,
       start: start.toISOString(),
       end: end.toISOString(),
       inviteeTimezone: timezone,

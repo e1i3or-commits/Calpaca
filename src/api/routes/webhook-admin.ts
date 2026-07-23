@@ -17,20 +17,29 @@ import {
  * convention as the booking routes so tests stub the repo and the session. */
 export interface WebhookAdminDeps {
   readonly requireAuth: MiddlewareHandler<AuthEnv>;
-  readonly listWebhooks: () => Promise<WebhookRow[]>;
-  readonly createWebhook: (input: { url: string; events: string[] }) => Promise<WebhookRow>;
-  readonly setWebhookActive: (id: string, active: boolean) => Promise<WebhookRow | null>;
-  readonly deleteWebhook: (id: string) => Promise<boolean>;
-  readonly listWebhookDeliveries?: (id: string, limit: number) => Promise<WebhookDeliveryRow[]>;
+  readonly listWebhooks: (workspaceId?: string) => Promise<WebhookRow[]>;
+  readonly createWebhook: (
+    input: { url: string; events: string[] },
+    workspaceId?: string,
+  ) => Promise<WebhookRow>;
+  readonly setWebhookActive: (id: string, active: boolean, workspaceId?: string) => Promise<WebhookRow | null>;
+  readonly deleteWebhook: (id: string, workspaceId?: string) => Promise<boolean>;
+  readonly listWebhookDeliveries?: (
+    id: string,
+    limit: number,
+    workspaceId?: string,
+  ) => Promise<WebhookDeliveryRow[]>;
 }
 
 const defaultDeps: WebhookAdminDeps = {
   requireAuth: requireSession,
-  listWebhooks: () => listWebhooks(),
-  createWebhook: (input) => createWebhook(input),
-  setWebhookActive: (id, active) => setWebhookActive(id, active),
-  deleteWebhook: (id) => deleteWebhook(id),
-  listWebhookDeliveries: (id, limit) => listWebhookDeliveries(id, limit),
+  listWebhooks: (workspaceId) => listWebhooks(undefined, workspaceId),
+  createWebhook: (input, workspaceId) => createWebhook(input, undefined, workspaceId),
+  setWebhookActive: (id, active, workspaceId) =>
+    setWebhookActive(id, active, undefined, workspaceId),
+  deleteWebhook: (id, workspaceId) => deleteWebhook(id, undefined, workspaceId),
+  listWebhookDeliveries: (id, limit, workspaceId) =>
+    listWebhookDeliveries(id, limit, undefined, workspaceId),
 };
 
 const createBodySchema = z.object({
@@ -53,7 +62,7 @@ export function createWebhookAdminRoutes(deps: WebhookAdminDeps = defaultDeps): 
   router.use("/api/me/webhooks", deps.requireAuth);
 
   router.get("/api/me/webhooks", async (c) => {
-    const rows = await deps.listWebhooks();
+    const rows = await deps.listWebhooks(c.get("user").workspaceId);
     return c.json({ webhooks: rows.map(redact) });
   });
 
@@ -62,14 +71,18 @@ export function createWebhookAdminRoutes(deps: WebhookAdminDeps = defaultDeps): 
     const parsed = createBodySchema.safeParse(body);
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
 
-    const row = await deps.createWebhook(parsed.data);
+    const row = await deps.createWebhook(parsed.data, c.get("user").workspaceId);
     return c.json(row, 201); // includes the secret — the only time it does
   });
 
   router.get("/api/me/webhooks/:id/deliveries", async (c) => {
     const parsed = deliveryQuerySchema.safeParse(c.req.query("limit"));
     if (!parsed.success) return c.json({ error: "invalid_limit" }, 400);
-    const rows = await deps.listWebhookDeliveries?.(c.req.param("id"), parsed.data);
+    const rows = await deps.listWebhookDeliveries?.(
+      c.req.param("id"),
+      parsed.data,
+      c.get("user").workspaceId,
+    );
     return c.json({ deliveries: rows ?? [] });
   });
 
@@ -78,13 +91,20 @@ export function createWebhookAdminRoutes(deps: WebhookAdminDeps = defaultDeps): 
     const parsed = patchBodySchema.safeParse(body);
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
 
-    const row = await deps.setWebhookActive(c.req.param("id"), parsed.data.active);
+    const row = await deps.setWebhookActive(
+      c.req.param("id"),
+      parsed.data.active,
+      c.get("user").workspaceId,
+    );
     if (!row) return c.json({ error: "webhook_not_found" }, 404);
     return c.json(redact(row));
   });
 
   router.delete("/api/me/webhooks/:id", async (c) => {
-    const deleted = await deps.deleteWebhook(c.req.param("id"));
+    const deleted = await deps.deleteWebhook(
+      c.req.param("id"),
+      c.get("user").workspaceId,
+    );
     if (!deleted) return c.json({ error: "webhook_not_found" }, 404);
     return c.json({ ok: true });
   });

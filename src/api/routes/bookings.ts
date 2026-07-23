@@ -51,13 +51,21 @@ import {
   createRateLimitMiddleware,
   positiveIntegerEnv,
 } from "../rate-limit";
+import { publicWorkspaceId } from "../public-workspace";
 
 /** Same "inject repo functions, not module bindings" convention as
  * src/api/routes/availability.ts (task 13), so tests can stub every
  * dependency including the database-transaction-shaped ones (createHold,
  * confirmHold, confirmReschedule, cancelBooking) without a real Postgres. */
 export interface BookingDeps {
-  readonly getEventTypeForBooking: (slug: string) => Promise<BookingEventTypeConfig | null>;
+  readonly getEventTypeForBooking: (
+    slug: string,
+    workspaceId?: string,
+  ) => Promise<BookingEventTypeConfig | null>;
+  readonly resolveWorkspaceId?: (
+    context: Parameters<typeof publicWorkspaceId>[0],
+    workspaceSlug?: string,
+  ) => Promise<string | undefined>;
   readonly getEventTypeForBookingById: (id: string) => Promise<BookingEventTypeConfig | null>;
   readonly getEventTypeHosts: (eventTypeId: string) => Promise<EventTypeHostRecord[]>;
   readonly getSchedulesForUsers: (userIds: readonly string[]) => Promise<HostSchedule[]>;
@@ -108,7 +116,9 @@ export interface BookingDeps {
 }
 
 const defaultDeps: BookingDeps = {
-  getEventTypeForBooking: (slug) => dbGetEventTypeForBooking(slug),
+  getEventTypeForBooking: (slug, workspaceId) =>
+    dbGetEventTypeForBooking(slug, undefined, workspaceId),
+  resolveWorkspaceId: publicWorkspaceId,
   getEventTypeForBookingById: (id) => dbGetEventTypeForBookingById(id),
   getEventTypeHosts: (eventTypeId) => dbGetEventTypeHosts(eventTypeId),
   getSchedulesForUsers: (userIds) => dbGetSchedulesForUsers(userIds),
@@ -141,6 +151,7 @@ const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 const holdBodySchema = z.object({
   eventTypeSlug: z.string().min(1),
+  workspaceSlug: z.string().min(1).optional(),
   start: z.string().min(1),
   end: z.string().min(1),
   hosts: z.array(z.string().min(1)).optional(),
@@ -150,6 +161,7 @@ const holdBodySchema = z.object({
 
 const bookingBodySchema = z.object({
   eventTypeSlug: z.string().min(1),
+  workspaceSlug: z.string().min(1).optional(),
   holdIds: z.array(z.string().min(1)).min(1),
   invitee: z.object({
     email: z.string().email(),
@@ -353,6 +365,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
     const {
       eventTypeSlug,
+      workspaceSlug,
       start,
       end,
       hosts: requestedHosts,
@@ -363,7 +376,13 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     const slot = parseSlot(start, end);
     if (!slot) return c.json({ error: "invalid_window" }, 400);
 
-    const eventType = await deps.getEventTypeForBooking(eventTypeSlug);
+    const workspaceId = deps.resolveWorkspaceId
+      ? await deps.resolveWorkspaceId(c, workspaceSlug)
+      : undefined;
+    if (process.env.CALPACA_DEPLOYMENT_MODE === "hosted" && !workspaceId) {
+      return c.json({ error: "event_type_not_found" }, 404);
+    }
+    const eventType = await deps.getEventTypeForBooking(eventTypeSlug, workspaceId);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
     if (agent && !eventType.agentPolicy?.enabled) {
       return c.json({ error: "agent_not_allowed" }, 403);
@@ -484,9 +503,23 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     const body = await c.req.json().catch(() => null);
     const parsed = bookingBodySchema.safeParse(body);
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
-    const { eventTypeSlug, holdIds, invitee, routingAnswers, agent, inviteePhone } = parsed.data;
+    const {
+      eventTypeSlug,
+      workspaceSlug,
+      holdIds,
+      invitee,
+      routingAnswers,
+      agent,
+      inviteePhone,
+    } = parsed.data;
 
-    const eventType = await deps.getEventTypeForBooking(eventTypeSlug);
+    const workspaceId = deps.resolveWorkspaceId
+      ? await deps.resolveWorkspaceId(c, workspaceSlug)
+      : undefined;
+    if (process.env.CALPACA_DEPLOYMENT_MODE === "hosted" && !workspaceId) {
+      return c.json({ error: "event_type_not_found" }, 404);
+    }
+    const eventType = await deps.getEventTypeForBooking(eventTypeSlug, workspaceId);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
     if (agent && !eventType.agentPolicy?.enabled) {
       return c.json({ error: "agent_not_allowed" }, 403);

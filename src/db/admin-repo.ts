@@ -401,16 +401,19 @@ function toAdminEventType(
   };
 }
 
-export async function listEventTypesForUser(userId: string, executor: Db = getDb()): Promise<AdminEventType[]> {
-  const memberTeams = (await listTeamsForUser(userId, executor)).map((t) => t.id);
+export async function listEventTypesForUser(
+  userId: string,
+  executor: Db = getDb(),
+  workspaceId?: string,
+): Promise<AdminEventType[]> {
+  const memberTeams = (await listTeamsForUser(userId, executor, workspaceId)).map((t) => t.id);
+  const ownership = memberTeams.length > 0
+    ? or(eq(eventTypes.ownerUserId, userId), inArray(eventTypes.teamId, memberTeams))
+    : eq(eventTypes.ownerUserId, userId);
   const rows = await executor
     .select()
     .from(eventTypes)
-    .where(
-      memberTeams.length > 0
-        ? or(eq(eventTypes.ownerUserId, userId), inArray(eventTypes.teamId, memberTeams))
-        : eq(eventTypes.ownerUserId, userId),
-    );
+    .where(workspaceId ? and(eq(eventTypes.workspaceId, workspaceId), ownership) : ownership);
   const hosts = await hostsFor(executor, rows.map((r) => r.id));
   return rows.map((r) => toAdminEventType(r, hosts.get(r.id) ?? []));
 }
@@ -420,8 +423,13 @@ export async function getEventTypeForAdmin(
   id: string,
   userId: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<AdminEventType | null> {
-  const [row] = await executor.select().from(eventTypes).where(eq(eventTypes.id, id));
+  const [row] = await executor.select().from(eventTypes).where(
+    workspaceId
+      ? and(eq(eventTypes.id, id), eq(eventTypes.workspaceId, workspaceId))
+      : eq(eventTypes.id, id),
+  );
   if (!row) return null;
   const allowed =
     row.ownerUserId === userId || (row.teamId !== null && (await isTeamMember(row.teamId, userId, executor)));
@@ -459,16 +467,34 @@ export async function createEventType(
   ownerUserId: string,
   input: EventTypeInput,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<AdminEventType | "slug_taken"> {
   return executor.transaction(async (tx) => {
+    const resolvedWorkspaceId = workspaceId ?? (
+      await tx
+        .select({ workspaceId: schema.workspaceMembers.workspaceId })
+        .from(schema.workspaceMembers)
+        .where(eq(schema.workspaceMembers.userId, ownerUserId))
+        .limit(1)
+    )[0]?.workspaceId;
+    if (!resolvedWorkspaceId) throw new Error("workspace membership required");
     const [existing] = await tx
       .select({ id: eventTypes.id })
       .from(eventTypes)
-      .where(and(eq(eventTypes.slug, input.slug), eq(eventTypes.ownerUserId, ownerUserId)));
+      .where(and(
+        eq(eventTypes.slug, input.slug),
+        eq(eventTypes.workspaceId, resolvedWorkspaceId),
+      ));
     if (existing) return "slug_taken";
     const [row] = await tx
       .insert(eventTypes)
-      .values({ ...input, ownerUserId, scheduleId: input.scheduleId, teamId: input.teamId })
+      .values({
+        ...input,
+        workspaceId: resolvedWorkspaceId,
+        ownerUserId,
+        scheduleId: input.scheduleId,
+        teamId: input.teamId,
+      })
       .returning();
     if (input.hosts.length > 0) {
       await tx.insert(eventTypeHosts).values(input.hosts.map((h) => ({ ...h, eventTypeId: row!.id })));
@@ -483,9 +509,10 @@ export async function updateEventType(
   userId: string,
   input: EventTypeInput,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<AdminEventType | null> {
   return executor.transaction(async (tx) => {
-    const existing = await getEventTypeForAdmin(id, userId, tx);
+    const existing = await getEventTypeForAdmin(id, userId, tx, workspaceId);
     if (!existing) return null;
     const [row] = await tx
       .update(eventTypes)
@@ -525,8 +552,9 @@ export async function deleteEventType(
   id: string,
   userId: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<"deleted" | "not_found" | "in_use"> {
-  const existing = await getEventTypeForAdmin(id, userId, executor);
+  const existing = await getEventTypeForAdmin(id, userId, executor, workspaceId);
   if (!existing) return "not_found";
   try {
     return await executor.transaction(async (tx) => {

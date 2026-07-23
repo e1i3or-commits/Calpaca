@@ -15,12 +15,18 @@ const querySchema = z.object({
 
 export interface AnalyticsDeps {
   readonly requireAuth: MiddlewareHandler<AuthEnv>;
-  readonly getReport: (userId: string, from: Date, to: Date) => Promise<AnalyticsReport>;
+  readonly getReport: (
+    userId: string,
+    from: Date,
+    to: Date,
+    workspaceId?: string,
+  ) => Promise<AnalyticsReport>;
 }
 
 const defaultDeps: AnalyticsDeps = {
   requireAuth: requireSession,
-  getReport: (userId, from, to) => getAnalyticsReport(userId, from, to),
+  getReport: (userId, from, to, workspaceId) =>
+    getAnalyticsReport(userId, from, to, undefined, workspaceId),
 };
 
 function range(query: unknown): { from: Date; to: Date } | null {
@@ -70,13 +76,25 @@ export function createAnalyticsRoutes(deps: AnalyticsDeps = defaultDeps): Hono<A
   routes.get("/api/me/analytics", async (c) => {
     const selected = range(c.req.query());
     if (!selected) return c.json({ error: "invalid_query" }, 400);
-    return c.json(await deps.getReport(c.get("user").id, selected.from, selected.to));
+    const user = c.get("user");
+    return c.json(await deps.getReport(
+      user.id,
+      selected.from,
+      selected.to,
+      user.workspaceId,
+    ));
   });
 
   routes.get("/api/me/analytics.csv", async (c) => {
     const selected = range(c.req.query());
     if (!selected) return c.json({ error: "invalid_query" }, 400);
-    const csv = reportCsv(await deps.getReport(c.get("user").id, selected.from, selected.to));
+    const user = c.get("user");
+    const csv = reportCsv(await deps.getReport(
+      user.id,
+      selected.from,
+      selected.to,
+      user.workspaceId,
+    ));
     c.header("content-type", "text/csv; charset=utf-8");
     c.header("content-disposition", "attachment; filename=\"calpaca-analytics.csv\"");
     return c.body(csv);

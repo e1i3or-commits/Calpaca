@@ -2,7 +2,7 @@ import { and, count, eq, gt, inArray, lte } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
-import { bookings, holds } from "./schema";
+import { bookings, eventTypes, holds } from "./schema";
 import * as schema from "./schema";
 import { ok, err, type Result } from "../lib/result";
 import { generateToken } from "../lib/id";
@@ -181,6 +181,11 @@ export async function confirmHold(
 
     const startsAt = toInstant(first.slotStart);
     const endsAt = toInstant(first.slotEnd);
+    const [eventType] = await tx
+      .select({ workspaceId: eventTypes.workspaceId })
+      .from(eventTypes)
+      .where(eq(eventTypes.id, first.eventTypeId));
+    if (!eventType) return err({ kind: "not_found" });
 
     let hostUserIds = rows.map((row) => row.hostUserId);
     let holdIdsToConfirm = [...holdIds];
@@ -211,6 +216,7 @@ export async function confirmHold(
     const [booking] = await tx
       .insert(bookings)
       .values({
+        workspaceId: eventType.workspaceId,
         eventTypeId: first.eventTypeId,
         startsAt: first.slotStart,
         endsAt: first.slotEnd,

@@ -230,6 +230,7 @@ export const schedules = pgTable("schedules", {
 
 export const eventTypes = pgTable("event_types", {
   id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull().default(sql`NULL`).references(() => workspaces.id),
   ownerUserId: uuid("owner_user_id").references(() => users.id),
   teamId: uuid("team_id").references(() => teams.id),
   slug: text("slug").notNull(),
@@ -256,7 +257,9 @@ export const eventTypes = pgTable("event_types", {
   agentPolicy: jsonb("agent_policy").$type<{
     enabled: boolean; autoExpireHoldsMin?: number;
   }>().notNull().default({ enabled: false }),
-}, (t) => [uniqueIndex("event_type_slug_uq").on(t.ownerUserId, t.teamId, t.slug)]);
+}, (t) => [
+  uniqueIndex("event_type_workspace_slug_uq").on(t.workspaceId, t.slug),
+]);
 
 export const eventTypeHosts = pgTable("event_type_hosts", {
   eventTypeId: uuid("event_type_id").notNull().references(() => eventTypes.id),
@@ -281,6 +284,7 @@ export const holds = pgTable("holds", {
 
 export const bookings = pgTable("bookings", {
   id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull().default(sql`NULL`).references(() => workspaces.id),
   eventTypeId: uuid("event_type_id").notNull().references(() => eventTypes.id),
   startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
   endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
@@ -315,12 +319,15 @@ export const bookingEvents = pgTable("booking_events", {
 
 export const routingForms = pgTable("routing_forms", {
   id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull().default(sql`NULL`).references(() => workspaces.id),
   // owner-or-team scoping, same shape as eventTypes
   ownerUserId: uuid("owner_user_id").references(() => users.id),
   teamId: uuid("team_id").references(() => teams.id),
-  slug: text("slug").notNull().unique(),
+  slug: text("slug").notNull(),
   fields: jsonb("fields").notNull(), // form definition
-});
+}, (t) => [
+  uniqueIndex("routing_form_workspace_slug_uq").on(t.workspaceId, t.slug),
+]);
 
 export const routingRules = pgTable("routing_rules", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -334,6 +341,7 @@ export const routingRules = pgTable("routing_rules", {
 
 export const webhooks = pgTable("webhooks", {
   id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull().default(sql`NULL`).references(() => workspaces.id),
   teamId: uuid("team_id").references(() => teams.id),
   url: text("url").notNull(),
   events: jsonb("events").$type<string[]>().notNull(), // kinds subscribed

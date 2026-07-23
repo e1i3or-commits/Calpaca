@@ -27,6 +27,7 @@ import { generateSlots, type SlotConfig } from "../../core/availability/slots";
 import { scoreSlots } from "../../core/availability/scoring";
 import { groupAvailability, type GroupHost } from "../../core/availability/group";
 import { resolveBookingLayout, resolveTheme } from "../../core/theming/themes";
+import { publicWorkspaceId } from "../public-workspace";
 
 /**
  * Repo access the route needs, as plain functions rather than imported
@@ -35,7 +36,11 @@ import { resolveBookingLayout, resolveTheme } from "../../core/theming/themes";
  * reason - minimum notice / rolling window math is time-dependent.
  */
 export interface AvailabilityDeps {
-  readonly getEventTypeBySlug: (slug: string) => Promise<EventTypeConfig | null>;
+  readonly getEventTypeBySlug: (slug: string, workspaceId?: string) => Promise<EventTypeConfig | null>;
+  readonly resolveWorkspaceId?: (
+    context: Parameters<typeof publicWorkspaceId>[0],
+    workspaceSlug?: string,
+  ) => Promise<string | undefined>;
   readonly getEventTypeHosts: (eventTypeId: string) => Promise<EventTypeHostRecord[]>;
   /** optional so injected test fixtures predating the booking-page profile
    * stay valid; when absent the meta response simply omits `profile` */
@@ -46,7 +51,9 @@ export interface AvailabilityDeps {
 }
 
 const defaultDeps: AvailabilityDeps = {
-  getEventTypeBySlug: (slug) => dbGetEventTypeBySlug(slug),
+  getEventTypeBySlug: (slug, workspaceId) =>
+    dbGetEventTypeBySlug(slug, undefined, workspaceId),
+  resolveWorkspaceId: publicWorkspaceId,
   getEventTypeHosts: (eventTypeId) => dbGetEventTypeHosts(eventTypeId),
   getEventTypeProfile: (eventTypeId) => dbGetEventTypeProfile(eventTypeId),
   getSchedulesForUsers: (userIds) => dbGetSchedulesForUsers(userIds),
@@ -59,6 +66,7 @@ const querySchema = z.object({
   start: z.string().min(1),
   end: z.string().min(1),
   inviteeTimezone: z.string().min(1),
+  workspaceSlug: z.string().min(1).optional(),
 });
 
 interface RenderedInstant {
@@ -193,7 +201,14 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
   // invitee is meeting (host/team display names + avatars; emails stay out).
   // Config that could leak host behavior (buffers, notice) stays private.
   router.get("/event-types/:slug", async (c) => {
-    const eventType = await deps.getEventTypeBySlug(c.req.param("slug"));
+    const workspaceSlug = c.req.query("workspaceSlug");
+    const workspaceId = deps.resolveWorkspaceId
+      ? await deps.resolveWorkspaceId(c, workspaceSlug)
+      : undefined;
+    if (process.env.CALPACA_DEPLOYMENT_MODE === "hosted" && !workspaceId) {
+      return c.json({ error: "event_type_not_found" }, 404);
+    }
+    const eventType = await deps.getEventTypeBySlug(c.req.param("slug"), workspaceId);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
 
     const profile = deps.getEventTypeProfile
@@ -241,11 +256,12 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       start: c.req.query("start"),
       end: c.req.query("end"),
       inviteeTimezone: c.req.query("inviteeTimezone"),
+      workspaceSlug: c.req.query("workspaceSlug"),
     });
     if (!parsedQuery.success) {
       return c.json({ error: "invalid_query", issues: parsedQuery.error.issues }, 400);
     }
-    const { eventTypeSlug, start, end, inviteeTimezone } = parsedQuery.data;
+    const { eventTypeSlug, start, end, inviteeTimezone, workspaceSlug } = parsedQuery.data;
     const requestedHosts = c.req.queries("hosts");
     const requestedOptionalHosts = c.req.queries("optionalHosts") ?? [];
     const overrideHostRoles = c.req.query("overrideHostRoles") === "true";
@@ -266,7 +282,13 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     }
     const window: Interval = { start: windowStart, end: windowEnd };
 
-    const eventType = await deps.getEventTypeBySlug(eventTypeSlug);
+    const workspaceId = deps.resolveWorkspaceId
+      ? await deps.resolveWorkspaceId(c, workspaceSlug)
+      : undefined;
+    if (process.env.CALPACA_DEPLOYMENT_MODE === "hosted" && !workspaceId) {
+      return c.json({ error: "event_type_not_found" }, 404);
+    }
+    const eventType = await deps.getEventTypeBySlug(eventTypeSlug, workspaceId);
     if (!eventType) {
       return c.json({ error: "event_type_not_found" }, 404);
     }

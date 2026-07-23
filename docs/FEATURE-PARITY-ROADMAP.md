@@ -99,13 +99,13 @@ Sources:
 | Sign-up sheets/session enrollment | Missing | Major Doodle gap |
 | One-off and single-use links | Missing | Common convenience gap |
 | Recurring series | Missing | Common service/education gap |
-| Date overrides and explicit OOO | Missing | Common availability gap |
+| Date overrides and explicit OOO | Shipped | Alternate hours, ranges, and teammate forwarding |
 | Microsoft/CalDAV calendars | Missing | Major adoption gap |
 | Conferencing adapters | Missing | Google Meet is incidental to Google write-through |
 | Payments | Missing | Commercial-use gap |
 | Managed event templates | Missing | Team governance gap |
 | SSO, SCIM, audit log, granular roles | Partial | Core roles and lifecycle shipped; enterprise controls missing |
-| Embeds and documented public API | Planned | Distribution gap |
+| Embeds and documented public API | Shipped | Responsive loader and generated OpenAPI reference |
 
 ## Product principles for parity
 
@@ -170,10 +170,10 @@ self-hosted edition.
 
 | Deliverable | Effort | Notes |
 | --- | ---: | --- |
-| Workspace tenancy and strict data scoping | L | Every hosted row belongs to a workspace; migration preserves existing installs |
-| Hosted identity and domains | M | `calpaca.io` public site and booking namespace, `app.calpaca.io` organizer UI |
-| Custom domains | M | Verified domain mapping; `cal.tourscale.com` remains the TourScale workspace |
-| Plans and entitlements | L | Free/paid limits enforced as capabilities, not scattered UI checks |
+| Workspace tenancy and strict data scoping | Shipped | Event types, bookings, routing, webhooks, analytics, users, and teams are scoped |
+| Hosted identity and domains | Shipped | Hosted booking/routing namespaces and canonical organizer origin are implemented |
+| Custom domains | Shipped | TXT verification, hostname mapping, and optional NPM certificate provisioning |
+| Plans and entitlements | Foundation shipped | Capability model exists; billing-driven plan changes remain |
 | Billing lifecycle | L | Checkout, subscription state, grace period, cancellation, and audit trail |
 | Self-hosted distribution | M | No billing dependency; installation, upgrades, backups, and environment reference |
 

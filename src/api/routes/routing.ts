@@ -16,36 +16,49 @@ import {
   type RoutingFormRecord,
 } from "../../db/routing-repo";
 import { isTeamMember } from "../../db/admin-repo";
+import { publicWorkspaceId } from "../public-workspace";
 
 /** Routing forms: a public form whose answers pick the event type (and
  * optionally the host) via the rules AST in src/core/routing. Public surface
  * exposes fields only — rules stay private to the form's owners. */
 export interface RoutingDeps {
   readonly requireAuth: MiddlewareHandler<AuthEnv>;
-  readonly getRoutingFormBySlug: (slug: string) => Promise<RoutingFormRecord | null>;
+  readonly getRoutingFormBySlug: (slug: string, workspaceId?: string) => Promise<RoutingFormRecord | null>;
+  readonly resolveWorkspaceId?: (
+    context: Parameters<typeof publicWorkspaceId>[0],
+    workspaceSlug?: string,
+  ) => Promise<string | undefined>;
   readonly getEventTypeSlugById: (id: string) => Promise<string | null>;
-  readonly listRoutingFormsForUser: (userId: string) => Promise<RoutingFormRecord[]>;
+  readonly listRoutingFormsForUser: (userId: string, workspaceId?: string) => Promise<RoutingFormRecord[]>;
   readonly createRoutingForm: (
     ownerUserId: string,
     input: RoutingFormInput,
+    workspaceId?: string,
   ) => Promise<RoutingFormRecord | "slug_taken">;
   readonly updateRoutingForm: (
     id: string,
     userId: string,
     input: RoutingFormInput,
+    workspaceId?: string,
   ) => Promise<RoutingFormRecord | null | "slug_taken">;
-  readonly deleteRoutingForm: (id: string, userId: string) => Promise<"deleted" | "not_found">;
+  readonly deleteRoutingForm: (id: string, userId: string, workspaceId?: string) => Promise<"deleted" | "not_found">;
   readonly isTeamMember: (teamId: string, userId: string) => Promise<boolean>;
 }
 
 const defaultDeps: RoutingDeps = {
   requireAuth: requireSession,
-  getRoutingFormBySlug: (slug) => getRoutingFormBySlug(slug),
+  getRoutingFormBySlug: (slug, workspaceId) =>
+    getRoutingFormBySlug(slug, undefined, workspaceId),
+  resolveWorkspaceId: publicWorkspaceId,
   getEventTypeSlugById: (id) => getEventTypeSlugById(id),
-  listRoutingFormsForUser: (userId) => listRoutingFormsForUser(userId),
-  createRoutingForm: (ownerUserId, input) => createRoutingForm(ownerUserId, input),
-  updateRoutingForm: (id, userId, input) => updateRoutingForm(id, userId, input),
-  deleteRoutingForm: (id, userId) => deleteRoutingForm(id, userId),
+  listRoutingFormsForUser: (userId, workspaceId) =>
+    listRoutingFormsForUser(userId, undefined, workspaceId),
+  createRoutingForm: (ownerUserId, input, workspaceId) =>
+    createRoutingForm(ownerUserId, input, undefined, workspaceId),
+  updateRoutingForm: (id, userId, input, workspaceId) =>
+    updateRoutingForm(id, userId, input, undefined, workspaceId),
+  deleteRoutingForm: (id, userId, workspaceId) =>
+    deleteRoutingForm(id, userId, undefined, workspaceId),
   isTeamMember: (teamId, userId) => isTeamMember(teamId, userId),
 };
 
@@ -102,6 +115,7 @@ const answersSchema = z.record(z.string(), z.union([z.string().max(1000), z.arra
 
 const evaluateBodySchema = z.object({
   slug: z.string().min(1),
+  workspaceSlug: z.string().min(1).optional(),
   answers: answersSchema,
 });
 
@@ -114,7 +128,13 @@ export function createRoutingRoutes(deps: RoutingDeps = defaultDeps): Hono<AuthE
   // ---- public ----
 
   router.get("/routing/:slug", async (c) => {
-    const form = await deps.getRoutingFormBySlug(c.req.param("slug"));
+    const workspaceId = deps.resolveWorkspaceId
+      ? await deps.resolveWorkspaceId(c, c.req.query("workspaceSlug"))
+      : undefined;
+    if (process.env.CALPACA_DEPLOYMENT_MODE === "hosted" && !workspaceId) {
+      return c.json({ error: "form_not_found" }, 404);
+    }
+    const form = await deps.getRoutingFormBySlug(c.req.param("slug"), workspaceId);
     if (!form) return c.json({ error: "form_not_found" }, 404);
     // rules are private: only the shape the invitee needs to fill in
     return c.json({ slug: form.slug, fields: form.fields });
@@ -124,7 +144,13 @@ export function createRoutingRoutes(deps: RoutingDeps = defaultDeps): Hono<AuthE
     const parsed = evaluateBodySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
 
-    const form = await deps.getRoutingFormBySlug(parsed.data.slug);
+    const workspaceId = deps.resolveWorkspaceId
+      ? await deps.resolveWorkspaceId(c, parsed.data.workspaceSlug)
+      : undefined;
+    if (process.env.CALPACA_DEPLOYMENT_MODE === "hosted" && !workspaceId) {
+      return c.json({ error: "form_not_found" }, 404);
+    }
+    const form = await deps.getRoutingFormBySlug(parsed.data.slug, workspaceId);
     if (!form) return c.json({ error: "form_not_found" }, 404);
 
     const validated = validateAnswers(form.fields, parsed.data.answers);
@@ -147,7 +173,10 @@ export function createRoutingRoutes(deps: RoutingDeps = defaultDeps): Hono<AuthE
   // ---- admin ----
 
   router.get("/api/me/routing-forms", async (c) => {
-    return c.json({ forms: await deps.listRoutingFormsForUser(c.get("user").id) });
+    const user = c.get("user");
+    return c.json({
+      forms: await deps.listRoutingFormsForUser(user.id, user.workspaceId),
+    });
   });
 
   router.post("/api/me/routing-forms", async (c) => {
@@ -157,7 +186,7 @@ export function createRoutingRoutes(deps: RoutingDeps = defaultDeps): Hono<AuthE
     if (parsed.data.teamId && !(await deps.isTeamMember(parsed.data.teamId, user.id))) {
       return c.json({ error: "team_not_found" }, 404);
     }
-    const result = await deps.createRoutingForm(user.id, parsed.data);
+    const result = await deps.createRoutingForm(user.id, parsed.data, user.workspaceId);
     if (result === "slug_taken") return c.json({ error: "slug_taken" }, 409);
     return c.json(result, 201);
   });
@@ -169,14 +198,24 @@ export function createRoutingRoutes(deps: RoutingDeps = defaultDeps): Hono<AuthE
     if (parsed.data.teamId && !(await deps.isTeamMember(parsed.data.teamId, user.id))) {
       return c.json({ error: "team_not_found" }, 404);
     }
-    const result = await deps.updateRoutingForm(c.req.param("id"), user.id, parsed.data);
+    const result = await deps.updateRoutingForm(
+      c.req.param("id"),
+      user.id,
+      parsed.data,
+      user.workspaceId,
+    );
     if (result === null) return c.json({ error: "form_not_found" }, 404);
     if (result === "slug_taken") return c.json({ error: "slug_taken" }, 409);
     return c.json(result);
   });
 
   router.delete("/api/me/routing-forms/:id", async (c) => {
-    const result = await deps.deleteRoutingForm(c.req.param("id"), c.get("user").id);
+    const user = c.get("user");
+    const result = await deps.deleteRoutingForm(
+      c.req.param("id"),
+      user.id,
+      user.workspaceId,
+    );
     if (result === "not_found") return c.json({ error: "form_not_found" }, 404);
     return c.json({ ok: true });
   });

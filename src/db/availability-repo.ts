@@ -109,8 +109,13 @@ function toDate(instant: Temporal.Instant): Date {
 export async function getEventTypeBySlug(
   slug: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<EventTypeConfig | null> {
-  const [row] = await executor.select().from(eventTypes).where(eq(eventTypes.slug, slug));
+  const [row] = await executor.select().from(eventTypes).where(
+    workspaceId
+      ? and(eq(eventTypes.slug, slug), eq(eventTypes.workspaceId, workspaceId))
+      : eq(eventTypes.slug, slug),
+  );
   if (!row) return null;
 
   return {
@@ -141,8 +146,13 @@ export async function getEventTypeBySlug(
 export async function getEventTypeForBooking(
   slug: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<BookingEventTypeConfig | null> {
-  const [row] = await executor.select().from(eventTypes).where(eq(eventTypes.slug, slug));
+  const [row] = await executor.select().from(eventTypes).where(
+    workspaceId
+      ? and(eq(eventTypes.slug, slug), eq(eventTypes.workspaceId, workspaceId))
+      : eq(eventTypes.slug, slug),
+  );
   return row ? toBookingEventTypeConfig(row) : null;
 }
 

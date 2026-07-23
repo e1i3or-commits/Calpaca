@@ -65,6 +65,7 @@ import {
   updateCalendarConnection,
   updateProfile,
   updateWorkspace,
+  verifyWorkspaceDomain,
   updateRoutingForm,
   updateSchedule,
   updateTeamMemberRole,
@@ -921,6 +922,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
   const [embed, setEmbed] = useState<{ slug: string; mode: "inline" | "popup" } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [bookingBase, setBookingBase] = useState(window.location.origin);
 
   const reload = useCallback(() => {
     listEventTypes()
@@ -935,6 +937,17 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     listPresentationOptions().then((options) => {
       setAvailableThemes(options.themes);
       setAvailableLayouts(options.layouts);
+    }).catch(() => undefined);
+    getWorkspace().then(({ workspace, domains, deploymentMode }) => {
+      const customDomain = domains.find((domain) => domain.status === "verified" && domain.isPrimary)
+        ?? domains.find((domain) => domain.status === "verified");
+      if (customDomain) {
+        setBookingBase(`https://${customDomain.hostname}`);
+      } else if (deploymentMode === "hosted") {
+        setBookingBase(`https://calpaca.io/book/${workspace.slug}`);
+      } else {
+        setBookingBase(window.location.origin);
+      }
     }).catch(() => undefined);
   }, [reload]);
 
@@ -962,7 +975,9 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
   };
 
   const copyLink = (slug: string) => {
-    const url = `${window.location.origin}/book/${slug}`;
+    const url = bookingBase.includes("/book/")
+      ? `${bookingBase}/${slug}`
+      : `${bookingBase}/book/${slug}`;
     void navigator.clipboard.writeText(url).then(() => {
       setCopied(slug);
       setTimeout(() => setCopied(null), 1500);
@@ -970,7 +985,9 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
   };
 
   const embedSnippet = (slug: string, mode: "inline" | "popup") => {
-    const bookingUrl = `${window.location.origin}/book/${slug}`;
+    const bookingUrl = bookingBase.includes("/book/")
+      ? `${bookingBase}/${slug}`
+      : `${bookingBase}/book/${slug}`;
     const loader = `<script async src="${window.location.origin}/embed.js"></script>`;
     return mode === "inline"
       ? `<div data-calpaca-inline="${bookingUrl}"></div>\n${loader}`
@@ -1746,6 +1763,17 @@ function WorkspaceCard() {
                       <span className="text-xs text-muted-foreground">{domain.status}</span>
                     </span>
                     <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={domain.status === "verified" || !["owner", "admin"].includes(workspace.role)}
+                      onClick={() => void verifyWorkspaceDomain(domain.id)
+                        .then(reload)
+                        .catch((reason: unknown) => setError(errorText(reason)))}
+                    >
+                      {domain.status === "verified" ? "Verified" : "Verify DNS"}
+                    </Button>
+                    <Button
                       variant="ghost"
                       size="sm"
                       disabled={!["owner", "admin"].includes(workspace.role)}
@@ -2200,6 +2228,7 @@ function RoutingTab({ users }: { users: DirectoryUser[] }) {
   const [editing, setEditing] = useState<{ id: string | null; form: RoutingFormInput } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [routingBase, setRoutingBase] = useState(window.location.origin);
 
   const reload = useCallback(() => {
     listRoutingForms()
@@ -2211,6 +2240,17 @@ function RoutingTab({ users }: { users: DirectoryUser[] }) {
     reload();
     listEventTypes().then((r) => setEventTypes(r.eventTypes)).catch(() => undefined);
     listTeams().then((r) => setTeams(r.teams)).catch(() => undefined);
+    getWorkspace().then(({ workspace, domains, deploymentMode }) => {
+      const customDomain = domains.find((domain) => domain.status === "verified" && domain.isPrimary)
+        ?? domains.find((domain) => domain.status === "verified");
+      if (customDomain) {
+        setRoutingBase(`https://${customDomain.hostname}`);
+      } else if (deploymentMode === "hosted") {
+        setRoutingBase(`https://calpaca.io/r/${workspace.slug}`);
+      } else {
+        setRoutingBase(window.location.origin);
+      }
+    }).catch(() => undefined);
   }, [reload]);
 
   const save = async () => {
@@ -2237,7 +2277,9 @@ function RoutingTab({ users }: { users: DirectoryUser[] }) {
   };
 
   const copyLink = (slug: string) => {
-    const url = `${window.location.origin}/r/${slug}`;
+    const url = routingBase.includes("/r/")
+      ? `${routingBase}/${slug}`
+      : `${routingBase}/r/${slug}`;
     void navigator.clipboard.writeText(url).then(() => {
       setCopied(slug);
       setTimeout(() => setCopied(null), 1500);

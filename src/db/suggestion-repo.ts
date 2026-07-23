@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
 import {
@@ -34,6 +34,7 @@ export interface TimeSuggestionInput {
 
 export interface TimeSuggestionContext extends TimeSuggestionInput {
   readonly id: string;
+  readonly workspaceId: string;
   readonly eventType: SuggestionEventType;
   readonly hosts: readonly {
     readonly id: string;
@@ -46,6 +47,7 @@ export interface TimeSuggestionContext extends TimeSuggestionInput {
 export async function getSuggestionEventTypeBySlug(
   slug: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<SuggestionEventType | null> {
   const [row] = await executor
     .select({
@@ -56,7 +58,9 @@ export async function getSuggestionEventTypeBySlug(
       logoUrl: eventTypes.logoUrl,
     })
     .from(eventTypes)
-    .where(eq(eventTypes.slug, slug));
+    .where(workspaceId
+      ? and(eq(eventTypes.slug, slug), eq(eventTypes.workspaceId, workspaceId))
+      : eq(eventTypes.slug, slug));
   return row ?? null;
 }
 
@@ -92,6 +96,7 @@ export async function getTimeSuggestionContext(
       eventTypeTitle: eventTypes.title,
       eventTypeTheme: eventTypes.theme,
       eventTypeLogoUrl: eventTypes.logoUrl,
+      workspaceId: eventTypes.workspaceId,
       inviteeEmail: timeSuggestions.inviteeEmail,
       inviteeName: timeSuggestions.inviteeName,
       inviteeTimezone: timeSuggestions.inviteeTimezone,
@@ -116,6 +121,7 @@ export async function getTimeSuggestionContext(
 
   return {
     id: row.id,
+    workspaceId: row.workspaceId,
     eventType: {
       id: row.eventTypeId,
       slug: row.eventTypeSlug,

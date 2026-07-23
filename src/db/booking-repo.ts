@@ -192,6 +192,7 @@ export async function rebuildProjection(
 
 export interface BookingRow {
   readonly id: string;
+  readonly workspaceId?: string;
   readonly eventTypeId: string;
   readonly startsAt: Temporal.Instant;
   readonly endsAt: Temporal.Instant;
@@ -264,6 +265,7 @@ export interface InviteHost {
 }
 
 export interface InviteContext {
+  readonly workspaceId?: string;
   readonly booking: BookingRow;
   readonly eventTypeTitle: string;
   readonly eventTypeSlug: string;
@@ -314,6 +316,7 @@ export async function getInviteContext(
     .where(and(eq(bookingEvents.bookingId, bookingId), eq(bookingEvents.kind, "rescheduled")));
 
   return {
+    ...(booking.workspaceId ? { workspaceId: booking.workspaceId } : {}),
     booking,
     eventTypeTitle: eventType.title,
     eventTypeSlug: eventType.slug,
@@ -410,6 +413,7 @@ export async function getAssignmentExplanationForUser(
   bookingId: string,
   userId: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<AssignmentExplanation | null> {
   const [row] = await executor
     .select({ payload: bookingEvents.payload })
@@ -423,6 +427,7 @@ export async function getAssignmentExplanationForUser(
     .where(
       and(
         eq(bookings.id, bookingId),
+        ...(workspaceId ? [eq(bookings.workspaceId, workspaceId)] : []),
         inArray(bookingEvents.kind, ["created", "reassigned"]),
         or(eq(eventTypes.ownerUserId, userId), eq(teamMembers.userId, userId)),
       ),
@@ -506,6 +511,7 @@ export async function listBookingsForUser(
     page: number;
     pageSize: number;
     now: Temporal.Instant;
+    workspaceId?: string;
   },
   executor: Db = getDb(),
 ): Promise<AdminBookingPage> {
@@ -515,6 +521,7 @@ export async function listBookingsForUser(
       : lt(bookings.startsAt, new Date(input.now.epochMilliseconds));
   const where = and(
     adminScope(input.userId),
+    ...(input.workspaceId ? [eq(bookings.workspaceId, input.workspaceId)] : []),
     timeCondition,
     ...(input.status ? [eq(bookings.status, input.status)] : []),
   );
@@ -559,6 +566,7 @@ export async function getBookingDetailForUser(
   bookingId: string,
   userId: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<AdminBookingDetail | null> {
   const [row] = await executor
     .select({
@@ -585,7 +593,11 @@ export async function getBookingDetailForUser(
       teamMembers,
       and(eq(teamMembers.teamId, eventTypes.teamId), eq(teamMembers.userId, userId)),
     )
-    .where(and(eq(bookings.id, bookingId), adminScope(userId)));
+    .where(and(
+      eq(bookings.id, bookingId),
+      ...(workspaceId ? [eq(bookings.workspaceId, workspaceId)] : []),
+      adminScope(userId),
+    ));
   if (!row) return null;
 
   const events = await executor
@@ -618,6 +630,7 @@ export async function markBookingNoShowForUser(
   bookingId: string,
   userId: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<Result<BookingState, BookingStateError> | null> {
   return executor.transaction(async (tx) => {
     const [visible] = await tx
@@ -628,7 +641,11 @@ export async function markBookingNoShowForUser(
         teamMembers,
         and(eq(teamMembers.teamId, eventTypes.teamId), eq(teamMembers.userId, userId)),
       )
-      .where(and(eq(bookings.id, bookingId), adminScope(userId)));
+      .where(and(
+        eq(bookings.id, bookingId),
+        ...(workspaceId ? [eq(bookings.workspaceId, workspaceId)] : []),
+        adminScope(userId),
+      ));
     if (!visible) return null;
     return appendEvent(bookingId, "no_show", {}, tx);
   });

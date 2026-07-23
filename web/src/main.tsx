@@ -5,7 +5,6 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-  Link,
   Outlet,
   RouterProvider,
 } from "@tanstack/react-router";
@@ -38,9 +37,14 @@ const indexRoute = createRoute({
           <BrandMark />
           <span className="text-lg font-semibold tracking-[-0.03em]">Calpaca</span>
         </div>
-        <Link to="/sign-in" className="text-sm font-medium text-muted-foreground transition hover:text-foreground">
+        <a
+          href={window.location.hostname === "calpaca.io"
+            ? "https://app.calpaca.io/sign-in"
+            : "/sign-in"}
+          className="text-sm font-medium text-muted-foreground transition hover:text-foreground"
+        >
           Host sign in
-        </Link>
+        </a>
       </header>
       <main className="mx-auto grid max-w-6xl items-center gap-14 px-5 pb-20 pt-12 sm:px-8 md:grid-cols-[1.05fr_.95fr] md:pb-28 md:pt-24">
         <section>
@@ -54,12 +58,14 @@ const indexRoute = createRoute({
             Flexible booking pages, team availability, and calm organizer tools—all in one focused workspace.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
-            <Link
-              to="/sign-in"
+            <a
+              href={window.location.hostname === "calpaca.io"
+                ? "https://app.calpaca.io/sign-in"
+                : "/sign-in"}
               className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90"
             >
               Open your workspace <ArrowRight className="h-4 w-4" />
-            </Link>
+            </a>
             <span className="text-sm text-muted-foreground">Sign in securely with Google</span>
           </div>
         </section>
@@ -127,12 +133,41 @@ const bookRoute = createRoute({
   },
 });
 
+const hostedBookRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/book/$workspaceSlug/$slug",
+  validateSearch: (s: Record<string, unknown>): { answers?: RoutingAnswers } => {
+    const answers = parseAnswers(s.answers);
+    return answers ? { answers } : {};
+  },
+  component: function HostedBookRoute() {
+    const { workspaceSlug, slug } = hostedBookRoute.useParams();
+    const { answers } = hostedBookRoute.useSearch();
+    return (
+      <BookingPage
+        workspaceSlug={workspaceSlug}
+        slug={slug}
+        routingAnswers={answers}
+      />
+    );
+  },
+});
+
 const routingFormRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/r/$slug",
   component: function RoutingFormRoute() {
     const { slug } = routingFormRoute.useParams();
     return <RoutingFormPage slug={slug} />;
+  },
+});
+
+const hostedRoutingFormRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/r/$workspaceSlug/$slug",
+  component: function HostedRoutingFormRoute() {
+    const { workspaceSlug, slug } = hostedRoutingFormRoute.useParams();
+    return <RoutingFormPage workspaceSlug={workspaceSlug} slug={slug} />;
   },
 });
 
@@ -175,7 +210,9 @@ const dashboardRoute = createRoute({
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
+    hostedBookRoute,
     bookRoute,
+    hostedRoutingFormRoute,
     routingFormRoute,
     rescheduleRoute,
     cancelRoute,

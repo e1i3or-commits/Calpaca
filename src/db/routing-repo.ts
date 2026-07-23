@@ -86,8 +86,13 @@ function toRecord(
 export async function getRoutingFormBySlug(
   slug: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<RoutingFormRecord | null> {
-  const [row] = await executor.select().from(routingForms).where(eq(routingForms.slug, slug));
+  const [row] = await executor.select().from(routingForms).where(
+    workspaceId
+      ? and(eq(routingForms.slug, slug), eq(routingForms.workspaceId, workspaceId))
+      : eq(routingForms.slug, slug),
+  );
   if (!row) return null;
   const rules = await rulesFor(executor, [row.id]);
   return toRecord(row, rules.get(row.id) ?? []);
@@ -96,6 +101,7 @@ export async function getRoutingFormBySlug(
 export async function listRoutingFormsForUser(
   userId: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<RoutingFormRecord[]> {
   const memberTeams = (
     await executor
@@ -103,20 +109,28 @@ export async function listRoutingFormsForUser(
       .from(teamMembers)
       .where(eq(teamMembers.userId, userId))
   ).map((r) => r.teamId);
+  const ownership = memberTeams.length > 0
+    ? or(eq(routingForms.ownerUserId, userId), inArray(routingForms.teamId, memberTeams))
+    : eq(routingForms.ownerUserId, userId);
   const rows = await executor
     .select()
     .from(routingForms)
-    .where(
-      memberTeams.length > 0
-        ? or(eq(routingForms.ownerUserId, userId), inArray(routingForms.teamId, memberTeams))
-        : eq(routingForms.ownerUserId, userId),
-    );
+    .where(workspaceId ? and(eq(routingForms.workspaceId, workspaceId), ownership) : ownership);
   const rules = await rulesFor(executor, rows.map((r) => r.id));
   return rows.map((r) => toRecord(r, rules.get(r.id) ?? []));
 }
 
-async function getFormForAdmin(id: string, userId: string, executor: Db): Promise<RoutingFormRecord | null> {
-  const [row] = await executor.select().from(routingForms).where(eq(routingForms.id, id));
+async function getFormForAdmin(
+  id: string,
+  userId: string,
+  executor: Db,
+  workspaceId?: string,
+): Promise<RoutingFormRecord | null> {
+  const [row] = await executor.select().from(routingForms).where(
+    workspaceId
+      ? and(eq(routingForms.id, id), eq(routingForms.workspaceId, workspaceId))
+      : eq(routingForms.id, id),
+  );
   if (!row) return null;
   const allowed =
     row.ownerUserId === userId ||
@@ -145,16 +159,34 @@ export async function createRoutingForm(
   ownerUserId: string,
   input: RoutingFormInput,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<RoutingFormRecord | "slug_taken"> {
   return executor.transaction(async (tx) => {
+    const resolvedWorkspaceId = workspaceId ?? (
+      await tx
+        .select({ workspaceId: schema.workspaceMembers.workspaceId })
+        .from(schema.workspaceMembers)
+        .where(eq(schema.workspaceMembers.userId, ownerUserId))
+        .limit(1)
+    )[0]?.workspaceId;
+    if (!resolvedWorkspaceId) throw new Error("workspace membership required");
     const [existing] = await tx
       .select({ id: routingForms.id })
       .from(routingForms)
-      .where(eq(routingForms.slug, input.slug));
+      .where(and(
+        eq(routingForms.slug, input.slug),
+        eq(routingForms.workspaceId, resolvedWorkspaceId),
+      ));
     if (existing) return "slug_taken";
     const [row] = await tx
       .insert(routingForms)
-      .values({ ownerUserId, teamId: input.teamId, slug: input.slug, fields: input.fields })
+      .values({
+        workspaceId: resolvedWorkspaceId,
+        ownerUserId,
+        teamId: input.teamId,
+        slug: input.slug,
+        fields: input.fields,
+      })
       .returning();
     await insertRules(tx, row!.id, input.rules);
     const rules = await rulesFor(tx, [row!.id]);
@@ -167,15 +199,21 @@ export async function updateRoutingForm(
   userId: string,
   input: RoutingFormInput,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<RoutingFormRecord | null | "slug_taken"> {
   return executor.transaction(async (tx) => {
-    const existing = await getFormForAdmin(id, userId, tx);
+    const existing = await getFormForAdmin(id, userId, tx, workspaceId);
     if (!existing) return null;
     if (input.slug !== existing.slug) {
       const [clash] = await tx
         .select({ id: routingForms.id })
         .from(routingForms)
-        .where(eq(routingForms.slug, input.slug));
+        .where(workspaceId
+          ? and(
+              eq(routingForms.slug, input.slug),
+              eq(routingForms.workspaceId, workspaceId),
+            )
+          : eq(routingForms.slug, input.slug));
       if (clash) return "slug_taken";
     }
     const [row] = await tx
@@ -195,9 +233,10 @@ export async function deleteRoutingForm(
   id: string,
   userId: string,
   executor: Db = getDb(),
+  workspaceId?: string,
 ): Promise<"deleted" | "not_found"> {
   return executor.transaction(async (tx) => {
-    const existing = await getFormForAdmin(id, userId, tx);
+    const existing = await getFormForAdmin(id, userId, tx, workspaceId);
     if (!existing) return "not_found";
     await tx.delete(routingRules).where(eq(routingRules.formId, id));
     await tx.delete(routingForms).where(eq(routingForms.id, id));

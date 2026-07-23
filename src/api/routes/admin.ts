@@ -99,21 +99,24 @@ export interface AdminDeps {
     userId: string,
     isAdmin: boolean,
   ) => Promise<"updated" | "not_found" | "last_admin">;
-  readonly listEventTypesForUser: (userId: string) => Promise<AdminEventType[]>;
-  readonly getEventTypeForAdmin: (id: string, userId: string) => Promise<AdminEventType | null>;
+  readonly listEventTypesForUser: (userId: string, workspaceId?: string) => Promise<AdminEventType[]>;
+  readonly getEventTypeForAdmin: (id: string, userId: string, workspaceId?: string) => Promise<AdminEventType | null>;
   readonly createEventType: (
     ownerUserId: string,
     input: EventTypeInput,
+    workspaceId?: string,
   ) => Promise<AdminEventType | "slug_taken">;
   readonly updateEventType: (
     id: string,
     userId: string,
     input: EventTypeInput,
+    workspaceId?: string,
   ) => Promise<AdminEventType | null>;
-  readonly deleteEventType: (id: string, userId: string) => Promise<"deleted" | "not_found" | "in_use">;
+  readonly deleteEventType: (id: string, userId: string, workspaceId?: string) => Promise<"deleted" | "not_found" | "in_use">;
   readonly getAssignmentExplanationForUser?: (
     bookingId: string,
     userId: string,
+    workspaceId?: string,
   ) => Promise<AssignmentExplanation | null>;
   readonly listBookingsForUser?: (input: {
     userId: string;
@@ -122,14 +125,17 @@ export interface AdminDeps {
     page: number;
     pageSize: number;
     now: Temporal.Instant;
+    workspaceId?: string;
   }) => Promise<AdminBookingPage>;
   readonly getBookingDetailForUser?: (
     bookingId: string,
     userId: string,
+    workspaceId?: string,
   ) => Promise<AdminBookingDetail | null>;
   readonly markBookingNoShowForUser?: (
     bookingId: string,
     userId: string,
+    workspaceId?: string,
   ) => Promise<Result<BookingState, BookingStateError> | null>;
   readonly emitBookingWebhook?: (bookingId: string, kind: "no_show") => Promise<void>;
   readonly now?: () => Temporal.Instant;
@@ -153,18 +159,23 @@ const defaultDeps: AdminDeps = {
   removeTeamMember: (teamId, userId) => removeTeamMember(teamId, userId),
   updateTeamMemberAdmin: (teamId, userId, isAdmin) =>
     updateTeamMemberAdmin(teamId, userId, isAdmin),
-  listEventTypesForUser: (userId) => listEventTypesForUser(userId),
-  getEventTypeForAdmin: (id, userId) => getEventTypeForAdmin(id, userId),
-  createEventType: (ownerUserId, input) => createEventType(ownerUserId, input),
-  updateEventType: (id, userId, input) => updateEventType(id, userId, input),
-  deleteEventType: (id, userId) => deleteEventType(id, userId),
-  getAssignmentExplanationForUser: (bookingId, userId) =>
-    getAssignmentExplanationForUser(bookingId, userId),
+  listEventTypesForUser: (userId, workspaceId) =>
+    listEventTypesForUser(userId, undefined, workspaceId),
+  getEventTypeForAdmin: (id, userId, workspaceId) =>
+    getEventTypeForAdmin(id, userId, undefined, workspaceId),
+  createEventType: (ownerUserId, input, workspaceId) =>
+    createEventType(ownerUserId, input, undefined, workspaceId),
+  updateEventType: (id, userId, input, workspaceId) =>
+    updateEventType(id, userId, input, undefined, workspaceId),
+  deleteEventType: (id, userId, workspaceId) =>
+    deleteEventType(id, userId, undefined, workspaceId),
+  getAssignmentExplanationForUser: (bookingId, userId, workspaceId) =>
+    getAssignmentExplanationForUser(bookingId, userId, undefined, workspaceId),
   listBookingsForUser: (input) => listBookingsForUser(input),
-  getBookingDetailForUser: (bookingId, userId) =>
-    getBookingDetailForUser(bookingId, userId),
-  markBookingNoShowForUser: (bookingId, userId) =>
-    markBookingNoShowForUser(bookingId, userId),
+  getBookingDetailForUser: (bookingId, userId, workspaceId) =>
+    getBookingDetailForUser(bookingId, userId, undefined, workspaceId),
+  markBookingNoShowForUser: (bookingId, userId, workspaceId) =>
+    markBookingNoShowForUser(bookingId, userId, undefined, workspaceId),
   emitBookingWebhook: (bookingId, kind) => jobsEmitBookingWebhook(bookingId, kind),
   now: () => Temporal.Now.instant(),
 };
@@ -310,9 +321,11 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
   // ---- booking assignment transparency ----
 
   router.get("/api/me/bookings/:id/assignment", async (c) => {
+    const user = c.get("user");
     const assignment = await deps.getAssignmentExplanationForUser?.(
       c.req.param("id"),
-      c.get("user").id,
+      user.id,
+      user.workspaceId,
     );
     if (!assignment) return c.json({ error: "no_assignment" }, 404);
     return c.json({ assignment });
@@ -324,8 +337,10 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
       return c.json({ error: "invalid_query", issues: parsed.error.issues }, 400);
     }
     const { timezone, ...query } = parsed.data;
+    const user = c.get("user");
     const page = await deps.listBookingsForUser?.({
-      userId: c.get("user").id,
+      userId: user.id,
+      workspaceId: user.workspaceId,
       ...query,
       now: deps.now?.() ?? Temporal.Now.instant(),
     });
@@ -341,9 +356,11 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
   router.get("/api/me/bookings/:id", async (c) => {
     const timezone = c.req.query("timezone") ?? "UTC";
     if (!isIanaZone(timezone)) return c.json({ error: "invalid_timezone" }, 400);
+    const user = c.get("user");
     const detail = await deps.getBookingDetailForUser?.(
       c.req.param("id"),
-      c.get("user").id,
+      user.id,
+      user.workspaceId,
     );
     if (!detail) return c.json({ error: "booking_not_found" }, 404);
     return c.json({
@@ -364,9 +381,11 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   router.post("/api/me/bookings/:id/no-show", async (c) => {
     const bookingId = c.req.param("id");
+    const user = c.get("user");
     const result = await deps.markBookingNoShowForUser?.(
       bookingId,
-      c.get("user").id,
+      user.id,
+      user.workspaceId,
     );
     if (!result) return c.json({ error: "booking_not_found" }, 404);
     if (!result.ok) return c.json({ error: result.error.reason }, 409);
@@ -510,7 +529,10 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
   });
 
   router.get("/api/me/event-types", async (c) => {
-    return c.json({ eventTypes: await deps.listEventTypesForUser(c.get("user").id) });
+    const user = c.get("user");
+    return c.json({
+      eventTypes: await deps.listEventTypesForUser(user.id, user.workspaceId),
+    });
   });
 
   router.post("/api/me/event-types", async (c) => {
@@ -523,7 +545,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     if (parsed.data.teamId && !(await deps.isTeamMember(parsed.data.teamId, user.id))) {
       return c.json({ error: "team_not_found" }, 404);
     }
-    const result = await deps.createEventType(user.id, parsed.data);
+    const result = await deps.createEventType(user.id, parsed.data, user.workspaceId);
     if (result === "slug_taken") return c.json({ error: "slug_taken" }, 409);
     return c.json(result, 201);
   });
@@ -538,13 +560,23 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     if (parsed.data.teamId && !(await deps.isTeamMember(parsed.data.teamId, user.id))) {
       return c.json({ error: "team_not_found" }, 404);
     }
-    const result = await deps.updateEventType(c.req.param("id"), user.id, parsed.data);
+    const result = await deps.updateEventType(
+      c.req.param("id"),
+      user.id,
+      parsed.data,
+      user.workspaceId,
+    );
     if (!result) return c.json({ error: "event_type_not_found" }, 404);
     return c.json(result);
   });
 
   router.delete("/api/me/event-types/:id", async (c) => {
-    const result = await deps.deleteEventType(c.req.param("id"), c.get("user").id);
+    const user = c.get("user");
+    const result = await deps.deleteEventType(
+      c.req.param("id"),
+      user.id,
+      user.workspaceId,
+    );
     if (result === "not_found") return c.json({ error: "event_type_not_found" }, 404);
     if (result === "in_use") return c.json({ error: "event_type_in_use" }, 409);
     return c.json({ ok: true });

@@ -100,8 +100,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export function getEventTypeMeta(slug: string): Promise<EventTypeMeta> {
-  return request(`/event-types/${encodeURIComponent(slug)}`);
+export function getEventTypeMeta(slug: string, workspaceSlug?: string): Promise<EventTypeMeta> {
+  const query = workspaceSlug
+    ? `?workspaceSlug=${encodeURIComponent(workspaceSlug)}`
+    : "";
+  return request(`/event-types/${encodeURIComponent(slug)}${query}`);
 }
 
 export function getAvailability(args: {
@@ -109,6 +112,7 @@ export function getAvailability(args: {
   start: string;
   end: string;
   inviteeTimezone: string;
+  workspaceSlug?: string;
   hosts?: string[];
   optionalHosts?: string[];
 }): Promise<AvailabilityResponse> {
@@ -118,6 +122,7 @@ export function getAvailability(args: {
     end: args.end,
     inviteeTimezone: args.inviteeTimezone,
   });
+  if (args.workspaceSlug) params.set("workspaceSlug", args.workspaceSlug);
   for (const host of args.hosts ?? []) params.append("hosts", host);
   if (args.optionalHosts) {
     params.set("overrideHostRoles", "true");
@@ -128,6 +133,7 @@ export function getAvailability(args: {
 
 export function createHold(args: {
   eventTypeSlug: string;
+  workspaceSlug?: string;
   start: string;
   end: string;
   hosts?: string[];
@@ -138,6 +144,7 @@ export function createHold(args: {
 
 export function confirmBooking(args: {
   eventTypeSlug: string;
+  workspaceSlug?: string;
   holdIds: string[];
   invitee: { email: string; name: string; timezone: string; notes?: string };
   routingAnswers?: RoutingAnswers;
@@ -150,6 +157,7 @@ export function confirmBooking(args: {
 
 export function suggestTimes(args: {
   eventTypeSlug: string;
+  workspaceSlug?: string;
   invitee: { email: string; name: string; timezone: string };
   proposedSlots: { start: string; end: string }[];
   message?: string;
@@ -355,6 +363,13 @@ export function addWorkspaceDomain(hostname: string): Promise<{
 
 export function removeWorkspaceDomain(id: string): Promise<{ ok: true }> {
   return request(`/api/me/workspace/domains/${id}`, { method: "DELETE" });
+}
+
+export function verifyWorkspaceDomain(id: string): Promise<{
+  domain: Pick<WorkspaceDomain, "id" | "hostname" | "status" | "isPrimary">;
+  provisioning: "provisioned" | "not_configured";
+}> {
+  return request(`/api/me/workspace/domains/${id}/verify`, { method: "POST" });
 }
 
 export function getProfile(): Promise<{ profile: UserProfile }> {
@@ -655,12 +670,25 @@ export type RoutingEvaluation =
   | { matched: false }
   | { matched: true; eventTypeSlug: string | null; hostUserId: string | null; answers: RoutingAnswers };
 
-export function getRoutingForm(slug: string): Promise<{ slug: string; fields: RoutingField[] }> {
-  return request(`/routing/${encodeURIComponent(slug)}`);
+export function getRoutingForm(
+  slug: string,
+  workspaceSlug?: string,
+): Promise<{ slug: string; fields: RoutingField[] }> {
+  const query = workspaceSlug
+    ? `?workspaceSlug=${encodeURIComponent(workspaceSlug)}`
+    : "";
+  return request(`/routing/${encodeURIComponent(slug)}${query}`);
 }
 
-export function evaluateRouting(slug: string, answers: RoutingAnswers): Promise<RoutingEvaluation> {
-  return request("/routing/evaluate", { method: "POST", body: JSON.stringify({ slug, answers }) });
+export function evaluateRouting(
+  slug: string,
+  answers: RoutingAnswers,
+  workspaceSlug?: string,
+): Promise<RoutingEvaluation> {
+  return request("/routing/evaluate", {
+    method: "POST",
+    body: JSON.stringify({ slug, answers, ...(workspaceSlug ? { workspaceSlug } : {}) }),
+  });
 }
 
 export function listRoutingForms(): Promise<{ forms: RoutingForm[] }> {
