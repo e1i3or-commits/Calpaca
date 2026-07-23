@@ -19,7 +19,10 @@ import { SignupSheetPage } from "@/pages/signup-sheet-page";
 import { PublicBookingPage } from "@/pages/public-booking-page";
 import type { RoutingAnswers } from "@/lib/api";
 import { BrandMark } from "@/components/brand-mark";
+import { initializeAppearance } from "@/lib/appearance";
 import "./styles.css";
+
+initializeAppearance();
 
 // Code-based routes: four pages don't justify the file-router codegen step.
 const rootRoute = createRootRoute({

@@ -126,6 +126,25 @@ body {
   --destructive: oklch(0.55 0.18 28);
   --destructive-foreground: oklch(0.99 0 0);
   --radius: 0.75rem;
+  color-scheme: light;
+}
+
+[data-appearance="dark"] [data-organizer] {
+  --background: oklch(0.175 0.012 65);
+  --foreground: oklch(0.93 0.012 78);
+  --card: oklch(0.215 0.014 65);
+  --card-foreground: oklch(0.93 0.012 78);
+  --primary: oklch(0.69 0.105 158);
+  --primary-foreground: oklch(0.16 0.02 158);
+  --muted: oklch(0.265 0.015 68);
+  --muted-foreground: oklch(0.7 0.02 75);
+  --border: oklch(0.335 0.018 70);
+  --ring: oklch(0.69 0.105 158);
+  --warning: oklch(0.72 0.12 77);
+  --warning-foreground: oklch(0.92 0.04 80);
+  --destructive: oklch(0.67 0.17 28);
+  --destructive-foreground: oklch(0.98 0 0);
+  color-scheme: dark;
 }
 
 @media (prefers-reduced-motion: reduce) {

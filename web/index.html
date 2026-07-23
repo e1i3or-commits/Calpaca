@@ -10,6 +10,15 @@
     <link rel="icon" type="image/svg+xml" href="/icons/llama.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
+    <script>
+      (() => {
+        const saved = localStorage.getItem("calpaca:appearance");
+        document.documentElement.dataset.appearance =
+          saved === "light" || saved === "dark"
+            ? saved
+            : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

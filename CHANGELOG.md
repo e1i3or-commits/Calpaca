@@ -5,6 +5,14 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-23
+
+### Added
+
+- Persistent dark mode across organizer surfaces, initialized from the
+  operating-system preference and switchable from desktop or mobile navigation.
+- A persistent collapsible desktop sidebar with accessible icon labels.
+
 ## [0.14.0] - 2026-07-23
 
 ### Added

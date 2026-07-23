@@ -16,10 +16,14 @@ import {
   ListChecks,
   LogOut,
   Menu,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plus,
   Route,
   ShieldCheck,
+  Sun,
   Trash2,
   UserPlus,
   UserRound,
@@ -121,6 +125,7 @@ import {
   type SignupSheet,
 } from "@/lib/api";
 import { themeOptions } from "@/lib/theme";
+import { useAppearance } from "@/lib/appearance";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -168,6 +173,14 @@ export function DashboardPage() {
   const [tab, setTab] = useState<TabKey>("home");
   const [users, setUsers] = useState<DirectoryUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("calpaca:sidebar-collapsed") === "true",
+  );
+  const { appearance, toggleAppearance } = useAppearance();
+
+  useEffect(() => {
+    localStorage.setItem("calpaca:sidebar-collapsed", String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     listUsers()
@@ -183,31 +196,53 @@ export function DashboardPage() {
 
   return (
     <div data-organizer className="min-h-screen bg-background text-foreground">
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border/70 bg-card/90 px-3 py-5 backdrop-blur md:flex">
-        <Brand />
+      <aside className={`fixed inset-y-0 left-0 z-20 hidden flex-col border-r border-border/70 bg-card/90 px-3 py-5 backdrop-blur transition-[width] md:flex ${sidebarCollapsed ? "w-16" : "w-60"}`}>
+        <Brand collapsed={sidebarCollapsed} />
         <nav className="mt-8 flex flex-1 flex-col" aria-label="Organizer">
           <div className="space-y-1">
             {TABS.filter((item) => item.group === "primary").map((item) => (
-              <NavButton key={item.key} item={item} active={tab === item.key} onClick={() => setTab(item.key)} />
+              <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => setTab(item.key)} />
             ))}
           </div>
-          <p className="mb-2 mt-8 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <p className={`mb-2 mt-8 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground ${sidebarCollapsed ? "sr-only" : ""}`}>
             Setup
           </p>
           <div className="space-y-1">
             {TABS.filter((item) => item.group === "setup").map((item) => (
-              <NavButton key={item.key} item={item} active={tab === item.key} onClick={() => setTab(item.key)} />
+              <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => setTab(item.key)} />
             ))}
           </div>
           <div className="mt-auto border-t border-border/70 pt-3">
             <button
               type="button"
-              className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground ${sidebarCollapsed ? "justify-center" : ""}`}
+              aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}
+              title={`Use ${appearance === "dark" ? "light" : "dark"} mode`}
+              onClick={toggleAppearance}
+            >
+              {appearance === "dark" ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+              {!sidebarCollapsed && (appearance === "dark" ? "Light mode" : "Dark mode")}
+            </button>
+            <button
+              type="button"
+              className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground ${sidebarCollapsed ? "justify-center" : ""}`}
+              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4 shrink-0" /> : <PanelLeftClose className="h-4 w-4 shrink-0" />}
+              {!sidebarCollapsed && "Collapse sidebar"}
+            </button>
+            <button
+              type="button"
+              className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground ${sidebarCollapsed ? "justify-center" : ""}`}
+              aria-label="Sign out"
+              title={sidebarCollapsed ? "Sign out" : undefined}
               onClick={() => void signOut().then(() => (window.location.href = "/sign-in"))}
             >
-              <LogOut className="h-4 w-4" /> Sign out
+              <LogOut className="h-4 w-4 shrink-0" /> {!sidebarCollapsed && "Sign out"}
             </button>
-            <p className="px-3 pt-2 text-[10px] text-muted-foreground">
+            <p className={`px-3 pt-2 text-[10px] text-muted-foreground ${sidebarCollapsed ? "sr-only" : ""}`}>
               Calpaca v{__CALPACA_VERSION__}
             </p>
           </div>
@@ -216,17 +251,27 @@ export function DashboardPage() {
 
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border/70 bg-background/90 px-4 backdrop-blur md:hidden">
         <Brand compact />
-        <button
-          type="button"
-          className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
-          aria-label="Open setup"
-          onClick={() => setTab("schedules")}
-        >
-          <Menu className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
+            aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}
+            onClick={toggleAppearance}
+          >
+            {appearance === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </button>
+          <button
+            type="button"
+            className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
+            aria-label="Open setup"
+            onClick={() => setTab("schedules")}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </div>
       </header>
 
-      <main className="px-4 pb-24 pt-7 md:ml-60 md:px-8 md:pb-10 md:pt-10">
+      <main className={`px-4 pb-24 pt-7 transition-[margin] md:px-8 md:pb-10 md:pt-10 ${sidebarCollapsed ? "md:ml-16" : "md:ml-60"}`}>
         <div className="mx-auto max-w-5xl">
           <PageHeading tab={tab} onNavigate={setTab} />
           {error && <p className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
@@ -278,11 +323,17 @@ export function DashboardPage() {
   );
 }
 
-function Brand({ compact = false }: { compact?: boolean }) {
+function Brand({
+  compact = false,
+  collapsed = false,
+}: {
+  compact?: boolean;
+  collapsed?: boolean;
+}) {
   return (
     <div className={`flex items-center gap-2.5 ${compact ? "" : "px-2"}`}>
       <BrandMark className="h-8 w-8" />
-      <span className="text-[17px] font-semibold tracking-[-0.02em]">Calpaca</span>
+      {!collapsed && <span className="text-[17px] font-semibold tracking-[-0.02em]">Calpaca</span>}
     </div>
   );
 }
@@ -290,22 +341,26 @@ function Brand({ compact = false }: { compact?: boolean }) {
 function NavButton({
   item,
   active,
+  collapsed,
   onClick,
 }: {
   item: (typeof TABS)[number];
   active: boolean;
+  collapsed: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm transition ${
+      className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm transition ${collapsed ? "justify-center" : ""} ${
         active ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
       }`}
+      aria-label={item.label}
+      title={collapsed ? item.label : undefined}
       onClick={onClick}
     >
-      <item.icon className="h-[17px] w-[17px]" />
-      {item.label}
+      <item.icon className="h-[17px] w-[17px] shrink-0" />
+      {!collapsed && item.label}
     </button>
   );
 }
