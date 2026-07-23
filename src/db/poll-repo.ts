@@ -24,6 +24,10 @@ export type PollRecord = {
   description: string | null;
   timezone: string;
   status: string;
+  resultsVisibility: string;
+  deadline: Date | null;
+  allowResponseEditing: boolean;
+  participantLimit: number | null;
   finalizedOptionId: string | null;
   participantCount: number;
   options: {
@@ -77,6 +81,10 @@ async function hydratePoll(
     description: poll.description,
     timezone: poll.timezone,
     status: poll.status,
+    resultsVisibility: poll.resultsVisibility,
+    deadline: poll.deadline,
+    allowResponseEditing: poll.allowResponseEditing,
+    participantLimit: poll.participantLimit,
     finalizedOptionId: poll.finalizedOptionId,
     participantCount: participants.length,
     options: ranked.map((item) => {
@@ -106,6 +114,10 @@ export async function createMeetingPoll(input: {
   title: string;
   description?: string;
   timezone: string;
+  resultsVisibility?: "live" | "after_response" | "aggregates" | "hidden";
+  deadline?: Date;
+  allowResponseEditing?: boolean;
+  participantLimit?: number;
   options: PollOptionInput[];
 }, executor: Db = getDb()): Promise<PollRecord> {
   return executor.transaction(async (tx) => {
@@ -116,6 +128,10 @@ export async function createMeetingPoll(input: {
       title: input.title,
       description: input.description ?? null,
       timezone: input.timezone,
+      resultsVisibility: input.resultsVisibility ?? "after_response",
+      deadline: input.deadline,
+      allowResponseEditing: input.allowResponseEditing ?? true,
+      participantLimit: input.participantLimit,
     }).returning();
     if (!poll) throw new Error("poll insert returned no row");
     await tx.insert(meetingPollOptions).values(input.options.map((option) => ({
@@ -173,12 +189,16 @@ export async function saveMeetingPollVotes(input: {
   email: string;
   votes: { optionId: string; choice: PollChoice }[];
   token?: string;
-}, executor: Db = getDb()): Promise<{ editToken: string } | "not_found" | "closed" | "email_exists" | "invalid_options" | "invalid_token"> {
+}, executor: Db = getDb()): Promise<{ editToken: string } | "not_found" | "closed" | "email_exists" | "invalid_options" | "invalid_token" | "editing_disabled" | "participant_limit_reached"> {
   return executor.transaction(async (tx) => {
     const [poll] = await tx.select().from(meetingPolls)
-      .where(eq(meetingPolls.publicId, input.publicId));
+      .where(eq(meetingPolls.publicId, input.publicId))
+      .for("update");
     if (!poll) return "not_found";
-    if (poll.status !== "open") return "closed";
+    if (
+      poll.status !== "open"
+      || (poll.deadline !== null && poll.deadline.getTime() <= Date.now())
+    ) return "closed";
     const options = await tx.select({ id: meetingPollOptions.id }).from(meetingPollOptions)
       .where(eq(meetingPollOptions.pollId, poll.id));
     const allowed = new Set(options.map((option) => option.id));
@@ -193,6 +213,7 @@ export async function saveMeetingPollVotes(input: {
     let participantId: string;
     let rawToken = input.token;
     if (rawToken) {
+      if (!poll.allowResponseEditing) return "editing_disabled";
       const [participant] = await tx.select({ id: meetingPollParticipants.id })
         .from(meetingPollParticipants)
         .where(and(
@@ -214,6 +235,12 @@ export async function saveMeetingPollVotes(input: {
           eq(meetingPollParticipants.email, input.email.toLowerCase()),
         ));
       if (existing) return "email_exists";
+      if (poll.participantLimit !== null) {
+        const participants = await tx.select({ id: meetingPollParticipants.id })
+          .from(meetingPollParticipants)
+          .where(eq(meetingPollParticipants.pollId, poll.id));
+        if (participants.length >= poll.participantLimit) return "participant_limit_reached";
+      }
       rawToken = editToken();
       const [participant] = await tx.insert(meetingPollParticipants).values({
         pollId: poll.id,
@@ -232,6 +259,28 @@ export async function saveMeetingPollVotes(input: {
     })));
     return { editToken: rawToken };
   });
+}
+
+export async function setMeetingPollOpenState(
+  id: string,
+  workspaceId: string,
+  open: boolean,
+  executor: Db = getDb(),
+): Promise<PollRecord | "not_found" | "finalized" | "deadline_passed"> {
+  const [poll] = await executor.select().from(meetingPolls).where(and(
+    eq(meetingPolls.id, id),
+    eq(meetingPolls.workspaceId, workspaceId),
+  ));
+  if (!poll) return "not_found";
+  if (poll.status === "finalized") return "finalized";
+  if (open && poll.deadline !== null && poll.deadline.getTime() <= Date.now()) {
+    return "deadline_passed";
+  }
+  const [updated] = await executor.update(meetingPolls).set({
+    status: open ? "open" : "closed",
+    updatedAt: new Date(),
+  }).where(eq(meetingPolls.id, poll.id)).returning();
+  return hydratePoll(updated!, executor, true);
 }
 
 export async function getMeetingPollResponse(

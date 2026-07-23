@@ -5,6 +5,18 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-23
+
+### Added
+
+- Poll result-visibility modes, voting deadlines, participant limits, and
+  organizer close/reopen controls.
+
+### Changed
+
+- Poll availability choices and result totals use accessible green, amber, and
+  red status treatments.
+
 ## [0.3.0] - 2026-07-23
 
 ### Added
@@ -46,3 +58,4 @@ First tracked public release.
 [0.1.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.1.0
 [0.2.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.2.0
 [0.3.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.3.0
+[0.4.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.4.0

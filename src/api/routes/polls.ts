@@ -12,6 +12,7 @@ import {
   getPublicMeetingPoll,
   listMeetingPolls,
   saveMeetingPollVotes,
+  setMeetingPollOpenState,
   type PollRecord,
 } from "../../db/poll-repo";
 import { getInviteeCalendarSession } from "../../db/invitee-calendar-repo";
@@ -38,6 +39,10 @@ const createSchema = z.object({
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).optional(),
   timezone: z.string().refine(isIanaZone),
+  resultsVisibility: z.enum(["live", "after_response", "aggregates", "hidden"]).default("after_response"),
+  deadline: z.string().datetime().optional(),
+  allowResponseEditing: z.boolean().default(true),
+  participantLimit: z.number().int().min(1).max(500).optional(),
   options: z.array(optionSchema).min(2).max(20),
 });
 const voteSchema = z.object({
@@ -72,26 +77,55 @@ const defaultSuggestionDeps: PollSuggestionDeps = {
   now: () => Temporal.Now.instant(),
 };
 
-function renderPoll(poll: PollRecord, publicView = false) {
+function renderPoll(
+  poll: PollRecord,
+  publicView = false,
+  revealParticipantResults = true,
+) {
+  const deadlinePassed = poll.deadline !== null && poll.deadline.getTime() <= Date.now();
+  const participantLimitReached = poll.participantLimit !== null
+    && poll.participantCount >= poll.participantLimit;
+  const votingOpen = poll.status === "open"
+    && !deadlinePassed
+    && (!publicView || !participantLimitReached || revealParticipantResults);
+  const showAggregates = !publicView
+    || poll.status === "finalized"
+    || poll.resultsVisibility === "live"
+    || poll.resultsVisibility === "aggregates"
+    || (poll.resultsVisibility === "after_response" && revealParticipantResults);
+  const showResponses = !publicView
+    || poll.status === "finalized"
+    || poll.resultsVisibility === "live"
+    || (poll.resultsVisibility === "after_response" && revealParticipantResults);
+  const renderedOptions = showAggregates
+    ? poll.options
+    : [...poll.options].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
   return {
     id: poll.id,
     publicId: poll.publicId,
     title: poll.title,
     description: poll.description,
     timezone: poll.timezone,
-    status: poll.status,
+    status: votingOpen ? poll.status : (poll.status === "open" ? "closed" : poll.status),
+    votingOpen,
+    resultsVisibility: poll.resultsVisibility,
+    resultsRevealed: showAggregates,
+    deadline: poll.deadline?.toISOString() ?? null,
+    allowResponseEditing: poll.allowResponseEditing,
+    participantLimit: poll.participantLimit,
+    participantLimitReached,
     finalizedOptionId: poll.finalizedOptionId,
     participantCount: poll.participantCount,
-    options: poll.options.map((option, rank) => ({
+    options: renderedOptions.map((option, rank) => ({
       id: option.id,
       start: option.startsAt.toISOString(),
       end: option.endsAt.toISOString(),
-      yes: option.yes,
-      ifNeeded: option.ifNeeded,
-      no: option.no,
+      yes: showAggregates ? option.yes : 0,
+      ifNeeded: showAggregates ? option.ifNeeded : 0,
+      no: showAggregates ? option.no : 0,
       rank: rank + 1,
     })),
-    ...(poll.responses
+    ...(poll.responses && showResponses
       ? {
           responses: poll.responses.map((response) => ({
             name: response.name,
@@ -244,12 +278,19 @@ export function createPollRoutes(
     } catch {
       return c.json({ error: "invalid_options" }, 400);
     }
+    if (parsed.data.deadline && new Date(parsed.data.deadline).getTime() <= Date.now()) {
+      return c.json({ error: "deadline_must_be_future" }, 400);
+    }
     const poll = await createMeetingPoll({
       workspaceId: user.workspaceId,
       ownerUserId: user.id,
       title: parsed.data.title,
       description: parsed.data.description,
       timezone: parsed.data.timezone,
+      resultsVisibility: parsed.data.resultsVisibility,
+      deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : undefined,
+      allowResponseEditing: parsed.data.allowResponseEditing,
+      participantLimit: parsed.data.participantLimit,
       options,
     });
     return c.json(renderPoll(poll), 201);
@@ -274,9 +315,30 @@ export function createPollRoutes(
     return c.json(renderPoll(result));
   });
 
+  routes.post("/api/me/polls/:id/state", async (c) => {
+    const parsed = z.object({ open: z.boolean() }).safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body" }, 400);
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "poll_not_found" }, 404);
+    const result = await setMeetingPollOpenState(
+      c.req.param("id"),
+      workspaceId,
+      parsed.data.open,
+    );
+    if (result === "not_found") return c.json({ error: "poll_not_found" }, 404);
+    if (result === "finalized") return c.json({ error: "poll_finalized" }, 409);
+    if (result === "deadline_passed") return c.json({ error: "deadline_passed" }, 409);
+    return c.json(renderPoll(result));
+  });
+
   routes.get("/polls/:publicId", async (c) => {
     const poll = await getPublicMeetingPoll(c.req.param("publicId"));
-    return poll ? c.json(renderPoll(poll, true)) : c.json({ error: "poll_not_found" }, 404);
+    if (!poll) return c.json({ error: "poll_not_found" }, 404);
+    const token = c.req.query("token");
+    const hasResponse = token
+      ? Boolean(await getMeetingPollResponse(poll.publicId, token))
+      : false;
+    return c.json(renderPoll(poll, true, hasResponse));
   });
 
   routes.get("/polls/:publicId/calendar-assessment", async (c) => {
@@ -338,6 +400,8 @@ export function createPollRoutes(
     if (result === "closed") return c.json({ error: "poll_closed" }, 409);
     if (result === "email_exists") return c.json({ error: "response_exists" }, 409);
     if (result === "invalid_token") return c.json({ error: "invalid_token" }, 403);
+    if (result === "editing_disabled") return c.json({ error: "response_editing_disabled" }, 403);
+    if (result === "participant_limit_reached") return c.json({ error: "participant_limit_reached" }, 409);
     if (result === "invalid_options") return c.json({ error: "invalid_options" }, 400);
     return c.json(result, 201);
   });

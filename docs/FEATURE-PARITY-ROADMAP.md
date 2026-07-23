@@ -205,8 +205,8 @@ Goal: cover Doodle's core coordination jobs and Calendly meeting polls.
 | --- | ---: | --- |
 | Optional invitee calendar overlay | Shipped | Consent-based busy/free only; mutual times rank first without hiding alternatives |
 | Meeting polls | v1 shipped | Account-free voting; yes / if-needed / no; signed response editing and organizer finalization |
-| Poll privacy and controls | M | Hidden votes, deadline, reminders, response editing, participant limits |
-| Calendar-aware voting | M | Signed voter link; optional busy overlay, no invitee account requirement |
+| Poll privacy and controls | v1 shipped | Result visibility, deadline, response editing, participant limits, close/reopen; reminders remain |
+| Calendar-aware voting | Shipped | Signed voter link; optional free/busy overlay, no invitee account requirement |
 | Capacity event types | L | One or more invitees per slot, seat counts, waitlist-ready model |
 | Sign-up sheets | L | Named sessions, capacity, custom questions, per-person registration cap |
 | Enrollment administration | M | Roster, removal, export, resend, privacy controls |

@@ -63,6 +63,19 @@ function choiceMark(choice: PollChoice | undefined) {
   return "–";
 }
 
+function selectedChoiceClass(choice: PollChoice) {
+  if (choice === "yes") return "border-emerald-600 bg-emerald-600 text-white";
+  if (choice === "if_needed") return "border-amber-500 bg-amber-400 text-amber-950";
+  return "border-red-600 bg-red-600 text-white";
+}
+
+function resultChoiceClass(choice: PollChoice | undefined) {
+  if (choice === "yes") return "bg-emerald-500/15 text-emerald-700";
+  if (choice === "if_needed") return "bg-amber-400/20 text-amber-700";
+  if (choice === "no") return "bg-red-500/15 text-red-700";
+  return "text-muted-foreground";
+}
+
 export function PollPage({ publicId }: { publicId: string }) {
   const [poll, setPoll] = useState<MeetingPoll | null>(null);
   const [name, setName] = useState("");
@@ -80,7 +93,7 @@ export function PollPage({ publicId }: { publicId: string }) {
       ?? localStorage.getItem(`calpaca:poll:${publicId}`)
       ?? undefined;
     setEditToken(token);
-    void getPublicMeetingPoll(publicId).then((loaded) => {
+    void getPublicMeetingPoll(publicId, token).then((loaded) => {
       setPoll(loaded);
       if (token) {
         void getMeetingPollResponse(publicId, token).then((response) => {
@@ -93,7 +106,8 @@ export function PollPage({ publicId }: { publicId: string }) {
     }).catch(() => setError("This poll could not be found."));
 
     const refresh = window.setInterval(() => {
-      void getPublicMeetingPoll(publicId).then(setPoll, () => {});
+      const currentToken = localStorage.getItem(`calpaca:poll:${publicId}`) ?? undefined;
+      void getPublicMeetingPoll(publicId, currentToken).then(setPoll, () => {});
     }, 10_000);
     return () => window.clearInterval(refresh);
   }, [publicId]);
@@ -155,7 +169,7 @@ export function PollPage({ publicId }: { publicId: string }) {
       history.replaceState(null, "", `${location.pathname}?token=${encodeURIComponent(result.editToken)}`);
       setEditToken(result.editToken);
       setSaved(true);
-      setPoll(await getPublicMeetingPoll(publicId));
+      setPoll(await getPublicMeetingPoll(publicId, result.editToken));
     } catch {
       setError("Could not save your response. If you already responded on another device, use that device to edit it.");
     }
@@ -200,9 +214,19 @@ export function PollPage({ publicId }: { publicId: string }) {
                 : ""}.
             </p>
           )}
+          {poll && poll.status === "closed" && (
+            <p className="rounded-lg bg-muted p-4 text-sm font-medium">
+              Voting is closed
+              {poll.deadline && new Date(poll.deadline).getTime() <= Date.now()
+                ? ` — the deadline was ${new Date(poll.deadline).toLocaleString()}.`
+                : poll.participantLimitReached
+                  ? " — this poll has reached its participant limit."
+                  : "."}
+            </p>
+          )}
           {poll && (
             <>
-              {poll.status === "open" && (
+              {poll.votingOpen && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 p-4">
                   <div className="flex items-start gap-3">
                     <CalendarCheck className="mt-0.5 h-5 w-5 text-primary" />
@@ -252,10 +276,10 @@ export function PollPage({ publicId }: { publicId: string }) {
                                 <button
                                   key={choice.value}
                                   type="button"
-                                  disabled={poll.status !== "open"}
+                                  disabled={!poll.votingOpen || (saved && !poll.allowResponseEditing)}
                                   className={`flex items-center justify-center gap-1 rounded-lg border px-2 py-2 text-xs font-medium ${
                                     votes[option.id] === choice.value
-                                      ? "border-primary bg-primary text-primary-foreground"
+                                      ? selectedChoiceClass(choice.value)
                                       : "border-border bg-card text-muted-foreground hover:text-foreground"
                                   }`}
                                   onClick={() => {
@@ -276,7 +300,7 @@ export function PollPage({ publicId }: { publicId: string }) {
                 ))}
               </div>
 
-              {poll.status === "open" && (
+              {poll.votingOpen && !(saved && !poll.allowResponseEditing) && (
                 <div className="sticky bottom-3 grid gap-4 rounded-xl border border-border bg-background/95 p-4 shadow-lg backdrop-blur sm:grid-cols-2">
                   <div><Label htmlFor="poll-name">Name</Label><Input id="poll-name" className="mt-1.5" value={name} onChange={(event) => setName(event.target.value)} /></div>
                   <div><Label htmlFor="poll-email">Email</Label><Input id="poll-email" type="email" className="mt-1.5" value={email} onChange={(event) => setEmail(event.target.value)} /></div>
@@ -288,6 +312,11 @@ export function PollPage({ publicId }: { publicId: string }) {
                   </Button>
                 </div>
               )}
+              {poll.votingOpen && saved && !poll.allowResponseEditing && (
+                <p className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                  Your response is saved. The organizer has disabled response editing for this poll.
+                </p>
+              )}
 
               <section className="border-t border-border pt-6">
                 <div className="mb-4 flex items-end justify-between gap-3">
@@ -297,14 +326,14 @@ export function PollPage({ publicId }: { publicId: string }) {
                   </div>
                   <span className="text-sm text-muted-foreground">{poll.participantCount} response{poll.participantCount === 1 ? "" : "s"}</span>
                 </div>
-                {poll.responses?.length ? (
+                {poll.resultsRevealed && poll.participantCount > 0 ? (
                   <div className="overflow-x-auto rounded-xl border border-border">
                     <table className="w-full min-w-[38rem] text-sm">
                       <thead className="bg-muted/40">
                         <tr>
                           <th className="sticky left-0 bg-muted/40 p-3 text-left font-medium">Participant</th>
                           {sortedOptions.map((option) => (
-                            <th key={option.id} className={`min-w-24 p-3 text-center text-xs ${option.rank === 1 ? "text-primary" : ""}`}>
+                            <th key={option.id} className={`min-w-24 p-3 text-center text-xs ${poll.resultsRevealed && option.rank === 1 ? "text-primary" : ""}`}>
                               <span className="block">{shortDateLabel(option.start, poll.timezone)}</span>
                               <span className="block font-normal">{timeLabel(option.start, option.end, poll.timezone).split("–")[0]}</span>
                             </th>
@@ -312,20 +341,41 @@ export function PollPage({ publicId }: { publicId: string }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {poll.responses.map((response, responseIndex) => (
+                        {(poll.responses ?? []).map((response, responseIndex) => (
                           <tr key={`${response.name}-${responseIndex}`} className="border-t border-border">
                             <td className="sticky left-0 bg-background p-3 font-medium">{response.name}</td>
                             {sortedOptions.map((option) => {
                               const choice = response.votes.find((vote) => vote.optionId === option.id)?.choice;
-                              return <td key={option.id} className="p-3 text-center text-base">{choiceMark(choice)}</td>;
+                              return (
+                                <td key={option.id} className={`p-3 text-center text-base font-semibold ${resultChoiceClass(choice)}`}>
+                                  <span className="sr-only">{choices.find((item) => item.value === choice)?.label ?? "No response"}: </span>
+                                  {choiceMark(choice)}
+                                </td>
+                              );
                             })}
                           </tr>
                         ))}
-                        <tr className="border-t border-border bg-muted/30 font-medium">
-                          <td className="sticky left-0 bg-muted p-3">Available</td>
+                        <tr className="border-t border-border bg-emerald-500/10 font-medium text-emerald-700">
+                          <td className="sticky left-0 bg-emerald-500/10 p-3">Available</td>
                           {sortedOptions.map((option) => (
-                            <td key={option.id} className={`p-3 text-center ${option.rank === 1 ? "text-primary" : ""}`}>
-                              {option.yes}{option.ifNeeded ? ` + ${option.ifNeeded}` : ""}
+                            <td key={option.id} className={`p-3 text-center ${poll.resultsRevealed && option.rank === 1 ? "text-primary" : ""}`}>
+                              {option.yes}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr className="border-t border-border bg-amber-400/10 font-medium text-amber-700">
+                          <td className="sticky left-0 bg-amber-400/10 p-3">If needed</td>
+                          {sortedOptions.map((option) => (
+                            <td key={option.id} className="p-3 text-center">
+                              {option.ifNeeded}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr className="border-t border-border bg-red-500/10 font-medium text-red-700">
+                          <td className="sticky left-0 bg-red-500/10 p-3">Unavailable</td>
+                          {sortedOptions.map((option) => (
+                            <td key={option.id} className="p-3 text-center">
+                              {option.no}
                             </td>
                           ))}
                         </tr>
@@ -334,7 +384,11 @@ export function PollPage({ publicId }: { publicId: string }) {
                   </div>
                 ) : (
                   <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                    Results will appear here as people respond.
+                    {poll.participantCount === 0
+                      ? "Results will appear here as people respond."
+                      : poll.resultsVisibility === "after_response"
+                        ? "Submit your response to see the results."
+                        : "The organizer has hidden results for now."}
                   </p>
                 )}
               </section>

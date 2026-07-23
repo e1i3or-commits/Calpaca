@@ -33,6 +33,13 @@ export type MeetingPoll = {
   description: string | null;
   timezone: string;
   status: string;
+  votingOpen: boolean;
+  resultsVisibility: "live" | "after_response" | "aggregates" | "hidden";
+  resultsRevealed: boolean;
+  deadline: string | null;
+  allowResponseEditing: boolean;
+  participantLimit: number | null;
+  participantLimitReached: boolean;
   finalizedOptionId: string | null;
   participantCount: number;
   options: {
@@ -207,6 +214,10 @@ export function createMeetingPoll(input: {
   title: string;
   description?: string;
   timezone: string;
+  resultsVisibility: "live" | "after_response" | "aggregates" | "hidden";
+  deadline?: string;
+  allowResponseEditing: boolean;
+  participantLimit?: number;
   options: { start: string; end: string }[];
 }): Promise<MeetingPoll> {
   return request("/api/me/polls", { method: "POST", body: JSON.stringify(input) });
@@ -234,8 +245,16 @@ export function finalizeMeetingPoll(id: string, optionId: string): Promise<Meeti
   });
 }
 
-export function getPublicMeetingPoll(publicId: string): Promise<MeetingPoll> {
-  return request(`/polls/${encodeURIComponent(publicId)}`);
+export function setMeetingPollOpenState(id: string, open: boolean): Promise<MeetingPoll> {
+  return request(`/api/me/polls/${id}/state`, {
+    method: "POST",
+    body: JSON.stringify({ open }),
+  });
+}
+
+export function getPublicMeetingPoll(publicId: string, editToken?: string): Promise<MeetingPoll> {
+  const query = editToken ? `?token=${encodeURIComponent(editToken)}` : "";
+  return request(`/polls/${encodeURIComponent(publicId)}${query}`);
 }
 
 export function getMeetingPollResponse(publicId: string, token: string): Promise<{

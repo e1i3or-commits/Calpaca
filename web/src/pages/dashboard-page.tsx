@@ -64,6 +64,7 @@ import {
   markBookingNoShow,
   finalizeMeetingPoll,
   signOut,
+  setMeetingPollOpenState,
   suggestMeetingPollTimes,
   updateEventType,
   updateManagedUser,
@@ -936,6 +937,10 @@ function PollsTab() {
   const [dailyEnd, setDailyEnd] = useState("17:00");
   const [suggestionCount, setSuggestionCount] = useState(10);
   const [suggesting, setSuggesting] = useState(false);
+  const [resultsVisibility, setResultsVisibility] = useState<"live" | "after_response" | "aggregates" | "hidden">("after_response");
+  const [deadline, setDeadline] = useState("");
+  const [allowResponseEditing, setAllowResponseEditing] = useState(true);
+  const [participantLimit, setParticipantLimit] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
@@ -952,6 +957,10 @@ function PollsTab() {
         title,
         description: description.trim() || undefined,
         timezone: viewerTimezone(),
+        resultsVisibility,
+        deadline: deadline ? new Date(deadline).toISOString() : undefined,
+        allowResponseEditing,
+        participantLimit: participantLimit ? Number(participantLimit) : undefined,
         options: options.map((option) => ({
           start: new Date(option.start).toISOString(),
           end: new Date(new Date(option.start).getTime() + durationMinutes * 60_000).toISOString(),
@@ -962,6 +971,10 @@ function PollsTab() {
       setDescription("");
       setDurationMinutes(30);
       setOptions([{ start: "" }, { start: "" }]);
+      setResultsVisibility("after_response");
+      setDeadline("");
+      setAllowResponseEditing(true);
+      setParticipantLimit("");
       reload();
     } catch (cause) {
       setError(errorText(cause));
@@ -1005,6 +1018,15 @@ function PollsTab() {
     }
   };
 
+  const changeOpenState = async (poll: MeetingPoll, open: boolean) => {
+    try {
+      await setMeetingPollOpenState(poll.id, open);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
@@ -1037,6 +1059,29 @@ function PollsTab() {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="grid gap-4 rounded-xl border border-border p-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="poll-results-visibility">Results visibility</Label>
+                <select id="poll-results-visibility" className="mt-1 block h-9 w-full rounded-md border border-border bg-card px-3 text-sm" value={resultsVisibility} onChange={(event) => setResultsVisibility(event.target.value as typeof resultsVisibility)}>
+                  <option value="after_response">After responding</option>
+                  <option value="live">Live for everyone</option>
+                  <option value="aggregates">Aggregate totals only</option>
+                  <option value="hidden">Hidden until finalized</option>
+                </select>
+              </div>
+              <div>
+                <Label htmlFor="poll-deadline">Voting deadline (optional)</Label>
+                <Input id="poll-deadline" type="datetime-local" step={900} className="mt-1" value={deadline} onChange={(event) => setDeadline(event.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="poll-participant-limit">Participant limit (optional)</Label>
+                <Input id="poll-participant-limit" type="number" min={1} max={500} className="mt-1" placeholder="No limit" value={participantLimit} onChange={(event) => setParticipantLimit(event.target.value)} />
+              </div>
+              <label className="flex items-center gap-2 self-end rounded-lg border border-border px-3 py-2 text-sm">
+                <input type="checkbox" checked={allowResponseEditing} onChange={(event) => setAllowResponseEditing(event.target.checked)} />
+                Allow people to edit responses
+              </label>
             </div>
             <div className="rounded-xl border border-border bg-muted/30 p-4">
               <div>
@@ -1093,8 +1138,21 @@ function PollsTab() {
         <Card key={poll.id} className="rounded-xl">
           <CardHeader>
             <div className="flex items-start justify-between gap-4">
-              <div><CardTitle>{poll.title}</CardTitle><CardDescription>{poll.participantCount} response{poll.participantCount === 1 ? "" : "s"} · {poll.status}</CardDescription></div>
-              <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/poll/${poll.publicId}`)}><Copy className="h-4 w-4" /> Copy link</Button>
+              <div>
+                <CardTitle>{poll.title}</CardTitle>
+                <CardDescription>
+                  {poll.participantCount} response{poll.participantCount === 1 ? "" : "s"} · {poll.status}
+                  {poll.deadline ? ` · closes ${formatBookingDate(poll.deadline)} ${formatBookingTime(poll.deadline)}` : ""}
+                </CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {poll.status !== "finalized" && !(poll.deadline && new Date(poll.deadline).getTime() <= Date.now()) && (
+                  <Button variant="outline" size="sm" onClick={() => void changeOpenState(poll, !poll.votingOpen)}>
+                    {poll.votingOpen ? "Close voting" : "Reopen"}
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/poll/${poll.publicId}`)}><Copy className="h-4 w-4" /> Copy link</Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -1104,7 +1162,7 @@ function PollsTab() {
                   <p className="text-sm font-medium">{formatBookingDate(option.start, { weekday: "short", month: "short", day: "numeric" })} · {formatBookingTime(option.start)}</p>
                   <p className="text-xs text-muted-foreground">{option.yes} yes · {option.ifNeeded} if needed · {option.no} no</p>
                 </div>
-                {poll.status === "open" && <Button size="sm" variant={option.rank === 1 ? "default" : "outline"} onClick={() => void finalize(poll, option.id)}>Finalize</Button>}
+                {poll.votingOpen && <Button size="sm" variant={option.rank === 1 ? "default" : "outline"} onClick={() => void finalize(poll, option.id)}>Finalize</Button>}
               </div>
             ))}
             {poll.responses && poll.responses.length > 0 && (
