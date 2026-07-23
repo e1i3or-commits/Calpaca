@@ -1,0 +1,23 @@
+{
+  "name": "Calpaca",
+  "short_name": "Calpaca",
+  "description": "Thoughtful scheduling for modern teams.",
+  "icons": [
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "theme_color": "#316b4a",
+  "background_color": "#faf8f4",
+  "display": "standalone",
+  "start_url": "/"
+}

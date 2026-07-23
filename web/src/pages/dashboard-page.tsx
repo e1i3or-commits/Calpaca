@@ -12,7 +12,6 @@ import {
   Pencil,
   Plus,
   Route,
-  Sparkles,
   Trash2,
   Users,
 } from "lucide-react";
@@ -71,6 +70,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { PeoplePicker } from "@/components/people-picker";
 import { TimezoneSelect } from "@/pages/booking-page";
+import { BrandMark } from "@/components/brand-mark";
 
 const TABS = [
   { key: "home", label: "Home", icon: Home, group: "primary" },
@@ -208,11 +208,7 @@ export function DashboardPage() {
 function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`flex items-center gap-2.5 ${compact ? "" : "px-2"}`}>
-      <span className="relative grid h-8 w-8 place-items-center rounded-[11px] bg-primary text-primary-foreground">
-        <span className="absolute -top-1 left-1.5 h-2.5 w-1.5 rotate-[-18deg] rounded-full bg-primary" />
-        <span className="absolute -top-1 right-1.5 h-2.5 w-1.5 rotate-[18deg] rounded-full bg-primary" />
-        <Sparkles className="h-4 w-4" />
-      </span>
+      <BrandMark className="h-8 w-8" />
       <span className="text-[17px] font-semibold tracking-[-0.02em]">Calpaca</span>
     </div>
   );

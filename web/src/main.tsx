@@ -1,4 +1,5 @@
 import { StrictMode } from "react";
+import { ArrowRight, CalendarDays } from "lucide-react";
 import { createRoot } from "react-dom/client";
 import {
   createRootRoute,
@@ -15,6 +16,7 @@ import { ReschedulePage } from "@/pages/reschedule-page";
 import { RoutingFormPage } from "@/pages/routing-form-page";
 import { SignInPage } from "@/pages/sign-in-page";
 import type { RoutingAnswers } from "@/lib/api";
+import { BrandMark } from "@/components/brand-mark";
 import "./styles.css";
 
 // Code-based routes: four pages don't justify the file-router codegen step.
@@ -30,19 +32,67 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: () => (
-    <div className="mx-auto flex max-w-2xl flex-col items-center gap-6 px-4 py-24 text-center">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">TourScale Scheduling</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Invitees book through links like /book/&lt;event-type&gt;.
-        </p>
-      </div>
-      <Link
-        to="/sign-in"
-        className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90"
-      >
-        Host sign in
-      </Link>
+    <div data-organizer className="min-h-screen overflow-hidden bg-background text-foreground">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8">
+        <div className="flex items-center gap-2.5">
+          <BrandMark />
+          <span className="text-lg font-semibold tracking-[-0.03em]">Calpaca</span>
+        </div>
+        <Link to="/sign-in" className="text-sm font-medium text-muted-foreground transition hover:text-foreground">
+          Host sign in
+        </Link>
+      </header>
+      <main className="mx-auto grid max-w-6xl items-center gap-14 px-5 pb-20 pt-12 sm:px-8 md:grid-cols-[1.05fr_.95fr] md:pb-28 md:pt-24">
+        <section>
+          <p className="mb-5 inline-flex rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm">
+            Thoughtful scheduling for modern teams
+          </p>
+          <h1 className="max-w-xl text-4xl font-semibold leading-[1.04] tracking-[-0.055em] sm:text-6xl">
+            Make time feel a little more human.
+          </h1>
+          <p className="mt-6 max-w-lg text-base leading-7 text-muted-foreground sm:text-lg">
+            Flexible booking pages, team availability, and calm organizer tools—all in one focused workspace.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link
+              to="/sign-in"
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90"
+            >
+              Open your workspace <ArrowRight className="h-4 w-4" />
+            </Link>
+            <span className="text-sm text-muted-foreground">Sign in securely with Google</span>
+          </div>
+        </section>
+        <section className="relative mx-auto w-full max-w-md" aria-label="Product preview">
+          <div className="absolute -inset-10 -z-10 rounded-full bg-primary/8 blur-3xl" />
+          <div className="rounded-3xl border border-border bg-card p-5 shadow-[0_24px_70px_-35px_rgba(52,64,54,.38)] sm:p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[.12em] text-muted-foreground">Up next</p>
+                <h2 className="mt-1 text-lg font-semibold tracking-[-.02em]">Strategy session</h2>
+              </div>
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">
+                <CalendarDays className="h-5 w-5" />
+              </span>
+            </div>
+            <div className="mt-7 space-y-3">
+              {["Today · 2:30 PM", "Tomorrow · 10:00 AM", "Friday · 11:45 AM"].map((time, index) => (
+                <div key={time} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${index === 0 ? "border-primary/30 bg-primary/5" : "border-border"}`}>
+                  <span className="text-sm font-medium">{time}</span>
+                  <span className="text-xs text-muted-foreground">{index === 0 ? "Best time" : "Available"}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex items-center gap-3 border-t border-border pt-5">
+              <span className="h-9 w-9 rounded-full bg-muted" />
+              <div>
+                <p className="text-sm font-medium">Your schedule, quietly organized.</p>
+                <p className="text-xs text-muted-foreground">Availability stays in sync.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   ),
 });
