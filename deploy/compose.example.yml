@@ -1,0 +1,45 @@
+name: calpaca
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://calpaca:${POSTGRES_PASSWORD}@db:5432/calpaca
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      PUBLIC_URL: ${PUBLIC_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      SMTP_URL: ${SMTP_URL:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      EMAIL_DELIVERY_WEBHOOK_SECRET: ${EMAIL_DELIVERY_WEBHOOK_SECRET:-}
+      RATE_LIMIT_HOLDS_PER_MINUTE: ${RATE_LIMIT_HOLDS_PER_MINUTE:-20}
+      RATE_LIMIT_BOOKINGS_PER_MINUTE: ${RATE_LIMIT_BOOKINGS_PER_MINUTE:-10}
+      RATE_LIMIT_SUGGESTIONS_PER_MINUTE: ${RATE_LIMIT_SUGGESTIONS_PER_MINUTE:-5}
+      ACTIVE_HOLDS_PER_EVENT_TYPE: ${ACTIVE_HOLDS_PER_EVENT_TYPE:-50}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: calpaca
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: calpaca
+    volumes:
+      - calpaca-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calpaca -d calpaca"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  calpaca-db-data:

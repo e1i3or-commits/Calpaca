@@ -90,8 +90,9 @@ Sources:
 | Workflows | Partial | Fixed reminders and webhooks, no user-authored automation |
 | Webhooks and delivery log | Shipped | Strong extension boundary |
 | Analytics | Dashboard and CSV shipped | Outcomes, lead time, no-shows, and round-robin balance are visible |
-| Admin bookings | API shipped | UI pending |
-| Suggest a time | Backend shipped | Invitee UI pending |
+| Admin bookings | Shipped | List, detail, delivery state, no-show, and assignment explanation |
+| Suggest a time | Shipped | Invitee form and organizer email notification |
+| User management | Shipped | Invitations, owner/admin/member roles, and safe deactivation |
 | MCP scheduling client | Shipped | Differentiated |
 | Meeting polls | Missing | Major Doodle/Calendly gap |
 | Capacity/group attendee events | Missing | Major Calendly/Doodle gap |
@@ -103,7 +104,7 @@ Sources:
 | Conferencing adapters | Missing | Google Meet is incidental to Google write-through |
 | Payments | Missing | Commercial-use gap |
 | Managed event templates | Missing | Team governance gap |
-| SSO, SCIM, audit log, granular roles | Missing | Enterprise gap |
+| SSO, SCIM, audit log, granular roles | Partial | Core roles and lifecycle shipped; enterprise controls missing |
 | Embeds and documented public API | Planned | Distribution gap |
 
 ## Product principles for parity
@@ -135,10 +136,10 @@ friction before adding new domains.
 
 | Deliverable | Effort | Release gate |
 | --- | ---: | --- |
-| Admin bookings list/detail, delivery state, no-show, assignment explanation | M | Task 27 visual and mobile review |
-| Invitee “Suggest a different time” form | M | Task 28 visual and mobile review |
+| Admin bookings list/detail, delivery state, no-show, assignment explanation | Shipped | Visual and mobile review complete |
+| Invitee “Suggest a different time” form | Shipped | Visual and mobile review complete |
 | Analytics dashboard and CSV export over the four views | Shipped | Results match SQL views exactly |
-| Generic deployment example, vendored AGPL text, issue templates | S | Clean self-host install |
+| Generic deployment example, vendored AGPL text, issue templates | Shipped | Portable Compose setup documented |
 | Embed v1: responsive iframe + small script launcher | M | CSP, resize, and mobile tests |
 | OpenAPI document generated from the live contracts | M | Contract drift check in verification |
 

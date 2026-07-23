@@ -7,7 +7,8 @@ availability, Google Calendar sync, and an MCP server for AI-assisted booking.
 [Live demo](https://cal.tourscale.com) ·
 [Architecture](docs/ARCHITECTURE.md) ·
 [MCP setup](docs/MCP.md) ·
-[Roadmap](BACKLOG.md)
+[Self-hosting](docs/SELF-HOSTING.md) ·
+[Roadmap](docs/FEATURE-PARITY-ROADMAP.md)
 
 ## Why Calpaca
 
@@ -85,6 +86,11 @@ Copy `.env.example` to `.env.local`. The main settings are:
 
 See [.env.example](.env.example) for details and safe local defaults.
 
+For a production-like Docker Compose deployment, use the portable example in
+[Self-hosting Calpaca](docs/SELF-HOSTING.md). The file at
+`deploy/compose.yml` is the maintainer's deployment and is not a reusable
+configuration template.
+
 ## MCP server
 
 Once the API is running, add Calpaca to Claude Code:
@@ -114,9 +120,10 @@ small infrastructure and dependency budget is a deliberate product constraint.
 ## Project status
 
 The core scheduling engine, booking UI, Google integration, outbound
-notifications, routing forms, group scheduling, and MCP read/write tools are
-implemented. Production trust-and-safety and administration work remains on
-the [roadmap](BACKLOG.md).
+notifications, routing forms, group scheduling, analytics, user management,
+and MCP read/write tools are implemented. Additional scheduling modes and
+integration work remain on the
+[feature-parity roadmap](docs/FEATURE-PARITY-ROADMAP.md).
 
 Calpaca is under active development. Review configuration and security for your
 environment before operating a public instance.
@@ -124,6 +131,6 @@ environment before operating a public instance.
 ## License
 
 Calpaca is licensed under the
-[GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html).
+[GNU Affero General Public License v3.0](LICENSE).
 If you modify Calpaca and provide it as a network service, the AGPL requires
 you to offer the corresponding source code to users of that service.

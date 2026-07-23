@@ -1,0 +1,48 @@
+name: Feature request
+description: Propose a focused product or platform improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Scheduling problem
+      description: What job is difficult or impossible today, and who encounters it?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the result without prescribing an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Current workaround
+      description: How is this handled today?
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Primary surface
+      options:
+        - Booking page
+        - Organizer dashboard
+        - API or webhooks
+        - MCP server
+        - Calendar or email integration
+        - Deployment and operations
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Architecture check
+      options:
+        - label: I reviewed the roadmap and existing issues.
+          required: true
+        - label: This can preserve PostgreSQL as the only infrastructure dependency, or I explained why it cannot.
+          required: true

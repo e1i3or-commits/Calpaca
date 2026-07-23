@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/e1i3or-commits/Calpaca/security/advisories/new
+    about: Report security issues privately. Do not open a public issue.
+  - name: Questions and ideas
+    url: https://github.com/e1i3or-commits/Calpaca/discussions
+    about: Ask for help or discuss an early idea.
