@@ -5,6 +5,17 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-07-23
+
+### Added
+
+- Custom public booking pages with ordered event selection, independent
+  themes, logos, titles, descriptions, and dedicated share links.
+
+### Changed
+
+- Meeting poll cards can be collapsed to keep the organizer dashboard compact.
+
 ## [0.13.0] - 2026-07-23
 
 ### Added

@@ -170,6 +170,23 @@ const hostedBookingPageRoute = createRoute({
   },
 });
 
+const customBookingPageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/booking/p/$pageSlug",
+  component: function CustomBookingPageRoute() {
+    return <PublicBookingPage pageSlug={customBookingPageRoute.useParams().pageSlug} />;
+  },
+});
+
+const hostedCustomBookingPageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/booking/$workspaceSlug/p/$pageSlug",
+  component: function HostedCustomBookingPageRoute() {
+    const { workspaceSlug, pageSlug } = hostedCustomBookingPageRoute.useParams();
+    return <PublicBookingPage workspaceSlug={workspaceSlug} pageSlug={pageSlug} />;
+  },
+});
+
 const routingFormRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/r/$slug",
@@ -255,6 +272,8 @@ const router = createRouter({
     bookRoute,
     hostedBookingPageRoute,
     bookingPageRoute,
+    hostedCustomBookingPageRoute,
+    customBookingPageRoute,
     hostedRoutingFormRoute,
     routingFormRoute,
     rescheduleRoute,

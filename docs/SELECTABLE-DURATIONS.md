@@ -11,10 +11,17 @@ store exact start and end instants, so notifications, calendars, analytics,
 capacity, and buffers naturally use the chosen length. Rescheduling preserves
 the original booking duration.
 
-Every workspace also has a public catalogue:
+Every workspace also has a default public catalogue:
 
 - `/booking` on a custom or self-hosted domain
 - `/booking/<workspace-slug>` on the hosted service
 
 The catalogue lists the workspace event types and links to their normal booking
 flows. Organizers can copy its URL from the Event types dashboard.
+
+Organizers may also create multiple custom catalogues. Each custom page has its
+own slug, title, description, theme, logo, and ordered selection of event
+types. Their public routes are:
+
+- `/booking/p/<page-slug>` on a custom or self-hosted domain
+- `/booking/<workspace-slug>/p/<page-slug>` on the hosted service

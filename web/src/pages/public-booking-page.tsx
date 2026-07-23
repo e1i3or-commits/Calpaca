@@ -3,6 +3,7 @@ import { ArrowRight, Clock } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPublicBookingPage, type PublicBookingPage as BookingPageData } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 
 function durationLabel(eventType: BookingPageData["eventTypes"][number]): string {
   const durations = eventType.selectableDurations.length
@@ -15,13 +16,20 @@ function durationLabel(eventType: BookingPageData["eventTypes"][number]): string
       : `${Math.floor(minutes / 60)} hr ${minutes % 60} min`).join(" · ");
 }
 
-export function PublicBookingPage({ workspaceSlug }: { workspaceSlug?: string }) {
+export function PublicBookingPage({
+  workspaceSlug,
+  pageSlug,
+}: {
+  workspaceSlug?: string;
+  pageSlug?: string;
+}) {
   const [page, setPage] = useState<BookingPageData | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    getPublicBookingPage(workspaceSlug).then(setPage, () => setFailed(true));
-  }, [workspaceSlug]);
+    getPublicBookingPage(workspaceSlug, pageSlug).then(setPage, () => setFailed(true));
+  }, [workspaceSlug, pageSlug]);
+  useTheme(page?.theme);
 
   if (failed) {
     return <main className="mx-auto max-w-3xl px-5 py-20 text-center">This booking page is unavailable.</main>;
@@ -33,14 +41,16 @@ export function PublicBookingPage({ workspaceSlug }: { workspaceSlug?: string })
   return (
     <div className="min-h-screen bg-background">
       <header className="mx-auto flex max-w-5xl items-center gap-2.5 px-5 py-7 sm:px-8">
-        <BrandMark />
-        <span className="font-semibold tracking-[-0.02em]">Calpaca</span>
+        {page?.logoUrl ? <img src={page.logoUrl} alt="" className="max-h-9 max-w-44 object-contain" /> : <BrandMark />}
+        {!page?.logoUrl && <span className="font-semibold tracking-[-0.02em]">Calpaca</span>}
       </header>
       <main className="mx-auto max-w-5xl px-5 pb-20 pt-8 sm:px-8 sm:pt-14">
         <div className="mx-auto max-w-2xl text-center">
           <p className="text-sm font-medium text-primary">Schedule a meeting</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-[-0.045em] sm:text-5xl">{page.name}</h1>
-          <p className="mt-4 text-muted-foreground">Choose the conversation that fits what you need.</p>
+          <p className="mt-4 whitespace-pre-wrap text-muted-foreground">
+            {page.description ?? "Choose the conversation that fits what you need."}
+          </p>
         </div>
         {page.eventTypes.length ? (
           <div className="mt-12 grid gap-4 md:grid-cols-2">

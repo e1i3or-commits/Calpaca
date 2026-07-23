@@ -36,7 +36,7 @@ release notes live in [CHANGELOG.md](CHANGELOG.md), and releases are tagged
 - **Flexible locations:** offer Google Meet, phone, in-person, or custom-link
   choices with team-host overrides.
 - **Flexible booking pages:** let invitees choose a meeting duration or browse
-  several event types from one workspace catalogue.
+  selected event types from custom themed workspace catalogues.
 - **Date-aware availability:** recurring hours, alternate-date hours, time-off
   ranges, and teammate forwarding.
 - **Agent-ready:** a stdio MCP server exposes availability, holds, booking,

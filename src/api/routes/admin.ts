@@ -16,12 +16,14 @@ import {
   createSchedule,
   createTeam,
   deleteEventType,
+  deleteBookingPage,
   deleteSchedule,
   getEventTypeForAdmin,
   isTeamMember,
   isTeamAdmin,
   isAppAdmin,
   listEventTypesForUser,
+  listBookingPages,
   listSchedulesForUser,
   listTeamMembers,
   listTeamsForUser,
@@ -30,7 +32,9 @@ import {
   updateTeamMemberAdmin,
   updateEventType,
   updateSchedule,
+  saveBookingPage,
   type AdminEventType,
+  type BookingPageRecord,
   type DirectoryUser,
   type EventTypeInput,
   type ScheduleRecord,
@@ -113,6 +117,13 @@ export interface AdminDeps {
     workspaceId?: string,
   ) => Promise<AdminEventType | null>;
   readonly deleteEventType: (id: string, userId: string, workspaceId?: string) => Promise<"deleted" | "not_found" | "in_use">;
+  readonly listBookingPages?: (workspaceId: string) => Promise<BookingPageRecord[]>;
+  readonly saveBookingPage?: (
+    workspaceId: string,
+    input: Omit<BookingPageRecord, "id">,
+    id?: string,
+  ) => Promise<BookingPageRecord | "slug_taken" | "invalid_event_types" | null>;
+  readonly deleteBookingPage?: (workspaceId: string, id: string) => Promise<boolean>;
   readonly getAssignmentExplanationForUser?: (
     bookingId: string,
     userId: string,
@@ -169,6 +180,9 @@ const defaultDeps: AdminDeps = {
     updateEventType(id, userId, input, undefined, workspaceId),
   deleteEventType: (id, userId, workspaceId) =>
     deleteEventType(id, userId, undefined, workspaceId),
+  listBookingPages: (workspaceId) => listBookingPages(workspaceId),
+  saveBookingPage: (workspaceId, input, id) => saveBookingPage(workspaceId, input, id),
+  deleteBookingPage: (workspaceId, id) => deleteBookingPage(workspaceId, id),
   getAssignmentExplanationForUser: (bookingId, userId, workspaceId) =>
     getAssignmentExplanationForUser(bookingId, userId, undefined, workspaceId),
   listBookingsForUser: (input) => listBookingsForUser(input),
@@ -364,6 +378,15 @@ const teamBodySchema = z.object({
 
 const memberBodySchema = z.object({ userId: z.string().uuid() });
 const memberRoleBodySchema = z.object({ isAdmin: z.boolean() });
+const bookingPageBodySchema = z.object({
+  slug: z.string().min(1).max(80).regex(SLUG_RE, "kebab-case only"),
+  title: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(2000).nullable().default(null),
+  theme: z.enum(themeNames).default("default"),
+  logoUrl: z.string().url().max(2048).nullable().default(null),
+  eventTypeIds: z.array(z.string().uuid()).min(1).max(100)
+    .refine((ids) => new Set(ids).size === ids.length, "event types must be unique"),
+});
 
 export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> {
   const router = new Hono<AuthEnv>();
@@ -373,6 +396,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     "/api/me/schedules",
     "/api/me/teams",
     "/api/me/event-types",
+    "/api/me/booking-pages",
     "/api/me/theme-options",
     "/api/me/bookings",
   ]) {
@@ -701,6 +725,54 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     if (result === "not_found") return c.json({ error: "event_type_not_found" }, 404);
     if (result === "in_use") return c.json({ error: "event_type_in_use" }, 409);
     return c.json({ ok: true });
+  });
+
+  router.get("/api/me/booking-pages", async (c) => {
+    const workspaceId = c.get("user").workspaceId;
+    return c.json({
+      bookingPages: workspaceId && deps.listBookingPages
+        ? await deps.listBookingPages(workspaceId)
+        : [],
+    });
+  });
+
+  router.post("/api/me/booking-pages", async (c) => {
+    const parsed = bookingPageBodySchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+    const user = c.get("user");
+    if (!canUseTheme(parsed.data.theme, user.email)) {
+      return c.json({ error: "theme_not_available" }, 403);
+    }
+    const workspaceId = user.workspaceId;
+    if (!workspaceId || !deps.saveBookingPage) return c.json({ error: "workspace_not_found" }, 404);
+    const result = await deps.saveBookingPage(workspaceId, parsed.data);
+    if (result === "slug_taken") return c.json({ error: "slug_taken" }, 409);
+    if (result === "invalid_event_types") return c.json({ error: result }, 400);
+    return c.json(result, 201);
+  });
+
+  router.put("/api/me/booking-pages/:id", async (c) => {
+    const parsed = bookingPageBodySchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+    const user = c.get("user");
+    if (!canUseTheme(parsed.data.theme, user.email)) {
+      return c.json({ error: "theme_not_available" }, 403);
+    }
+    const workspaceId = user.workspaceId;
+    if (!workspaceId || !deps.saveBookingPage) return c.json({ error: "workspace_not_found" }, 404);
+    const result = await deps.saveBookingPage(workspaceId, parsed.data, c.req.param("id"));
+    if (result === "slug_taken") return c.json({ error: "slug_taken" }, 409);
+    if (result === "invalid_event_types") return c.json({ error: result }, 400);
+    if (!result) return c.json({ error: "booking_page_not_found" }, 404);
+    return c.json(result);
+  });
+
+  router.delete("/api/me/booking-pages/:id", async (c) => {
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId || !deps.deleteBookingPage) return c.json({ error: "workspace_not_found" }, 404);
+    return (await deps.deleteBookingPage(workspaceId, c.req.param("id")))
+      ? c.json({ ok: true })
+      : c.json({ error: "booking_page_not_found" }, 404);
   });
 
   return router;

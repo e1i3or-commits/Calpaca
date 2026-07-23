@@ -220,6 +220,9 @@ export function getEventTypeMeta(slug: string, workspaceSlug?: string): Promise<
 export type PublicBookingPage = {
   name: string;
   slug: string;
+  description?: string | null;
+  theme?: string;
+  logoUrl?: string | null;
   eventTypes: {
     slug: string;
     title: string;
@@ -230,10 +233,14 @@ export type PublicBookingPage = {
   }[];
 };
 
-export function getPublicBookingPage(workspaceSlug?: string): Promise<PublicBookingPage> {
-  const query = workspaceSlug
-    ? `?workspaceSlug=${encodeURIComponent(workspaceSlug)}`
-    : "";
+export function getPublicBookingPage(
+  workspaceSlug?: string,
+  pageSlug?: string,
+): Promise<PublicBookingPage> {
+  const params = new URLSearchParams();
+  if (workspaceSlug) params.set("workspaceSlug", workspaceSlug);
+  if (pageSlug) params.set("pageSlug", pageSlug);
+  const query = params.size ? `?${params}` : "";
   return request(`/booking-page${query}`);
 }
 
@@ -932,6 +939,34 @@ export function updateEventType(id: string, input: EventTypeInput): Promise<Admi
 
 export function deleteEventType(id: string): Promise<{ ok: true }> {
   return request(`/api/me/event-types/${id}`, { method: "DELETE" });
+}
+
+export type BookingPageRecord = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  theme: string;
+  logoUrl: string | null;
+  eventTypeIds: string[];
+};
+
+export type BookingPageInput = Omit<BookingPageRecord, "id">;
+
+export function listBookingPages(): Promise<{ bookingPages: BookingPageRecord[] }> {
+  return request("/api/me/booking-pages");
+}
+
+export function createBookingPage(input: BookingPageInput): Promise<BookingPageRecord> {
+  return request("/api/me/booking-pages", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateBookingPage(id: string, input: BookingPageInput): Promise<BookingPageRecord> {
+  return request(`/api/me/booking-pages/${id}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function deleteBookingPage(id: string): Promise<{ ok: true }> {
+  return request(`/api/me/booking-pages/${id}`, { method: "DELETE" });
 }
 
 // ---- organizer bookings ----

@@ -3,7 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
 import * as schema from "./schema";
-import { bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, holds, schedules, teams, users, workspaces } from "./schema";
+import { bookingPages, bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, holds, schedules, teams, users, workspaces } from "./schema";
 import type { Interval } from "../core/availability/intervals";
 import type { WeeklyRule } from "../core/availability/rules";
 import type { ScheduleOverride } from "../core/availability/overrides";
@@ -47,6 +47,9 @@ export type AssignmentMode = "solo" | "round_robin" | "group";
 export interface PublicBookingPage {
   readonly name: string;
   readonly slug: string;
+  readonly description?: string | null;
+  readonly theme?: string;
+  readonly logoUrl?: string | null;
   readonly eventTypes: readonly {
     slug: string;
     title: string;
@@ -59,6 +62,7 @@ export interface PublicBookingPage {
 
 export async function getPublicBookingPage(
   workspaceId: string,
+  pageSlug?: string,
   executor: Db = getDb(),
 ): Promise<PublicBookingPage | null> {
   const [workspace] = await executor
@@ -66,8 +70,19 @@ export async function getPublicBookingPage(
     .from(workspaces)
     .where(eq(workspaces.id, workspaceId));
   if (!workspace) return null;
+  const [configuredPage] = pageSlug
+    ? await executor
+        .select()
+        .from(bookingPages)
+        .where(and(
+          eq(bookingPages.workspaceId, workspaceId),
+          eq(bookingPages.slug, pageSlug),
+        ))
+    : [];
+  if (pageSlug && !configuredPage) return null;
   const rows = await executor
     .select({
+      id: eventTypes.id,
       slug: eventTypes.slug,
       title: eventTypes.title,
       description: eventTypes.description,
@@ -76,9 +91,35 @@ export async function getPublicBookingPage(
       theme: eventTypes.theme,
     })
     .from(eventTypes)
-    .where(eq(eventTypes.workspaceId, workspaceId))
+    .where(and(
+      eq(eventTypes.workspaceId, workspaceId),
+      ...(configuredPage?.eventTypeIds.length
+        ? [inArray(eventTypes.id, configuredPage.eventTypeIds)]
+        : []),
+    ))
     .orderBy(eventTypes.title);
-  return { ...workspace, eventTypes: rows };
+  const orderedRows = configuredPage
+    ? configuredPage.eventTypeIds.flatMap((id) => {
+        const row = rows.find((candidate) => candidate.id === id);
+        if (!row) return [];
+        const { id: _id, ...eventType } = row;
+        void _id;
+        return [eventType];
+      })
+    : rows;
+  return {
+    name: configuredPage?.title ?? workspace.name,
+    slug: configuredPage?.slug ?? workspace.slug,
+    description: configuredPage?.description,
+    theme: configuredPage?.theme,
+    logoUrl: configuredPage?.logoUrl,
+    eventTypes: configuredPage
+      ? orderedRows
+      : rows.map(({ id, ...eventType }) => {
+          void id;
+          return eventType;
+        }),
+  };
 }
 
 /** Booking-endpoint view of an event type: adds the assignment mode the

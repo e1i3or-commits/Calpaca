@@ -225,7 +225,7 @@ teams.
 | --- | ---: | --- |
 | User directory and lifecycle | L | Invite, resend, status, deactivate/reactivate; preserve booking history |
 | Managed event templates | L | Admin-owned template, assigned members, lockable fields |
-| Team landing pages and grouped links | Partial | Workspace event catalogue shipped; team-specific catalogues and visibility controls remain |
+| Team landing pages and grouped links | Shipped | Custom themed catalogues expose an ordered selection of workspace or team event types |
 | Roles and permissions | L | Owner, admin, team manager, member; capability-based checks |
 | Fixed + rotating host pools | L | One required host plus one choice from each pool |
 | Member attributes and skill routing | L | Language, region, specialty, department |

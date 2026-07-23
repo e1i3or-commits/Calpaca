@@ -72,7 +72,10 @@ export interface AvailabilityDeps {
     capability: string,
   ) => Promise<{ busy: { start: string; end: string }[]; expiresAt: Date } | null>;
   readonly inviteeCalendarEnabled?: (workspaceId: string) => Promise<boolean>;
-  readonly getPublicBookingPage?: (workspaceId: string) => Promise<PublicBookingPage | null>;
+  readonly getPublicBookingPage?: (
+    workspaceId: string,
+    pageSlug?: string,
+  ) => Promise<PublicBookingPage | null>;
 }
 
 const defaultDeps: AvailabilityDeps = {
@@ -91,7 +94,7 @@ const defaultDeps: AvailabilityDeps = {
   getInviteeCalendarSession: (capability) => dbGetInviteeCalendarSession(capability),
   inviteeCalendarEnabled: async (workspaceId) =>
     (await getPublicWorkspaceEntitlements(workspaceId))?.inviteeCalendarOverlay ?? false,
-  getPublicBookingPage: (workspaceId) => dbGetPublicBookingPage(workspaceId),
+  getPublicBookingPage: (workspaceId, pageSlug) => dbGetPublicBookingPage(workspaceId, pageSlug),
 };
 
 const querySchema = z.object({
@@ -247,7 +250,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     if (!workspaceId || !deps.getPublicBookingPage) {
       return c.json({ error: "booking_page_not_found" }, 404);
     }
-    const page = await deps.getPublicBookingPage(workspaceId);
+    const page = await deps.getPublicBookingPage(workspaceId, c.req.query("pageSlug"));
     return page
       ? c.json(page)
       : c.json({ error: "booking_page_not_found" }, 404);

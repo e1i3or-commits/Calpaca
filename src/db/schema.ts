@@ -285,6 +285,22 @@ export const eventTypes = pgTable("event_types", {
   uniqueIndex("event_type_workspace_slug_uq").on(t.workspaceId, t.slug),
 ]);
 
+export const bookingPages = pgTable("booking_pages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  theme: text("theme").notNull().default("default"),
+  logoUrl: text("logo_url"),
+  eventTypeIds: jsonb("event_type_ids").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("booking_page_workspace_slug_uq").on(t.workspaceId, t.slug),
+]);
+
 export const eventTypeHosts = pgTable("event_type_hosts", {
   eventTypeId: uuid("event_type_id").notNull().references(() => eventTypes.id),
   userId: uuid("user_id").notNull().references(() => users.id),

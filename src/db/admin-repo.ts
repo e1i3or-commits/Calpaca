@@ -2,7 +2,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
 import * as schema from "./schema";
-import { eventTypeHosts, eventTypes, schedules, teamMembers, teams, users } from "./schema";
+import { bookingPages, eventTypeHosts, eventTypes, schedules, teamMembers, teams, users } from "./schema";
 import type { ScheduleOverride } from "../core/availability/overrides";
 import type { BookingQuestion } from "../core/booking/questions";
 import type { EventLocation } from "../core/booking/locations";
@@ -584,4 +584,87 @@ export async function deleteEventType(
     // FK violation from bookings/holds referencing the event type
     return "in_use";
   }
+}
+
+export interface BookingPageRecord {
+  readonly id: string;
+  readonly slug: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly theme: string;
+  readonly logoUrl: string | null;
+  readonly eventTypeIds: string[];
+}
+
+export async function listBookingPages(
+  workspaceId: string,
+  executor: Db = getDb(),
+): Promise<BookingPageRecord[]> {
+  return executor
+    .select({
+      id: bookingPages.id,
+      slug: bookingPages.slug,
+      title: bookingPages.title,
+      description: bookingPages.description,
+      theme: bookingPages.theme,
+      logoUrl: bookingPages.logoUrl,
+      eventTypeIds: bookingPages.eventTypeIds,
+    })
+    .from(bookingPages)
+    .where(eq(bookingPages.workspaceId, workspaceId))
+    .orderBy(bookingPages.title);
+}
+
+export async function saveBookingPage(
+  workspaceId: string,
+  input: Omit<BookingPageRecord, "id">,
+  id?: string,
+  executor: Db = getDb(),
+): Promise<BookingPageRecord | "slug_taken" | "invalid_event_types" | null> {
+  const selected = input.eventTypeIds.length
+    ? await executor
+        .select({ id: eventTypes.id })
+        .from(eventTypes)
+        .where(and(
+          eq(eventTypes.workspaceId, workspaceId),
+          inArray(eventTypes.id, input.eventTypeIds),
+        ))
+    : [];
+  if (selected.length !== new Set(input.eventTypeIds).size) return "invalid_event_types";
+  try {
+    const [row] = id
+      ? await executor
+          .update(bookingPages)
+          .set({ ...input, updatedAt: new Date() })
+          .where(and(eq(bookingPages.id, id), eq(bookingPages.workspaceId, workspaceId)))
+          .returning()
+      : await executor
+          .insert(bookingPages)
+          .values({ ...input, workspaceId })
+          .returning();
+    if (!row) return null;
+    return {
+      id: row.id,
+      slug: row.slug,
+      title: row.title,
+      description: row.description,
+      theme: row.theme,
+      logoUrl: row.logoUrl,
+      eventTypeIds: row.eventTypeIds,
+    };
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") return "slug_taken";
+    throw error;
+  }
+}
+
+export async function deleteBookingPage(
+  workspaceId: string,
+  id: string,
+  executor: Db = getDb(),
+): Promise<boolean> {
+  return (await executor
+    .delete(bookingPages)
+    .where(and(eq(bookingPages.id, id), eq(bookingPages.workspaceId, workspaceId)))
+    .returning({ id: bookingPages.id })).length > 0;
 }
