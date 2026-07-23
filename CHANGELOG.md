@@ -5,6 +5,14 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-07-23
+
+### Added
+
+- One-off offers with curated exact times, optional recipient-email
+  restrictions, expiry and revocation controls, and transaction-safe
+  single-use redemption.
+
 ## [0.15.0] - 2026-07-23
 
 ### Added

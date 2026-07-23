@@ -59,6 +59,10 @@ import {
   positiveIntegerEnv,
 } from "../rate-limit";
 import { publicWorkspaceId } from "../public-workspace";
+import {
+  getOneOffOfferByPublicId as dbGetOneOffOfferByPublicId,
+  type OneOffOffer,
+} from "../../db/one-off-offer-repo";
 
 /** Same "inject repo functions, not module bindings" convention as
  * src/api/routes/availability.ts (task 13), so tests can stub every
@@ -96,7 +100,9 @@ export interface BookingDeps {
     routingAnswers?: RoutingAnswers,
     meeting?: MeetingDetails,
     bookingAnswers?: BookingAnswers,
+    offerPublicId?: string,
   ) => Promise<Result<ConfirmedBooking, ConfirmHoldError>>;
+  readonly getOneOffOfferByPublicId?: (publicId: string) => Promise<OneOffOffer | null>;
   readonly confirmReschedule: (
     bookingId: string,
     holdIds: readonly string[],
@@ -140,8 +146,18 @@ const defaultDeps: BookingDeps = {
   getCapacityAwareBusyForUsers: (userIds, window, eventTypeId, capacity) =>
     dbGetCapacityAwareBusyForUsers(userIds, window, eventTypeId, capacity),
   createHold: (eventTypeId, hostUserIds, slot, ttl) => dbCreateHold(eventTypeId, hostUserIds, slot, ttl),
-  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting, bookingAnswers) =>
-    dbConfirmHold(holdIds, invitee, undefined, assignment, routingAnswers, meeting, bookingAnswers),
+  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting, bookingAnswers, offerPublicId) =>
+    dbConfirmHold(
+      holdIds,
+      invitee,
+      undefined,
+      assignment,
+      routingAnswers,
+      meeting,
+      bookingAnswers,
+      offerPublicId,
+    ),
+  getOneOffOfferByPublicId: (publicId) => dbGetOneOffOfferByPublicId(publicId),
   confirmReschedule: (bookingId, holdIds) => dbConfirmReschedule(bookingId, holdIds),
   cancelBooking: async (bookingId, reason) => {
     const result = await appendEvent(bookingId, "cancelled", { reason });
@@ -172,6 +188,7 @@ const holdBodySchema = z.object({
   end: z.string().min(1),
   hosts: z.array(z.string().min(1)).optional(),
   optionalHosts: z.array(z.string().min(1)).optional(),
+  offerPublicId: z.string().min(1).optional(),
   agent: z.literal(true).optional(),
 });
 
@@ -192,6 +209,7 @@ const bookingBodySchema = z.object({
   }),
   meetingFormat: z.enum(["phone", "google_meet"]).optional(),
   locationId: z.string().min(1).max(80).optional(),
+  offerPublicId: z.string().min(1).optional(),
   inviteePhone: z.string().trim().min(7).max(40).optional(),
   // present when the booking came through a routing form (/routing/evaluate)
   routingAnswers: z
@@ -393,6 +411,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       hosts: requestedHosts,
       optionalHosts: requestedOptionalHosts,
       agent,
+      offerPublicId,
     } = parsed.data;
 
     const slot = parseSlot(start, end);
@@ -408,6 +427,18 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
     if (agent && !eventType.agentPolicy?.enabled) {
       return c.json({ error: "agent_not_allowed" }, 403);
+    }
+    if (offerPublicId && deps.getOneOffOfferByPublicId) {
+      const offer = await deps.getOneOffOfferByPublicId(offerPublicId);
+      const allowed = offer
+        && offer.status === "active"
+        && offer.eventTypeId === eventType.id
+        && offer.expiresAt > new Date()
+        && offer.slots.some((candidate) =>
+          Temporal.Instant.compare(Temporal.Instant.from(candidate.start), slot.start) === 0
+          && Temporal.Instant.compare(Temporal.Instant.from(candidate.end), slot.end) === 0
+        );
+      if (!allowed) return c.json({ error: "offer_unavailable" }, 409);
     }
 
     const now = deps.now();
@@ -621,6 +652,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
         ...(inviteePhone ? { phone: inviteePhone } : {}),
       },
       validatedAnswers.answers,
+      parsed.data.offerPublicId,
     );
     if (!confirmed.ok) {
       return c.json({ error: confirmed.error.kind }, confirmHoldErrorStatus(confirmed.error.kind));

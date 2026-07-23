@@ -157,6 +157,48 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("holds-repo", () => {
     }
   });
 
+  test("a one-off offer can be redeemed by only one concurrent confirmation", async () => {
+    const { pool, db, eventType, host1 } = await setup();
+    try {
+      await db.update(schema.eventTypes).set({ capacity: 2 })
+        .where(eq(schema.eventTypes.id, eventType.id));
+      const [first, second] = await Promise.all([
+        createHold(eventType.id, [host1.id], slot, ttl, db),
+        createHold(eventType.id, [host1.id], slot, ttl, db),
+      ]);
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+      if (!first.ok || !second.ok) return;
+
+      const publicId = "single-use-test";
+      await db.insert(schema.oneOffOffers).values({
+        publicId,
+        workspaceId: eventType.workspaceId,
+        ownerUserId: host1.id,
+        eventTypeId: eventType.id,
+        title: "Reserved time",
+        slots: [{ start: slot.start.toString(), end: slot.end.toString() }],
+        expiresAt: new Date("2028-01-01T00:00:00Z"),
+      });
+
+      const results = await Promise.all([
+        confirmHold(first.value.map((hold) => hold.id), invitee, db, undefined, undefined, undefined, undefined, publicId),
+        confirmHold(second.value.map((hold) => hold.id), { ...invitee, email: "other@example.com" }, db, undefined, undefined, undefined, undefined, publicId),
+      ]);
+      expect(results.filter((result) => result.ok)).toHaveLength(1);
+      expect(results.filter((result) => !result.ok)).toEqual([
+        { ok: false, error: { kind: "offer_unavailable" } },
+      ]);
+
+      const [offer] = await db.select().from(schema.oneOffOffers)
+        .where(eq(schema.oneOffOffers.publicId, publicId));
+      expect(offer?.status).toBe("booked");
+      expect(offer?.bookingId).not.toBeNull();
+    } finally {
+      await pool.end();
+    }
+  });
+
   test("group hold rollback when one host is contended", async () => {
     const { pool, db, eventType, host1, host2 } = await setup();
 

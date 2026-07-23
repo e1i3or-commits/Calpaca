@@ -17,6 +17,7 @@ import { SignInPage } from "@/pages/sign-in-page";
 import { PollPage } from "@/pages/poll-page";
 import { SignupSheetPage } from "@/pages/signup-sheet-page";
 import { PublicBookingPage } from "@/pages/public-booking-page";
+import { OneOffOfferPage } from "@/pages/one-off-offer-page";
 import type { RoutingAnswers } from "@/lib/api";
 import { BrandMark } from "@/components/brand-mark";
 import { initializeAppearance } from "@/lib/appearance";
@@ -246,6 +247,14 @@ const pollRoute = createRoute({
   },
 });
 
+const oneOffOfferRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/offer/$publicId",
+  component: function OneOffOfferRoute() {
+    return <OneOffOfferPage publicId={oneOffOfferRoute.useParams().publicId} />;
+  },
+});
+
 const signupSheetRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/signup/$publicId",
@@ -283,6 +292,7 @@ const router = createRouter({
     cancelRoute,
     signInRoute,
     pollRoute,
+    oneOffOfferRoute,
     signupSheetRoute,
     signupCancelRoute,
     dashboardRoute,

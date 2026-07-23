@@ -14,6 +14,7 @@ import {
   Home,
   KeyRound,
   ListChecks,
+  Link2,
   LogOut,
   Menu,
   Moon,
@@ -42,6 +43,7 @@ import {
   createApiToken,
   createRoutingForm,
   createMeetingPoll,
+  createOneOffOffer,
   createSignupSheet,
   createSchedule,
   createTeam,
@@ -65,6 +67,7 @@ import {
   listPresentationOptions,
   listRoutingForms,
   listMeetingPolls,
+  listOneOffOffers,
   listSignupSheets,
   listSchedules,
   listTeamMembers,
@@ -74,6 +77,7 @@ import {
   removePollInvite,
   revokeUserInvitation,
   revokeApiToken,
+  revokeOneOffOffer,
   removeWorkspaceDomain,
   resendPollFinalization,
   resendPollInvitation,
@@ -122,6 +126,7 @@ import {
   type WorkspaceContext,
   type WorkspaceDomain,
   type MeetingPoll,
+  type OneOffOffer,
   type SignupSheet,
 } from "@/lib/api";
 import { themeOptions } from "@/lib/theme";
@@ -147,6 +152,7 @@ const TABS = [
   { key: "routing", label: "Routing", icon: Route, group: "setup" },
   { key: "team", label: "People & teams", icon: Users, group: "setup" },
   { key: "calendars", label: "Calendars", icon: Calendar, group: "setup" },
+  { key: "one-off", label: "One-off offers", icon: Link2, group: "setup" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -289,6 +295,7 @@ export function DashboardPage() {
               {tab === "routing" && <RoutingTab users={users} />}
               {tab === "team" && <TeamTab users={users} />}
               {tab === "calendars" && <CalendarsTab />}
+              {tab === "one-off" && <OneOffOffersTab />}
             </>
           )}
         </div>
@@ -377,6 +384,7 @@ const PAGE_COPY: Record<TabKey, { title: string; description: string }> = {
   routing: { title: "Routing", description: "Send each invitee to the right conversation." },
   team: { title: "People & teams", description: "Hosts, membership, and shared scheduling." },
   calendars: { title: "Calendars", description: "Where Calpaca checks conflicts and writes events." },
+  "one-off": { title: "One-off offers", description: "Send a private, single-use choice of exact times." },
 };
 
 function PageHeading({ tab, onNavigate }: { tab: TabKey; onNavigate: (tab: TabKey) => void }) {
@@ -1276,6 +1284,170 @@ function SignupSheetsTab() {
           </CardContent>
         </Card>
       ))}
+    </div>
+  );
+}
+
+function localInputValue(date: Date): string {
+  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return shifted.toISOString().slice(0, 16);
+}
+
+function OneOffOffersTab() {
+  const [offers, setOffers] = useState<OneOffOffer[]>([]);
+  const [eventTypes, setEventTypes] = useState<AdminEventType[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [eventTypeId, setEventTypeId] = useState("");
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [duration, setDuration] = useState(30);
+  const [starts, setStarts] = useState([localInputValue(new Date(Date.now() + 86_400_000))]);
+  const [expiresAt, setExpiresAt] = useState(localInputValue(new Date(Date.now() + 7 * 86_400_000)));
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const reload = useCallback(() => {
+    listOneOffOffers().then((result) => setOffers(result.offers)).catch((e) => setError(errorText(e)));
+  }, []);
+
+  useEffect(() => {
+    reload();
+    listEventTypes().then(({ eventTypes: items }) => {
+      setEventTypes(items);
+      if (items[0]) {
+        setEventTypeId(items[0].id);
+        setDuration(items[0].durationMinutes);
+      }
+    }).catch((e) => setError(errorText(e)));
+  }, [reload]);
+
+  const selectEventType = (id: string) => {
+    setEventTypeId(id);
+    const eventType = eventTypes.find((item) => item.id === id);
+    if (eventType) setDuration(eventType.durationMinutes);
+  };
+
+  const save = async () => {
+    setError(null);
+    try {
+      await createOneOffOffer({
+        eventTypeId,
+        title,
+        message: message.trim() || null,
+        recipientEmail: recipientEmail.trim() || null,
+        slots: starts.map((start) => {
+          const begins = new Date(start);
+          return {
+            start: begins.toISOString(),
+            end: new Date(begins.getTime() + duration * 60_000).toISOString(),
+          };
+        }),
+        expiresAt: new Date(expiresAt).toISOString(),
+      });
+      setCreating(false);
+      setTitle("");
+      setMessage("");
+      setRecipientEmail("");
+      reload();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex justify-end">
+        <Button onClick={() => setCreating((value) => !value)}>
+          <Plus className="h-4 w-4" /> New offer
+        </Button>
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {creating && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Create a single-use offer</CardTitle>
+            <CardDescription>The first completed booking uses the link. Every other attempt is blocked.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="offer-event">Event type</Label>
+              <select id="offer-event" className="h-10 rounded-lg border border-input bg-background px-3 text-sm" value={eventTypeId} onChange={(event) => selectEventType(event.target.value)}>
+                {eventTypes.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+              </select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="offer-title">Offer title</Label>
+              <Input id="offer-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="A time reserved for you" />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="offer-message">Message (optional)</Label>
+              <Textarea id="offer-message" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Choose whichever time works best." />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="offer-recipient">Restrict to email (optional)</Label>
+              <Input id="offer-recipient" type="email" value={recipientEmail} onChange={(event) => setRecipientEmail(event.target.value)} placeholder="person@example.com" />
+            </div>
+            <div>
+              <Label>Meeting duration</Label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(eventTypes.find((item) => item.id === eventTypeId)?.selectableDurations ?? [eventTypes.find((item) => item.id === eventTypeId)?.durationMinutes ?? 30]).map((minutes) => (
+                  <Button key={minutes} type="button" size="sm" variant={duration === minutes ? "default" : "outline"} onClick={() => setDuration(minutes)}>
+                    {minutes} min
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-3">
+              <Label>Times</Label>
+              {starts.map((start, index) => (
+                <div key={index} className="flex gap-2">
+                  <Input type="datetime-local" step={900} value={start} onChange={(event) => setStarts((items) => items.map((item, i) => i === index ? event.target.value : item))} />
+                  {starts.length > 1 && <Button type="button" size="sm" className="h-10 w-10 px-0" variant="ghost" aria-label="Remove time" onClick={() => setStarts((items) => items.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button>}
+                </div>
+              ))}
+              <Button type="button" variant="outline" className="justify-self-start" onClick={() => setStarts((items) => [...items, localInputValue(new Date(Date.now() + (items.length + 1) * 86_400_000))])}>
+                <Plus className="h-4 w-4" /> Add time
+              </Button>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="offer-expiry">Link expires</Label>
+              <Input id="offer-expiry" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
+            </div>
+            <div className="flex gap-2">
+              <Button disabled={!eventTypeId || !title.trim() || starts.some((start) => !start)} onClick={() => void save()}>Create offer</Button>
+              <Button variant="ghost" onClick={() => setCreating(false)}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {offers.map((offer) => (
+        <Card key={offer.id}>
+          <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="font-medium">{offer.title}</p>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-muted-foreground">{offer.status}</span>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">{offer.eventTypeTitle} · {offer.slots.length} {offer.slots.length === 1 ? "time" : "times"}</p>
+              <p className="text-xs text-muted-foreground">Expires {new Date(offer.expiresAt).toLocaleString()}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => {
+                const url = `${window.location.origin}/offer/${offer.publicId}`;
+                void navigator.clipboard.writeText(url).then(() => {
+                  setCopied(offer.id);
+                  setTimeout(() => setCopied(null), 1500);
+                });
+              }}>
+                <Copy className="h-4 w-4" /> {copied === offer.id ? "Copied" : "Copy link"}
+              </Button>
+              {offer.status === "active" && <Button variant="ghost" size="sm" onClick={() => void revokeOneOffOffer(offer.id).then(reload).catch((e) => setError(errorText(e)))}>Revoke</Button>}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+      {!creating && offers.length === 0 && <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No one-off offers yet.</p>}
     </div>
   );
 }

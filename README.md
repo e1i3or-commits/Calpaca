@@ -37,6 +37,8 @@ release notes live in [CHANGELOG.md](CHANGELOG.md), and releases are tagged
   choices with team-host overrides.
 - **Flexible booking pages:** let invitees choose a meeting duration or browse
   selected event types from custom themed workspace catalogues.
+- **One-off offers:** share exact times through a private link that expires
+  after its first completed booking.
 - **Adaptable organizer UI:** mobile navigation, persistent dark mode, and a
   collapsible desktop sidebar.
 - **Date-aware availability:** recurring hours, alternate-date hours, time-off

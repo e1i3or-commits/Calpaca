@@ -52,6 +52,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_slots: "Choose future times and try again.",
   rate_limited: "Too many suggestions were sent. Please wait a minute and try again.",
   invalid_booking_answers: "Check the booking questions and try again.",
+  offer_unavailable: "This offer was already used or is no longer available.",
 };
 
 export function errorMessage(e: unknown): string {
@@ -63,11 +64,21 @@ export function BookingPage({
   slug,
   workspaceSlug,
   routingAnswers,
+  offeredSlots,
+  offerPublicId,
+  offerTitle,
+  offerMessage,
+  recipientRestricted = false,
 }: {
   slug: string;
   workspaceSlug?: string;
   /** present when the invitee arrived via a routing form (/r/<form>) */
   routingAnswers?: RoutingAnswers;
+  offeredSlots?: { start: string; end: string }[];
+  offerPublicId?: string;
+  offerTitle?: string;
+  offerMessage?: string | null;
+  recipientRestricted?: boolean;
 }) {
   const [timezone, setTimezone] = useState(browserTimezone());
   const [step, setStep] = useState<Step>({ name: "pick" });
@@ -174,10 +185,15 @@ export function BookingPage({
             <img src={meta.logoUrl} alt="" className="mb-3 max-h-9 max-w-44 object-contain object-left" />
           )}
           {meta?.profile && <ProfileHeader profile={meta.profile} />}
-          <CardTitle className="text-xl">{meta?.title ?? slug.replace(/-/g, " ")}</CardTitle>
-          {meta?.description && (
+          <CardTitle className="text-xl">{offerTitle ?? meta?.title ?? slug.replace(/-/g, " ")}</CardTitle>
+          {(offerMessage ?? meta?.description) && (
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-              {meta.description}
+              {offerMessage ?? meta?.description}
+            </p>
+          )}
+          {recipientRestricted && (
+            <p className="text-xs text-muted-foreground">
+              This private offer can only be booked with the intended recipient's email.
             </p>
           )}
           <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -295,7 +311,30 @@ export function BookingPage({
                   </span>
                 )}
               </div>}
-              {!meta?.selectableHosts || selectedHostIds.length > 0 ? (
+              {offeredSlots ? (
+                <div className="grid gap-2">
+                  <p className="text-sm font-medium">Choose one of these offered times</p>
+                  {offeredSlots.map((slot) => (
+                    <Button
+                      key={slot.start}
+                      type="button"
+                      variant="outline"
+                      className="h-auto justify-start px-4 py-3 text-left"
+                      onClick={() => setStep({
+                        name: "details",
+                        slot: {
+                          start: { utc: slot.start, invitee: slot.start },
+                          end: { utc: slot.end, invitee: slot.end },
+                          score: 0,
+                          localHourWarning: false,
+                        },
+                      })}
+                    >
+                      {formatDayTime(slot.start, timezone)} – {formatTime(slot.end, timezone)}
+                    </Button>
+                  ))}
+                </div>
+              ) : !meta?.selectableHosts || selectedHostIds.length > 0 ? (
                 <SlotPicker
                   slug={slug}
                   workspaceSlug={workspaceSlug}
@@ -329,7 +368,7 @@ export function BookingPage({
                   Choose at least one person to see available times.
                 </p>
               )}
-              <button
+              {!offeredSlots && <button
                 type="button"
                 className="self-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
                 onClick={() => {
@@ -338,7 +377,7 @@ export function BookingPage({
                 }}
               >
                 None of these work? Suggest a time.
-              </button>
+              </button>}
             </div>
           )}
 
@@ -368,6 +407,7 @@ export function BookingPage({
                   ? { id: "phone", type: "phone" as const, label: "Phone call", phoneDirection: "organizer_calls_invitee" as const }
                   : { id: "google-meet", type: "google_meet" as const, label: "Google Meet" })}
               bookingQuestions={meta?.bookingQuestions ?? []}
+              offerPublicId={offerPublicId}
               onBack={() => setStep({ name: "pick" })}
               onError={(e) => {
                 setError(errorMessage(e));
@@ -669,6 +709,7 @@ function DetailsStep({
   meetingFormats,
   locations,
   bookingQuestions,
+  offerPublicId,
   onBack,
   onError,
   onConfirmed,
@@ -683,6 +724,7 @@ function DetailsStep({
   meetingFormats: ("phone" | "google_meet")[];
   locations: EventLocation[];
   bookingQuestions: BookingQuestion[];
+  offerPublicId?: string;
   onBack: () => void;
   onError: (e: unknown) => void;
   onConfirmed: (confirmation: BookingConfirmation) => void;
@@ -717,6 +759,7 @@ function DetailsStep({
         end: slot.end.utc,
         hosts,
         optionalHosts,
+        offerPublicId,
       });
       const confirmation = await confirmBooking({
         eventTypeSlug: slug,
@@ -729,6 +772,7 @@ function DetailsStep({
         locationId: selectedLocation?.id,
         ...(selectedLocation?.type === "phone" && phone.trim() ? { inviteePhone: phone.trim() } : {}),
         bookingAnswers,
+        offerPublicId,
       });
       onConfirmed(confirmation);
     } catch (e) {

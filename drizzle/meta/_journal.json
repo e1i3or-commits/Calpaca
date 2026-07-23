@@ -288,6 +288,13 @@
       "when": 1784842842851,
       "tag": "0040_orange_post",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1784844746658,
+      "tag": "0041_slim_vulture",
+      "breakpoints": true
     }
   ]
 }

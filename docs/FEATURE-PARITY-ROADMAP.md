@@ -97,7 +97,7 @@ Sources:
 | Meeting polls | Shipped | Doodle/Calendly coordination parity |
 | Capacity/group attendee events | v1 shipped | Shared solo-host sessions; waitlists remain |
 | Sign-up sheets/session enrollment | Shipped | Fixed sessions with enrollment administration |
-| One-off and single-use links | Missing | Common convenience gap |
+| One-off and single-use links | Shipped | Curated exact-time offers with atomic redemption |
 | Recurring series | Missing | Common service/education gap |
 | Date overrides and explicit OOO | Shipped | Alternate hours, ranges, and teammate forwarding |
 | Microsoft/CalDAV calendars | Missing | Major adoption gap |
@@ -155,7 +155,7 @@ features matter.
 | Custom booking questions | Shipped | Text, textarea, select, multiselect, phone, checkbox; required/hidden |
 | Locations | Shipped | In-person, phone, custom URL, Google Meet; per-host override |
 | Multiple selectable durations | Shipped | Buffers, caps, holds, scoring, and rescheduling follow the selected duration |
-| One-off offers and single-use links | M | Curated slots, optional reservation holds, viewed/booked/expired state |
+| One-off offers and single-use links | Shipped | Curated slots, recipient restriction, revoke/expire/booked state |
 | Availability troubleshooter | M | Explain why a time is unavailable without exposing private events |
 | Email verification and abuse controls | S–M | Optional OTP for public bookings; retain rate limiting |
 

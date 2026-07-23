@@ -349,6 +349,25 @@ export const bookings = pgTable("bookings", {
   googleEventId: text("google_event_id"),
 }, (t) => [index("bookings_time_idx").on(t.startsAt)]);
 
+export const oneOffOffers = pgTable("one_off_offers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  publicId: text("public_id").notNull().unique(),
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
+  eventTypeId: uuid("event_type_id").notNull().references(() => eventTypes.id),
+  title: text("title").notNull(),
+  message: text("message"),
+  recipientEmail: text("recipient_email"),
+  slots: jsonb("slots").$type<{ start: string; end: string }[]>().notNull(),
+  status: text("status").notNull().default("active"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  bookingId: uuid("booking_id").references(() => bookings.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("one_off_offer_workspace_idx").on(t.workspaceId, t.createdAt),
+]);
+
 export const bookingEvents = pgTable("booking_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   bookingId: uuid("booking_id").notNull().references(() => bookings.id),

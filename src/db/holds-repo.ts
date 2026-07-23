@@ -2,7 +2,7 @@ import { and, count, eq, gt, inArray, lte } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
-import { bookings, eventTypes, holds } from "./schema";
+import { bookings, eventTypes, holds, oneOffOffers } from "./schema";
 import * as schema from "./schema";
 import { ok, err, type Result } from "../lib/result";
 import { generateToken } from "../lib/id";
@@ -53,7 +53,8 @@ export interface MeetingDetails {
 export type ConfirmHoldError =
   | { readonly kind: "not_found" }
   | { readonly kind: "expired" }
-  | { readonly kind: "not_active" };
+  | { readonly kind: "not_active" }
+  | { readonly kind: "offer_unavailable" };
 
 export interface ConfirmedBooking {
   readonly bookingId: string;
@@ -174,6 +175,7 @@ export async function confirmHold(
   routingAnswers?: RoutingAnswers,
   meeting?: MeetingDetails,
   bookingAnswers?: BookingAnswers,
+  offerPublicId?: string,
 ): Promise<Result<ConfirmedBooking, ConfirmHoldError>> {
   return executor.transaction(async (tx) => {
     const rows = await tx
@@ -200,6 +202,27 @@ export async function confirmHold(
 
     const startsAt = toInstant(first.slotStart);
     const endsAt = toInstant(first.slotEnd);
+    let offerId: string | undefined;
+    if (offerPublicId) {
+      const [offer] = await tx.select()
+        .from(oneOffOffers)
+        .where(eq(oneOffOffers.publicId, offerPublicId))
+        .for("update");
+      const matchesSlot = offer?.slots.some((slot) =>
+        Temporal.Instant.compare(Temporal.Instant.from(slot.start), startsAt) === 0
+        && Temporal.Instant.compare(Temporal.Instant.from(slot.end), endsAt) === 0
+      );
+      if (
+        !offer
+        || offer.status !== "active"
+        || offer.expiresAt <= new Date()
+        || offer.eventTypeId !== first.eventTypeId
+        || (offer.recipientEmail !== null
+          && offer.recipientEmail.toLowerCase() !== invitee.email.toLowerCase())
+        || !matchesSlot
+      ) return err({ kind: "offer_unavailable" });
+      offerId = offer.id;
+    }
     const [eventType] = await tx
       .select({ workspaceId: eventTypes.workspaceId })
       .from(eventTypes)
@@ -276,6 +299,11 @@ export async function confirmHold(
     if (!created.ok) throw new Error(`failed to append created event: ${created.error.reason}`);
 
     await tx.update(holds).set({ status: "confirmed" }).where(inArray(holds.id, holdIdsToConfirm));
+    if (offerId) {
+      await tx.update(oneOffOffers)
+        .set({ status: "booked", bookingId: booking.id })
+        .where(eq(oneOffOffers.id, offerId));
+    }
 
     return ok({ bookingId: booking.id, hostUserIds });
   });

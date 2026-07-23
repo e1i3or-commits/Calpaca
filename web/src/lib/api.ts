@@ -527,6 +527,7 @@ export function createHold(args: {
   end: string;
   hosts?: string[];
   optionalHosts?: string[];
+  offerPublicId?: string;
 }): Promise<HoldResponse> {
   return request("/holds", { method: "POST", body: JSON.stringify(args) });
 }
@@ -542,6 +543,7 @@ export function confirmBooking(args: {
   inviteePhone?: string;
   locationId?: string;
   bookingAnswers?: BookingAnswers;
+  offerPublicId?: string;
 }): Promise<BookingConfirmation> {
   return request("/bookings", { method: "POST", body: JSON.stringify(args) });
 }
@@ -967,6 +969,55 @@ export function updateBookingPage(id: string, input: BookingPageInput): Promise<
 
 export function deleteBookingPage(id: string): Promise<{ ok: true }> {
   return request(`/api/me/booking-pages/${id}`, { method: "DELETE" });
+}
+
+export type OneOffOffer = {
+  id: string;
+  publicId: string;
+  workspaceSlug: string;
+  eventTypeId: string;
+  eventTypeSlug: string;
+  eventTypeTitle: string;
+  title: string;
+  message: string | null;
+  recipientEmail: string | null;
+  slots: { start: string; end: string }[];
+  status: "active" | "booked" | "revoked" | "expired";
+  expiresAt: string;
+  bookingId: string | null;
+  createdAt: string;
+};
+
+export type OneOffOfferInput = {
+  eventTypeId: string;
+  title: string;
+  message: string | null;
+  recipientEmail: string | null;
+  slots: { start: string; end: string }[];
+  expiresAt: string;
+};
+
+export function listOneOffOffers(): Promise<{ offers: OneOffOffer[] }> {
+  return request("/api/me/one-off-offers");
+}
+
+export function createOneOffOffer(input: OneOffOfferInput): Promise<OneOffOffer> {
+  return request("/api/me/one-off-offers", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function revokeOneOffOffer(id: string): Promise<{ ok: true }> {
+  return request(`/api/me/one-off-offers/${id}`, { method: "DELETE" });
+}
+
+export type PublicOneOffOffer = Omit<
+  OneOffOffer,
+  "id" | "eventTypeId" | "bookingId" | "createdAt" | "recipientEmail"
+> & {
+  recipientRestricted: boolean;
+};
+
+export function getOneOffOffer(publicId: string): Promise<PublicOneOffOffer> {
+  return request(`/offers/${encodeURIComponent(publicId)}`);
 }
 
 // ---- organizer bookings ----
