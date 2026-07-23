@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../db/client";
 import * as schema from "../db/schema";
+import { resolveWorkspaceByHostname } from "../db/workspace-repo";
 
 // Calendar scopes ride the sign-in flow (ARCHITECTURE.md: no separate
 // connect step). readonly covers busy reads; events covers writing the
@@ -12,10 +13,37 @@ const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
 ];
 
+export async function trustedAuthOrigins(
+  request?: Request,
+  resolveHostname: (hostname: string) => Promise<string | null> = resolveWorkspaceByHostname,
+): Promise<string[]> {
+  const configured = [
+    process.env.BETTER_AUTH_URL,
+    process.env.PUBLIC_URL,
+    ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? []),
+  ].flatMap((value) => value?.trim() ? [value.trim()] : []);
+  const origin = request?.headers.get("origin");
+  if (!origin) return [...new Set(configured)];
+
+  try {
+    const parsed = new URL(origin);
+    if (
+      (parsed.protocol === "https:" || parsed.hostname === "localhost")
+      && await resolveHostname(parsed.hostname)
+    ) {
+      configured.push(parsed.origin);
+    }
+  } catch {
+    // An invalid Origin is intentionally absent from the trusted set.
+  }
+  return [...new Set(configured)];
+}
+
 function buildAuth() {
   return betterAuth({
     baseURL: process.env.BETTER_AUTH_URL,
     secret: process.env.BETTER_AUTH_SECRET,
+    trustedOrigins: trustedAuthOrigins,
     database: drizzleAdapter(getDb(), {
       provider: "pg",
       schema,
