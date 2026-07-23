@@ -25,6 +25,32 @@ export type AvailabilityResponse = {
   inviteeCalendar?: { connected: true; expiresAt: string };
 };
 
+export type PollChoice = "yes" | "if_needed" | "no";
+export type MeetingPoll = {
+  id: string;
+  publicId: string;
+  title: string;
+  description: string | null;
+  timezone: string;
+  status: string;
+  finalizedOptionId: string | null;
+  participantCount: number;
+  options: {
+    id: string;
+    start: string;
+    end: string;
+    yes: number;
+    ifNeeded: number;
+    no: number;
+    rank: number;
+  }[];
+  responses?: {
+    name: string;
+    email: string;
+    votes: { optionId: string; choice: PollChoice }[];
+  }[];
+};
+
 export type EventTypeProfile = {
   teamName: string | null;
   hosts: { name: string; image: string | null }[];
@@ -169,6 +195,52 @@ export function disconnectInviteeCalendar(capability: string): Promise<{ connect
       "content-type": "application/json",
       "x-calpaca-invitee-calendar": capability,
     },
+  });
+}
+
+export function listMeetingPolls(): Promise<{ polls: MeetingPoll[] }> {
+  return request("/api/me/polls");
+}
+
+export function createMeetingPoll(input: {
+  title: string;
+  description?: string;
+  timezone: string;
+  options: { start: string; end: string }[];
+}): Promise<MeetingPoll> {
+  return request("/api/me/polls", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function finalizeMeetingPoll(id: string, optionId: string): Promise<MeetingPoll> {
+  return request(`/api/me/polls/${id}/finalize`, {
+    method: "POST",
+    body: JSON.stringify({ optionId }),
+  });
+}
+
+export function getPublicMeetingPoll(publicId: string): Promise<MeetingPoll> {
+  return request(`/polls/${encodeURIComponent(publicId)}`);
+}
+
+export function getMeetingPollResponse(publicId: string, token: string): Promise<{
+  name: string;
+  email: string;
+  votes: { optionId: string; choice: PollChoice }[];
+}> {
+  return request(`/polls/${encodeURIComponent(publicId)}/response?token=${encodeURIComponent(token)}`);
+}
+
+export function saveMeetingPollVotes(input: {
+  publicId: string;
+  name: string;
+  email: string;
+  editToken?: string;
+  votes: { optionId: string; choice: PollChoice }[];
+}): Promise<{ editToken: string }> {
+  const { publicId, ...body } = input;
+  return request(`/polls/${encodeURIComponent(publicId)}/votes`, {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 }
 

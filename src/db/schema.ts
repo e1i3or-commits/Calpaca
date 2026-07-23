@@ -397,3 +397,53 @@ export const timeSuggestions = pgTable("time_suggestions", {
   message: text("message"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const meetingPolls = pgTable("meeting_polls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: uuid("owner_user_id").notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  publicId: text("public_id").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description"),
+  timezone: text("timezone").notNull(),
+  status: text("status").notNull().default("open"),
+  finalizedOptionId: uuid("finalized_option_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("meeting_poll_workspace_idx").on(t.workspaceId, t.createdAt),
+]);
+
+export const meetingPollOptions = pgTable("meeting_poll_options", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  pollId: uuid("poll_id").notNull()
+    .references(() => meetingPolls.id, { onDelete: "cascade" }),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+}, (t) => [index("meeting_poll_option_poll_idx").on(t.pollId)]);
+
+export const meetingPollParticipants = pgTable("meeting_poll_participants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  pollId: uuid("poll_id").notNull()
+    .references(() => meetingPolls.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  editTokenHash: text("edit_token_hash").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("meeting_poll_participant_email_uq").on(t.pollId, t.email),
+]);
+
+export const meetingPollVotes = pgTable("meeting_poll_votes", {
+  participantId: uuid("participant_id").notNull()
+    .references(() => meetingPollParticipants.id, { onDelete: "cascade" }),
+  optionId: uuid("option_id").notNull()
+    .references(() => meetingPollOptions.id, { onDelete: "cascade" }),
+  choice: text("choice").notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.participantId, t.optionId] }),
+  index("meeting_poll_vote_option_idx").on(t.optionId),
+]);

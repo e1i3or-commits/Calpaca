@@ -15,6 +15,7 @@ import { userManagementRoutes } from "./routes/user-management";
 import { workspaceRoutes } from "./routes/workspace";
 import { inviteeCalendarRoutes } from "./routes/invitee-calendar";
 import { requestHostname } from "./public-workspace";
+import { pollRoutes } from "./routes/polls";
 
 export const app = new Hono();
 
@@ -55,3 +56,4 @@ app.route("/", suggestionRoutes);
 app.route("/", userManagementRoutes);
 app.route("/", workspaceRoutes);
 app.route("/", inviteeCalendarRoutes);
+app.route("/", pollRoutes);

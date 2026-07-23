@@ -11,6 +11,7 @@ import {
   Download,
   Home,
   KeyRound,
+  ListChecks,
   LogOut,
   Menu,
   Pencil,
@@ -31,6 +32,7 @@ import {
   createEventType,
   createApiToken,
   createRoutingForm,
+  createMeetingPoll,
   createSchedule,
   createTeam,
   deleteEventType,
@@ -50,6 +52,7 @@ import {
   listEventTypes,
   listPresentationOptions,
   listRoutingForms,
+  listMeetingPolls,
   listSchedules,
   listTeamMembers,
   listTeams,
@@ -59,6 +62,7 @@ import {
   revokeApiToken,
   removeWorkspaceDomain,
   markBookingNoShow,
+  finalizeMeetingPoll,
   signOut,
   updateEventType,
   updateManagedUser,
@@ -94,6 +98,7 @@ import {
   type UserProfile,
   type WorkspaceContext,
   type WorkspaceDomain,
+  type MeetingPoll,
 } from "@/lib/api";
 import { themeOptions } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
@@ -109,6 +114,7 @@ const TABS = [
   { key: "home", label: "Home", icon: Home, group: "primary" },
   { key: "event-types", label: "Scheduling", icon: CalendarDays, group: "primary" },
   { key: "bookings", label: "Bookings", icon: CalendarRange, group: "primary" },
+  { key: "polls", label: "Polls", icon: ListChecks, group: "primary" },
   { key: "analytics", label: "Analytics", icon: ChartNoAxesCombined, group: "primary" },
   { key: "profile", label: "Profile & API", icon: UserRound, group: "setup" },
   { key: "schedules", label: "Availability", icon: Clock3, group: "setup" },
@@ -206,6 +212,7 @@ export function DashboardPage() {
               {tab === "home" && <HomeTab onNavigate={setTab} />}
               {tab === "event-types" && <EventTypesTab users={users} />}
               {tab === "bookings" && <BookingsTab users={users} />}
+              {tab === "polls" && <PollsTab />}
               {tab === "analytics" && <AnalyticsTab />}
               {tab === "profile" && <ProfileTab />}
               {tab === "schedules" && <SchedulesTab />}
@@ -217,12 +224,13 @@ export function DashboardPage() {
         </div>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border/70 bg-card/95 px-2 pb-[max(.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden" aria-label="Primary">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border/70 bg-card/95 px-2 pb-[max(.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden" aria-label="Primary">
         {[
           TABS[0],
           TABS[1],
           TABS[2],
           TABS[3],
+          TABS[4],
         ].map((item) => {
           const active = item.key === tab;
           return (
@@ -280,6 +288,7 @@ const PAGE_COPY: Record<TabKey, { title: string; description: string }> = {
   home: { title: "Good day", description: "A focused view of what needs your attention." },
   "event-types": { title: "Scheduling", description: "Booking links and the people behind them." },
   bookings: { title: "Bookings", description: "Upcoming conversations and recent history." },
+  polls: { title: "Meeting polls", description: "Find the time that works best for a group." },
   analytics: { title: "Analytics", description: "A clear view of volume, outcomes, and team balance." },
   profile: { title: "Profile & API", description: "Your public identity and personal integration tokens." },
   schedules: { title: "Availability", description: "The recurring hours your booking links can offer." },
@@ -877,6 +886,134 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
       <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{title}</h3>
       {children}
     </section>
+  );
+}
+
+function PollsTab() {
+  const [polls, setPolls] = useState<MeetingPoll[] | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [options, setOptions] = useState([{ start: "", end: "" }, { start: "", end: "" }]);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(() => {
+    setPolls(null);
+    void listMeetingPolls().then((result) => setPolls(result.polls))
+      .catch((cause: unknown) => setError(errorText(cause)));
+  }, []);
+  useEffect(() => reload(), [reload]);
+
+  const create = async () => {
+    setError(null);
+    try {
+      await createMeetingPoll({
+        title,
+        description: description.trim() || undefined,
+        timezone: viewerTimezone(),
+        options: options.map((option) => ({
+          start: new Date(option.start).toISOString(),
+          end: new Date(option.end).toISOString(),
+        })),
+      });
+      setCreating(false);
+      setTitle("");
+      setDescription("");
+      setOptions([{ start: "", end: "" }, { start: "", end: "" }]);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  const finalize = async (poll: MeetingPoll, optionId: string) => {
+    if (!window.confirm("Finalize this time? Voting will close.")) return;
+    try {
+      await finalizeMeetingPoll(poll.id, optionId);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex justify-end">
+        <Button onClick={() => setCreating((value) => !value)}>
+          <Plus className="h-4 w-4" /> New poll
+        </Button>
+      </div>
+      {error && <p className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
+      {creating && (
+        <Card className="rounded-xl">
+          <CardHeader><CardTitle>Create a meeting poll</CardTitle><CardDescription>Add two or more candidate times.</CardDescription></CardHeader>
+          <CardContent className="space-y-4">
+            <div><Label htmlFor="poll-title">Title</Label><Input id="poll-title" className="mt-1.5" value={title} onChange={(event) => setTitle(event.target.value)} /></div>
+            <div><Label htmlFor="poll-description">Description</Label><Textarea id="poll-description" className="mt-1.5" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
+            <div className="space-y-3">
+              {options.map((option, index) => (
+                <div key={index} className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-[1fr_1fr_auto]">
+                  <div><Label>Starts</Label><Input type="datetime-local" className="mt-1" value={option.start} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, start: event.target.value } : item))} /></div>
+                  <div><Label>Ends</Label><Input type="datetime-local" className="mt-1" value={option.end} onChange={(event) => setOptions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, end: event.target.value } : item))} /></div>
+                  <Button type="button" variant="ghost" className="self-end px-3" disabled={options.length <= 2} onClick={() => setOptions((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => setOptions((current) => [...current, { start: "", end: "" }])}><Plus className="h-4 w-4" /> Add time</Button>
+              <Button disabled={!title.trim() || options.some((option) => !option.start || !option.end)} onClick={() => void create()}>Create poll</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {polls === null && <DashboardSkeleton />}
+      {polls?.length === 0 && !creating && (
+        <div className="rounded-xl border border-dashed border-border p-10 text-center">
+          <ListChecks className="mx-auto h-6 w-6 text-muted-foreground" />
+          <p className="mt-3 font-medium">No meeting polls yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">Create one when a booking link cannot settle the time.</p>
+        </div>
+      )}
+      {polls?.map((poll) => (
+        <Card key={poll.id} className="rounded-xl">
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div><CardTitle>{poll.title}</CardTitle><CardDescription>{poll.participantCount} response{poll.participantCount === 1 ? "" : "s"} · {poll.status}</CardDescription></div>
+              <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/poll/${poll.publicId}`)}><Copy className="h-4 w-4" /> Copy link</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {poll.options.map((option) => (
+              <div key={option.id} className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 ${poll.finalizedOptionId === option.id ? "border-primary bg-primary/5" : "border-border"}`}>
+                <div>
+                  <p className="text-sm font-medium">{formatBookingDate(option.start, { weekday: "short", month: "short", day: "numeric" })} · {formatBookingTime(option.start)}</p>
+                  <p className="text-xs text-muted-foreground">{option.yes} yes · {option.ifNeeded} if needed · {option.no} no</p>
+                </div>
+                {poll.status === "open" && <Button size="sm" variant={option.rank === 1 ? "default" : "outline"} onClick={() => void finalize(poll, option.id)}>Finalize</Button>}
+              </div>
+            ))}
+            {poll.responses && poll.responses.length > 0 && (
+              <div className="mt-4 overflow-x-auto border-t border-border pt-4">
+                <table className="w-full min-w-[36rem] text-left text-xs">
+                  <thead><tr><th className="pb-2 pr-4 font-medium">Participant</th>{poll.options.map((option) => <th key={option.id} className="px-2 pb-2 text-center font-medium">#{option.rank}</th>)}</tr></thead>
+                  <tbody>
+                    {poll.responses.map((response) => (
+                      <tr key={response.email} className="border-t border-border">
+                        <td className="py-2 pr-4"><span className="font-medium">{response.name}</span><span className="ml-2 text-muted-foreground">{response.email}</span></td>
+                        {poll.options.map((option) => {
+                          const choice = response.votes.find((vote) => vote.optionId === option.id)?.choice ?? "no";
+                          return <td key={option.id} className="px-2 py-2 text-center capitalize">{choice.replace("_", " ")}</td>;
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }
 

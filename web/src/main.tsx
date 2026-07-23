@@ -14,6 +14,7 @@ import { DashboardPage } from "@/pages/dashboard-page";
 import { ReschedulePage } from "@/pages/reschedule-page";
 import { RoutingFormPage } from "@/pages/routing-form-page";
 import { SignInPage } from "@/pages/sign-in-page";
+import { PollPage } from "@/pages/poll-page";
 import type { RoutingAnswers } from "@/lib/api";
 import { BrandMark } from "@/components/brand-mark";
 import "./styles.css";
@@ -201,6 +202,14 @@ const signInRoute = createRoute({
   component: SignInPage,
 });
 
+const pollRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/poll/$publicId",
+  component: function PollRoute() {
+    return <PollPage publicId={pollRoute.useParams().publicId} />;
+  },
+});
+
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dashboard",
@@ -217,6 +226,7 @@ const router = createRouter({
     rescheduleRoute,
     cancelRoute,
     signInRoute,
+    pollRoute,
     dashboardRoute,
   ]),
 });
