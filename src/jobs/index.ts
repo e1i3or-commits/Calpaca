@@ -7,12 +7,15 @@ import { REMINDER_LEAD, sendInvite, sendReminder } from "./invite-email";
 import type { InviteKind } from "../core/invite/email";
 import { listBookingsNeedingReminder } from "../db/booking-repo";
 import { expireHolds } from "../db/holds-repo";
+import { reapRateLimits } from "../db/rate-limit-repo";
 import {
   deliverWebhook,
   fanOutBookingWebhooks,
+  fanOutSuggestionWebhooks,
   type BookingWebhookKind,
   type DeliveryJob,
 } from "./webhook-delivery";
+import { sendSuggestionEmail } from "./suggestion-email";
 import {
   getConnection,
   listConnectionsNeedingChannel,
@@ -47,6 +50,7 @@ export const SYNC_QUEUE = "calendar-sync";
 const SWEEP_QUEUE = "sync-sweep";
 const RENEWAL_QUEUE = "channel-renewal";
 const INVITE_QUEUE = "invite-email";
+const SUGGESTION_EMAIL_QUEUE = "suggestion-email";
 const WEBHOOK_FANOUT_QUEUE = "webhook-fanout";
 const WEBHOOK_DELIVERY_QUEUE = "webhook-delivery";
 const REMINDER_SWEEP_QUEUE = "reminder-sweep";
@@ -105,6 +109,26 @@ export async function emitBookingWebhook(
     });
   } catch (e) {
     console.error(`[jobs] enqueue webhook fan-out ${kind} for ${bookingId} failed:`, e);
+  }
+}
+
+export async function enqueueSuggestionEmail(suggestionId: string): Promise<void> {
+  try {
+    await getBoss().send(SUGGESTION_EMAIL_QUEUE, { suggestionId }, {
+      retryLimit: 5, retryDelay: 60, retryBackoff: true,
+    });
+  } catch (e) {
+    console.error(`[jobs] enqueue suggestion email for ${suggestionId} failed:`, e);
+  }
+}
+
+export async function emitSuggestionWebhook(suggestionId: string): Promise<void> {
+  try {
+    await getBoss().send(WEBHOOK_FANOUT_QUEUE, { suggestionId }, {
+      retryLimit: 3, retryDelay: 30,
+    });
+  } catch (e) {
+    console.error(`[jobs] enqueue suggestion webhook for ${suggestionId} failed:`, e);
   }
 }
 
@@ -170,6 +194,7 @@ export async function startJobs(): Promise<void> {
   await b.createQueue(SYNC_QUEUE);
   await b.createQueue(SWEEP_QUEUE);
   await b.createQueue(INVITE_QUEUE);
+  await b.createQueue(SUGGESTION_EMAIL_QUEUE);
 
   await b.work<{ connectionId: string; forceFull?: boolean }>(SYNC_QUEUE, async ([job]) => {
     if (job) await runSync(job.data.connectionId, job.data.forceFull ?? false);
@@ -180,17 +205,24 @@ export async function startJobs(): Promise<void> {
     if (job.data.kind === "reminder") await sendReminder(job.data.bookingId);
     else await sendInvite(job.data.bookingId, job.data.kind);
   });
+  await b.work<{ suggestionId: string }>(SUGGESTION_EMAIL_QUEUE, async ([job]) => {
+    if (job) await sendSuggestionEmail(job.data.suggestionId);
+  });
 
   await b.createQueue(WEBHOOK_FANOUT_QUEUE);
   await b.createQueue(WEBHOOK_DELIVERY_QUEUE);
 
-  await b.work<{ bookingId: string; kind: BookingWebhookKind; reason?: string }>(
+  await b.work<
+    { bookingId: string; kind: BookingWebhookKind; reason?: string } | { suggestionId: string }
+  >(
     WEBHOOK_FANOUT_QUEUE,
     async ([job]) => {
       if (!job) return;
-      const deliveries = await fanOutBookingWebhooks(job.data.bookingId, job.data.kind, {
-        reason: job.data.reason,
-      });
+      const deliveries = "suggestionId" in job.data
+        ? await fanOutSuggestionWebhooks(job.data.suggestionId)
+        : await fanOutBookingWebhooks(job.data.bookingId, job.data.kind, {
+            reason: job.data.reason,
+          });
       for (const delivery of deliveries) {
         await b.send(WEBHOOK_DELIVERY_QUEUE, delivery, {
           retryLimit: 8,
@@ -201,9 +233,18 @@ export async function startJobs(): Promise<void> {
     },
   );
 
-  await b.work<DeliveryJob>(WEBHOOK_DELIVERY_QUEUE, async ([job]) => {
-    if (job) await deliverWebhook(job.data);
-  });
+  await b.work<DeliveryJob>(
+    WEBHOOK_DELIVERY_QUEUE,
+    { includeMetadata: true },
+    async ([job]) => {
+      if (job) {
+        await deliverWebhook(job.data, {
+          retryCount: job.retryCount,
+          retryLimit: job.retryLimit,
+        });
+      }
+    },
+  );
 
   await b.createQueue(REMINDER_SWEEP_QUEUE);
   await b.work(REMINDER_SWEEP_QUEUE, async () => {
@@ -226,7 +267,9 @@ export async function startJobs(): Promise<void> {
 
   await b.createQueue(HOLD_EXPIRY_QUEUE);
   await b.work(HOLD_EXPIRY_QUEUE, async () => {
-    const released = await expireHolds(Temporal.Now.instant());
+    const now = Temporal.Now.instant();
+    const released = await expireHolds(now);
+    await reapRateLimits(now.subtract({ seconds: 60 }));
     if (released > 0) console.log(`[jobs] hold-expiry: released ${released} hold(s)`);
   });
   await b.schedule(HOLD_EXPIRY_QUEUE, "*/5 * * * *");

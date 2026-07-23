@@ -1,8 +1,8 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
-import { bookingEvents, bookings, eventTypes, users } from "./schema";
+import { bookingEvents, bookings, eventTypes, teamMembers, users } from "./schema";
 import * as schema from "./schema";
 import { ok, type Result } from "../lib/result";
 import {
@@ -15,10 +15,15 @@ import {
   type BookingStateError,
 } from "../core/booking/state";
 import type { BookingRecord } from "../core/assignment/round-robin";
+import type { AssignmentExplanation } from "../core/assignment/round-robin";
 
 type Db = NodePgDatabase<typeof schema>;
 
 type StoredPayload = Record<string, unknown>;
+
+function toInstant(date: Date): Temporal.Instant {
+  return Temporal.Instant.fromEpochMilliseconds(date.getTime());
+}
 
 function serializePayload(event: BookingEvent): StoredPayload {
   switch (event.kind) {
@@ -28,6 +33,7 @@ function serializePayload(event: BookingEvent): StoredPayload {
         endsAt: event.payload.endsAt.toString(),
         hostUserIds: event.payload.hostUserIds,
         ...(event.payload.routingAnswers ? { routingAnswers: event.payload.routingAnswers } : {}),
+        ...(event.payload.assignment ? { assignment: event.payload.assignment } : {}),
       };
     case "rescheduled":
       return {
@@ -37,7 +43,10 @@ function serializePayload(event: BookingEvent): StoredPayload {
     case "cancelled":
       return { reason: event.payload.reason };
     case "reassigned":
-      return { hostUserIds: event.payload.hostUserIds };
+      return {
+        hostUserIds: event.payload.hostUserIds,
+        ...(event.payload.assignment ? { assignment: event.payload.assignment } : {}),
+      };
     case "no_show":
     case "invite_sent":
     case "invite_delivered":
@@ -56,6 +65,7 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
       const routingAnswers = payload["routingAnswers"] as
         | Record<string, string | string[]>
         | undefined;
+      const assignment = payload["assignment"] as AssignmentExplanation | undefined;
       return {
         kind: "created",
         payload: {
@@ -63,6 +73,7 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
           endsAt: Temporal.Instant.from(payload["endsAt"] as string),
           hostUserIds: payload["hostUserIds"] as string[],
           ...(routingAnswers ? { routingAnswers } : {}),
+          ...(assignment ? { assignment } : {}),
         },
       };
     }
@@ -76,8 +87,16 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
       };
     case "cancelled":
       return { kind: "cancelled", payload: { reason: payload["reason"] as string | undefined } };
-    case "reassigned":
-      return { kind: "reassigned", payload: { hostUserIds: payload["hostUserIds"] as string[] } };
+    case "reassigned": {
+      const assignment = payload["assignment"] as AssignmentExplanation | undefined;
+      return {
+        kind: "reassigned",
+        payload: {
+          hostUserIds: payload["hostUserIds"] as string[],
+          ...(assignment ? { assignment } : {}),
+        },
+      };
+    }
     case "no_show":
       return { kind: "no_show", payload: {} };
     case "invite_sent":
@@ -190,6 +209,7 @@ export interface BookingRow {
   readonly inviteStatus?: string;
   readonly rescheduleToken: string;
   readonly cancelToken: string;
+  readonly routingAnswers?: Record<string, string | string[]> | null;
   /** Google Calendar event id once written through to the organizer host's
    * calendar; null/absent means the ICS email is the calendar artifact.
    * Optional for the same fixture-compatibility reason as inviteStatus. */
@@ -217,6 +237,7 @@ export async function getBookingById(id: string, executor: Db = getDb()): Promis
     inviteStatus: row.inviteStatus,
     rescheduleToken: row.rescheduleToken,
     cancelToken: row.cancelToken,
+    routingAnswers: row.routingAnswers as Record<string, string | string[]> | null,
     googleEventId: row.googleEventId,
   };
 }
@@ -364,4 +385,232 @@ export async function getBookingHistoryForHosts(
     }
   }
   return records;
+}
+
+/**
+ * Returns the most recent stored assignment decision visible to an admin.
+ * Ownership follows the same owner-or-team-member rule as event-type admin
+ * routes. Missing, inaccessible, solo, and group bookings intentionally
+ * collapse to null so booking UUIDs cannot be probed across accounts.
+ */
+export async function getAssignmentExplanationForUser(
+  bookingId: string,
+  userId: string,
+  executor: Db = getDb(),
+): Promise<AssignmentExplanation | null> {
+  const [row] = await executor
+    .select({ payload: bookingEvents.payload })
+    .from(bookingEvents)
+    .innerJoin(bookings, eq(bookings.id, bookingEvents.bookingId))
+    .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+    .leftJoin(
+      teamMembers,
+      and(eq(teamMembers.teamId, eventTypes.teamId), eq(teamMembers.userId, userId)),
+    )
+    .where(
+      and(
+        eq(bookings.id, bookingId),
+        inArray(bookingEvents.kind, ["created", "reassigned"]),
+        or(eq(eventTypes.ownerUserId, userId), eq(teamMembers.userId, userId)),
+      ),
+    )
+    .orderBy(desc(bookingEvents.createdAt), desc(bookingEvents.id))
+    .limit(1);
+
+  const payload = (row?.payload ?? {}) as Record<string, unknown>;
+  return (payload["assignment"] as AssignmentExplanation | undefined) ?? null;
+}
+
+export interface AdminBookingRow {
+  readonly id: string;
+  readonly eventType: { readonly slug: string; readonly title: string };
+  readonly startsAt: Temporal.Instant;
+  readonly endsAt: Temporal.Instant;
+  readonly inviteeName: string;
+  readonly inviteeEmail: string;
+  readonly hostUserIds: readonly string[];
+  readonly status: string;
+  readonly inviteStatus: string;
+}
+
+export interface AdminBookingDetail extends AdminBookingRow {
+  readonly inviteeTimezone: string;
+  readonly inviteeNotes: string | null;
+  readonly routingAnswers: Record<string, string | string[]> | null;
+  readonly hasGoogleEvent: boolean;
+  readonly events: readonly {
+    readonly kind: BookingEventKind;
+    readonly payload: unknown;
+    readonly createdAt: Temporal.Instant;
+  }[];
+}
+
+export interface AdminBookingPage {
+  readonly bookings: readonly AdminBookingRow[];
+  readonly total: number;
+}
+
+function adminBookingRow(row: {
+  id: string;
+  slug: string;
+  title: string;
+  startsAt: Date;
+  endsAt: Date;
+  inviteeName: string;
+  inviteeEmail: string;
+  hostUserIds: string[];
+  status: string;
+  inviteStatus: string;
+}): AdminBookingRow {
+  return {
+    id: row.id,
+    eventType: { slug: row.slug, title: row.title },
+    startsAt: toInstant(row.startsAt),
+    endsAt: toInstant(row.endsAt),
+    inviteeName: row.inviteeName,
+    inviteeEmail: row.inviteeEmail,
+    hostUserIds: row.hostUserIds,
+    status: row.status,
+    inviteStatus: row.inviteStatus,
+  };
+}
+
+function adminScope(userId: string) {
+  return or(
+    eq(eventTypes.ownerUserId, userId),
+    eq(teamMembers.userId, userId),
+    sql`${bookings.hostUserIds} @> ${JSON.stringify([userId])}::jsonb`,
+  );
+}
+
+export async function listBookingsForUser(
+  input: {
+    userId: string;
+    filter: "upcoming" | "past";
+    status?: string;
+    page: number;
+    pageSize: number;
+    now: Temporal.Instant;
+  },
+  executor: Db = getDb(),
+): Promise<AdminBookingPage> {
+  const timeCondition =
+    input.filter === "upcoming"
+      ? gte(bookings.startsAt, new Date(input.now.epochMilliseconds))
+      : lt(bookings.startsAt, new Date(input.now.epochMilliseconds));
+  const where = and(
+    adminScope(input.userId),
+    timeCondition,
+    ...(input.status ? [eq(bookings.status, input.status)] : []),
+  );
+  const baseSelection = {
+    id: bookings.id,
+    slug: eventTypes.slug,
+    title: eventTypes.title,
+    startsAt: bookings.startsAt,
+    endsAt: bookings.endsAt,
+    inviteeName: bookings.inviteeName,
+    inviteeEmail: bookings.inviteeEmail,
+    hostUserIds: bookings.hostUserIds,
+    status: bookings.status,
+    inviteStatus: bookings.inviteStatus,
+  };
+  const rows = await executor
+    .select(baseSelection)
+    .from(bookings)
+    .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+    .leftJoin(
+      teamMembers,
+      and(eq(teamMembers.teamId, eventTypes.teamId), eq(teamMembers.userId, input.userId)),
+    )
+    .where(where)
+    .orderBy(input.filter === "upcoming" ? asc(bookings.startsAt) : desc(bookings.startsAt))
+    .limit(input.pageSize)
+    .offset((input.page - 1) * input.pageSize);
+  const [totalRow] = await executor
+    .select({ total: count() })
+    .from(bookings)
+    .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+    .leftJoin(
+      teamMembers,
+      and(eq(teamMembers.teamId, eventTypes.teamId), eq(teamMembers.userId, input.userId)),
+    )
+    .where(where);
+
+  return { bookings: rows.map(adminBookingRow), total: totalRow?.total ?? 0 };
+}
+
+export async function getBookingDetailForUser(
+  bookingId: string,
+  userId: string,
+  executor: Db = getDb(),
+): Promise<AdminBookingDetail | null> {
+  const [row] = await executor
+    .select({
+      id: bookings.id,
+      slug: eventTypes.slug,
+      title: eventTypes.title,
+      startsAt: bookings.startsAt,
+      endsAt: bookings.endsAt,
+      inviteeName: bookings.inviteeName,
+      inviteeEmail: bookings.inviteeEmail,
+      inviteeTimezone: bookings.inviteeTimezone,
+      inviteeNotes: bookings.inviteeNotes,
+      hostUserIds: bookings.hostUserIds,
+      status: bookings.status,
+      inviteStatus: bookings.inviteStatus,
+      routingAnswers: bookings.routingAnswers,
+      googleEventId: bookings.googleEventId,
+    })
+    .from(bookings)
+    .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+    .leftJoin(
+      teamMembers,
+      and(eq(teamMembers.teamId, eventTypes.teamId), eq(teamMembers.userId, userId)),
+    )
+    .where(and(eq(bookings.id, bookingId), adminScope(userId)));
+  if (!row) return null;
+
+  const events = await executor
+    .select({
+      kind: bookingEvents.kind,
+      payload: bookingEvents.payload,
+      createdAt: bookingEvents.createdAt,
+    })
+    .from(bookingEvents)
+    .where(eq(bookingEvents.bookingId, bookingId))
+    .orderBy(asc(bookingEvents.createdAt), asc(bookingEvents.id));
+
+  return {
+    ...adminBookingRow(row),
+    inviteeTimezone: row.inviteeTimezone,
+    inviteeNotes: row.inviteeNotes,
+    routingAnswers: row.routingAnswers as Record<string, string | string[]> | null,
+    hasGoogleEvent: row.googleEventId !== null,
+    events: events.map((event) => ({
+      kind: event.kind,
+      payload: event.payload,
+      createdAt: toInstant(event.createdAt),
+    })),
+  };
+}
+
+export async function markBookingNoShowForUser(
+  bookingId: string,
+  userId: string,
+  executor: Db = getDb(),
+): Promise<Result<BookingState, BookingStateError> | null> {
+  return executor.transaction(async (tx) => {
+    const [visible] = await tx
+      .select({ id: bookings.id })
+      .from(bookings)
+      .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+      .leftJoin(
+        teamMembers,
+        and(eq(teamMembers.teamId, eventTypes.teamId), eq(teamMembers.userId, userId)),
+      )
+      .where(and(eq(bookings.id, bookingId), adminScope(userId)));
+    if (!visible) return null;
+    return appendEvent(bookingId, "no_show", {}, tx);
+  });
 }

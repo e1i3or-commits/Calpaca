@@ -43,6 +43,25 @@ export interface RankedCandidate {
   readonly lastBookedAt: Temporal.Instant | null;
 }
 
+export type AssignmentReason =
+  | "only_available_candidate"
+  | "lowest_effective_load"
+  | "least_recently_booked"
+  | "stable_user_id_tiebreak";
+
+/** JSON-safe snapshot persisted at assignment time so later load changes
+ * cannot rewrite the explanation shown to an administrator. */
+export interface AssignmentExplanation {
+  readonly winnerUserId: string;
+  readonly reason: AssignmentReason;
+  readonly candidates: readonly {
+    readonly userId: string;
+    readonly bookingCount: number;
+    readonly effectiveLoad: number;
+    readonly lastBookedAt: string | null;
+  }[];
+}
+
 function slotKey(slot: Interval): string {
   return `${slot.start.toString()}|${slot.end.toString()}`;
 }
@@ -146,4 +165,45 @@ export function explainAssignment(
   history: readonly BookingRecord[],
 ): readonly RankedCandidate[] {
   return rank(candidates, history);
+}
+
+function winnerReason(ranked: readonly RankedCandidate[]): AssignmentReason {
+  const [winner, runnerUp] = ranked;
+  if (!winner || !runnerUp) return "only_available_candidate";
+  if (winner.effectiveLoad < runnerUp.effectiveLoad) return "lowest_effective_load";
+
+  if (winner.lastBookedAt === null && runnerUp.lastBookedAt !== null) {
+    return "least_recently_booked";
+  }
+  if (
+    winner.lastBookedAt !== null &&
+    runnerUp.lastBookedAt !== null &&
+    Temporal.Instant.compare(winner.lastBookedAt, runnerUp.lastBookedAt) < 0
+  ) {
+    return "least_recently_booked";
+  }
+
+  return "stable_user_id_tiebreak";
+}
+
+/** Captures the complete round-robin decision in a persistence-safe shape. */
+export function buildAssignmentExplanation(
+  slot: Interval,
+  candidates: readonly AssignmentCandidate[],
+  history: readonly BookingRecord[],
+): AssignmentExplanation | null {
+  const ranked = explainAssignment(slot, candidates, history);
+  const winner = ranked[0];
+  if (!winner) return null;
+
+  return {
+    winnerUserId: winner.userId,
+    reason: winnerReason(ranked),
+    candidates: ranked.map((candidate) => ({
+      userId: candidate.userId,
+      bookingCount: candidate.bookingCount,
+      effectiveLoad: candidate.effectiveLoad,
+      lastBookedAt: candidate.lastBookedAt?.toString() ?? null,
+    })),
+  };
 }

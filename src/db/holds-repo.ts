@@ -1,4 +1,4 @@
-import { and, eq, inArray, lte } from "drizzle-orm";
+import { and, count, eq, gt, inArray, lte } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
@@ -7,7 +7,12 @@ import * as schema from "./schema";
 import { ok, err, type Result } from "../lib/result";
 import { generateToken } from "../lib/id";
 import { appendEvent } from "./booking-repo";
-import { assign, type AssignmentCandidate, type BookingRecord } from "../core/assignment/round-robin";
+import {
+  buildAssignmentExplanation,
+  type AssignmentCandidate,
+  type AssignmentExplanation,
+  type BookingRecord,
+} from "../core/assignment/round-robin";
 import type { BookingState, BookingStateError } from "../core/booking/state";
 import type { RoutingAnswers } from "../core/routing/condition";
 
@@ -95,6 +100,25 @@ export async function createHold(
   }
 }
 
+/** Live active rows only: expired-but-unreaped holds never consume capacity. */
+export async function countActiveHoldsForEventType(
+  eventTypeId: string,
+  now: Temporal.Instant,
+  executor: Db = getDb(),
+): Promise<number> {
+  const [row] = await executor
+    .select({ count: count() })
+    .from(holds)
+    .where(
+      and(
+        eq(holds.eventTypeId, eventTypeId),
+        eq(holds.status, "active"),
+        gt(holds.expiresAt, toDate(now)),
+      ),
+    );
+  return row?.count ?? 0;
+}
+
 /**
  * Round-robin assignment input for confirmHold (task 14): `candidates` is the
  * pool's weights (event_type_hosts), `history` is past bookings for load
@@ -154,12 +178,20 @@ export async function confirmHold(
 
     let hostUserIds = rows.map((row) => row.hostUserId);
     let holdIdsToConfirm = [...holdIds];
+    let assignmentExplanation: AssignmentExplanation | undefined;
 
     if (assignment) {
       const eligible = assignment.candidates.filter((c) => hostUserIds.includes(c.userId));
-      const winner = assign({ start: startsAt, end: endsAt }, eligible, assignment.history);
+      const explanation = buildAssignmentExplanation(
+        { start: startsAt, end: endsAt },
+        eligible,
+        assignment.history,
+      );
+      if (!explanation) return err({ kind: "not_found" });
+      const winner = explanation.winnerUserId;
       const winningRow = winner ? rows.find((row) => row.hostUserId === winner) : undefined;
       if (!winningRow) return err({ kind: "not_found" });
+      assignmentExplanation = explanation;
 
       const losingHoldIds = rows.filter((row) => row.id !== winningRow.id).map((row) => row.id);
       if (losingHoldIds.length > 0) {
@@ -191,7 +223,13 @@ export async function confirmHold(
     const created = await appendEvent(
       booking.id,
       "created",
-      { startsAt, endsAt, hostUserIds, ...(routingAnswers ? { routingAnswers } : {}) },
+      {
+        startsAt,
+        endsAt,
+        hostUserIds,
+        ...(routingAnswers ? { routingAnswers } : {}),
+        ...(assignmentExplanation ? { assignment: assignmentExplanation } : {}),
+      },
       tx,
     );
     if (!created.ok) throw new Error(`failed to append created event: ${created.error.reason}`);

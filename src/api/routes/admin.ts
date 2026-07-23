@@ -29,6 +29,18 @@ import {
   type TeamMemberRecord,
   type TeamRecord,
 } from "../../db/admin-repo";
+import {
+  getBookingDetailForUser,
+  getAssignmentExplanationForUser,
+  listBookingsForUser,
+  markBookingNoShowForUser,
+  type AdminBookingDetail,
+  type AdminBookingPage,
+} from "../../db/booking-repo";
+import type { AssignmentExplanation } from "../../core/assignment/round-robin";
+import type { BookingState, BookingStateError } from "../../core/booking/state";
+import type { Result } from "../../lib/result";
+import { emitBookingWebhook as jobsEmitBookingWebhook } from "../../jobs/index";
 
 /** The dashboard settings surface: event types, schedules, teams, and the
  * user directory behind the people picker. Same injected-deps convention as
@@ -71,6 +83,28 @@ export interface AdminDeps {
     input: EventTypeInput,
   ) => Promise<AdminEventType | null>;
   readonly deleteEventType: (id: string, userId: string) => Promise<"deleted" | "not_found" | "in_use">;
+  readonly getAssignmentExplanationForUser?: (
+    bookingId: string,
+    userId: string,
+  ) => Promise<AssignmentExplanation | null>;
+  readonly listBookingsForUser?: (input: {
+    userId: string;
+    filter: "upcoming" | "past";
+    status?: string;
+    page: number;
+    pageSize: number;
+    now: Temporal.Instant;
+  }) => Promise<AdminBookingPage>;
+  readonly getBookingDetailForUser?: (
+    bookingId: string,
+    userId: string,
+  ) => Promise<AdminBookingDetail | null>;
+  readonly markBookingNoShowForUser?: (
+    bookingId: string,
+    userId: string,
+  ) => Promise<Result<BookingState, BookingStateError> | null>;
+  readonly emitBookingWebhook?: (bookingId: string, kind: "no_show") => Promise<void>;
+  readonly now?: () => Temporal.Instant;
 }
 
 const defaultDeps: AdminDeps = {
@@ -91,6 +125,15 @@ const defaultDeps: AdminDeps = {
   createEventType: (ownerUserId, input) => createEventType(ownerUserId, input),
   updateEventType: (id, userId, input) => updateEventType(id, userId, input),
   deleteEventType: (id, userId) => deleteEventType(id, userId),
+  getAssignmentExplanationForUser: (bookingId, userId) =>
+    getAssignmentExplanationForUser(bookingId, userId),
+  listBookingsForUser: (input) => listBookingsForUser(input),
+  getBookingDetailForUser: (bookingId, userId) =>
+    getBookingDetailForUser(bookingId, userId),
+  markBookingNoShowForUser: (bookingId, userId) =>
+    markBookingNoShowForUser(bookingId, userId),
+  emitBookingWebhook: (bookingId, kind) => jobsEmitBookingWebhook(bookingId, kind),
+  now: () => Temporal.Now.instant(),
 };
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -103,6 +146,35 @@ function isIanaZone(tz: string): boolean {
   } catch {
     return false;
   }
+}
+
+const bookingListQuerySchema = z.object({
+  filter: z.enum(["upcoming", "past"]).default("upcoming"),
+  status: z.enum(["confirmed", "cancelled", "no_show"]).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  timezone: z.string().refine(isIanaZone, "must be an IANA timezone").default("UTC"),
+});
+
+function renderAdminInstant(instant: Temporal.Instant, timezone: string) {
+  return {
+    utc: instant.toString(),
+    invitee: instant.toZonedDateTimeISO(timezone).toString(),
+  };
+}
+
+function renderAdminBooking(row: AdminBookingPage["bookings"][number], timezone: string) {
+  return {
+    id: row.id,
+    eventType: row.eventType,
+    start: renderAdminInstant(row.startsAt, timezone),
+    end: renderAdminInstant(row.endsAt, timezone),
+    inviteeName: row.inviteeName,
+    inviteeEmail: row.inviteeEmail,
+    hostUserIds: row.hostUserIds,
+    status: row.status,
+    inviteStatus: row.inviteStatus,
+  };
 }
 
 const ruleSchema = z
@@ -163,7 +235,13 @@ const memberBodySchema = z.object({ userId: z.string().uuid() });
 export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> {
   const router = new Hono<AuthEnv>();
 
-  for (const path of ["/api/me/users", "/api/me/schedules", "/api/me/teams", "/api/me/event-types"]) {
+  for (const path of [
+    "/api/me/users",
+    "/api/me/schedules",
+    "/api/me/teams",
+    "/api/me/event-types",
+    "/api/me/bookings",
+  ]) {
     router.use(path, deps.requireAuth);
     router.use(`${path}/*`, deps.requireAuth);
   }
@@ -172,6 +250,71 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   router.get("/api/me/users", async (c) => {
     return c.json({ users: await deps.listUsers() });
+  });
+
+  // ---- booking assignment transparency ----
+
+  router.get("/api/me/bookings/:id/assignment", async (c) => {
+    const assignment = await deps.getAssignmentExplanationForUser?.(
+      c.req.param("id"),
+      c.get("user").id,
+    );
+    if (!assignment) return c.json({ error: "no_assignment" }, 404);
+    return c.json({ assignment });
+  });
+
+  router.get("/api/me/bookings", async (c) => {
+    const parsed = bookingListQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: "invalid_query", issues: parsed.error.issues }, 400);
+    }
+    const { timezone, ...query } = parsed.data;
+    const page = await deps.listBookingsForUser?.({
+      userId: c.get("user").id,
+      ...query,
+      now: deps.now?.() ?? Temporal.Now.instant(),
+    });
+    const result = page ?? { bookings: [], total: 0 };
+    return c.json({
+      bookings: result.bookings.map((booking) => renderAdminBooking(booking, timezone)),
+      page: query.page,
+      pageSize: query.pageSize,
+      total: result.total,
+    });
+  });
+
+  router.get("/api/me/bookings/:id", async (c) => {
+    const timezone = c.req.query("timezone") ?? "UTC";
+    if (!isIanaZone(timezone)) return c.json({ error: "invalid_timezone" }, 400);
+    const detail = await deps.getBookingDetailForUser?.(
+      c.req.param("id"),
+      c.get("user").id,
+    );
+    if (!detail) return c.json({ error: "booking_not_found" }, 404);
+    return c.json({
+      ...renderAdminBooking(detail, timezone),
+      inviteeTimezone: detail.inviteeTimezone,
+      inviteeNotes: detail.inviteeNotes,
+      routingAnswers: detail.routingAnswers,
+      hasGoogleEvent: detail.hasGoogleEvent,
+      events: detail.events.map((event) => ({
+        kind: event.kind,
+        payload: event.payload,
+        createdAt: event.createdAt.toString(),
+      })),
+    });
+  });
+
+  router.post("/api/me/bookings/:id/no-show", async (c) => {
+    const bookingId = c.req.param("id");
+    const result = await deps.markBookingNoShowForUser?.(
+      bookingId,
+      c.get("user").id,
+    );
+    if (!result) return c.json({ error: "booking_not_found" }, 404);
+    if (!result.ok) return c.json({ error: result.error.reason }, 409);
+    await deps.emitBookingWebhook?.(bookingId, "no_show");
+    return c.json({ bookingId, status: result.value.status });
   });
 
   // ---- schedules ----

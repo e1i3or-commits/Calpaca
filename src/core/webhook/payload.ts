@@ -4,18 +4,68 @@ import { Temporal } from "@js-temporal/polyfill";
 // ARCHITECTURE.md). External event names are namespaced so consumers can
 // route on prefix; internal booking_event kinds map 1:1.
 
-export type WebhookEventKind = "booking.created" | "booking.rescheduled" | "booking.cancelled";
+export type WebhookEventKind =
+  | "booking.created"
+  | "booking.rescheduled"
+  | "booking.cancelled"
+  | "booking.reassigned"
+  | "booking.no_show"
+  | "booking.invite_sent"
+  | "booking.invite_delivered"
+  | "booking.invite_failed"
+  | "booking.reminder_sent"
+  | "suggestion.created";
 
 export const WEBHOOK_EVENT_KINDS: readonly WebhookEventKind[] = [
   "booking.created",
   "booking.rescheduled",
   "booking.cancelled",
+  "booking.reassigned",
+  "booking.no_show",
+  "booking.invite_sent",
+  "booking.invite_delivered",
+  "booking.invite_failed",
+  "booking.reminder_sent",
+  "suggestion.created",
 ];
 
 /** A subscription's `events` list matches an event when it names it or
  * contains the "*" wildcard. */
 export function matchesSubscription(events: readonly string[], event: WebhookEventKind): boolean {
   return events.includes("*") || events.includes(event);
+}
+
+export interface SuggestionWebhookInput {
+  readonly suggestionId: string;
+  readonly eventType: { readonly id: string; readonly slug: string; readonly title: string };
+  readonly invitee: { readonly email: string; readonly name: string; readonly timezone: string };
+  readonly proposedSlots: readonly { readonly start: Temporal.Instant; readonly end: Temporal.Instant }[];
+  readonly message?: string;
+}
+
+export function buildSuggestionWebhookBody(input: {
+  readonly deliveryId: string;
+  readonly occurredAt: Temporal.Instant;
+  readonly suggestion: SuggestionWebhookInput;
+}): string {
+  const tz = input.suggestion.invitee.timezone;
+  return JSON.stringify({
+    deliveryId: input.deliveryId,
+    event: "suggestion.created",
+    occurredAt: input.occurredAt.toString(),
+    data: {
+      suggestion: {
+        id: input.suggestion.suggestionId,
+        eventType: input.suggestion.eventType,
+        invitee: input.suggestion.invitee,
+        proposedSlots: input.suggestion.proposedSlots.map((slot) => ({
+          start: renderInstant(slot.start, tz),
+          end: renderInstant(slot.end, tz),
+        })),
+        ...(input.suggestion.message !== undefined && { message: input.suggestion.message }),
+      },
+    },
+  });
 }
 
 export interface WebhookBookingInput {

@@ -46,6 +46,10 @@ export interface EmailDeliveryDeps {
     kind: "invite_delivered" | "invite_failed",
     payload: { reason?: string },
   ) => Promise<Result<unknown, BookingStateError>>;
+  readonly emitBookingWebhook?: (
+    bookingId: string,
+    kind: "invite_delivered" | "invite_failed",
+  ) => Promise<void>;
   /** Read per request so rotation doesn't need a restart. */
   readonly secret: () => string | undefined;
 }
@@ -79,7 +83,13 @@ export function createEmailDeliveryRoutes(deps: EmailDeliveryDeps): Hono {
         ? await deps.appendInviteEvent(bookingId, "invite_delivered", {})
         : await deps.appendInviteEvent(bookingId, "invite_failed", { reason: reason ?? "bounced" });
 
-    if (result.ok) return c.json({ recorded: true });
+    if (result.ok) {
+      await deps.emitBookingWebhook?.(
+        bookingId,
+        status === "delivered" ? "invite_delivered" : "invite_failed",
+      );
+      return c.json({ recorded: true });
+    }
     if (result.error.reason === "not_created") return c.json({ error: "unknown_booking" }, 404);
     // duplicate notification, cancelled booking, feedback without a send —
     // acknowledged but not recorded, so the sender does not retry forever
@@ -93,6 +103,10 @@ webhookRoutes.route(
   "/",
   createEmailDeliveryRoutes({
     appendInviteEvent: (bookingId, kind, payload) => appendEvent(bookingId, kind, payload),
+    emitBookingWebhook: async (bookingId, kind) => {
+      const { emitBookingWebhook } = await import("../../jobs/index");
+      await emitBookingWebhook(bookingId, kind);
+    },
     secret: () => process.env.EMAIL_DELIVERY_WEBHOOK_SECRET,
   }),
 );

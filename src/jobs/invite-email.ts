@@ -12,6 +12,16 @@ import { getWritableConnectionForUser } from "../db/sync-repo";
 import { deleteEvent, insertEvent, patchEventTime } from "../sync/google";
 import { isMailerConfigured, sendInviteMail } from "../notifications/mailer";
 
+/** Lazy import avoids an initialization cycle: jobs/index owns pg-boss and
+ * imports this module to register the invite worker. */
+async function emitRecordedEvent(
+  bookingId: string,
+  kind: "invite_sent" | "invite_failed" | "reminder_sent",
+): Promise<void> {
+  const { emitBookingWebhook } = await import("./index");
+  await emitBookingWebhook(bookingId, kind);
+}
+
 /**
  * The invite-email job body. Best-effort write-through to the organizer
  * host's Google calendar happens first (Google then sends native invites via
@@ -61,6 +71,8 @@ export async function sendInvite(bookingId: string, kind: InviteKind): Promise<v
     if (!recorded.ok) {
       // e.g. cancelled between send and record — log, never retry the email
       console.error(`[jobs] invite_sent for ${bookingId} not recorded:`, recorded.error);
+    } else {
+      await emitRecordedEvent(bookingId, "invite_sent");
     }
     await recordInviteeRejection(bookingId, mail.to, result.rejected);
   }
@@ -173,6 +185,7 @@ export async function recordInviteeRejection(
   if (!recorded.ok) {
     console.error(`[jobs] invite_failed for ${bookingId} not recorded:`, recorded.error);
   } else {
+    if (!executor) await emitRecordedEvent(bookingId, "invite_failed");
     console.warn(`[jobs] invite for ${bookingId}: invitee address rejected at SMTP handoff`);
   }
 }
@@ -214,6 +227,8 @@ export async function sendReminder(bookingId: string): Promise<void> {
   if (!recorded.ok) {
     // e.g. cancelled between send and record — log; the log stays authoritative
     console.error(`[jobs] reminder_sent for ${bookingId} not recorded:`, recorded.error);
+  } else {
+    await emitRecordedEvent(bookingId, "reminder_sent");
   }
   // a refused invitee address is the same signal whichever mail surfaced it
   await recordInviteeRejection(bookingId, mail.to, result.rejected);

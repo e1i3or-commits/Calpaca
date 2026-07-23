@@ -1,6 +1,7 @@
 import type { Temporal } from "@js-temporal/polyfill";
 import { ok, err, type Result } from "../../lib/result";
 import type { RoutingAnswers } from "../routing/condition";
+import type { AssignmentExplanation } from "../assignment/round-robin";
 
 /** Mirrors docs/SCHEMA.md `booking_event_kind`. Duplicated, not imported from
  * src/db/schema: core must not depend on the database layer. */
@@ -21,6 +22,8 @@ export interface CreatedPayload {
   readonly hostUserIds: readonly string[];
   /** present when the invitee arrived via a routing form */
   readonly routingAnswers?: RoutingAnswers;
+  /** round-robin decision captured at booking time; absent for solo/group */
+  readonly assignment?: AssignmentExplanation;
 }
 
 export interface RescheduledPayload {
@@ -34,6 +37,8 @@ export interface CancelledPayload {
 
 export interface ReassignedPayload {
   readonly hostUserIds: readonly string[];
+  /** present only when a future reassignment flow uses round-robin ranking */
+  readonly assignment?: AssignmentExplanation;
 }
 
 export type NoShowPayload = Record<string, never>;

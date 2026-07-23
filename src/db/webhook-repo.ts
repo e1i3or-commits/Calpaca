@@ -1,9 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
 import * as schema from "./schema";
-import { webhooks } from "./schema";
+import { webhookDeliveries, webhooks } from "./schema";
+import type { WebhookEventKind } from "../core/webhook/payload";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -13,6 +14,20 @@ export interface WebhookRow {
   readonly events: readonly string[];
   readonly secret: string;
   readonly active: boolean;
+}
+
+export type WebhookDeliveryStatus = "pending" | "delivered" | "failed";
+
+export interface WebhookDeliveryRow {
+  readonly id: string;
+  readonly webhookId: string;
+  readonly event: string;
+  readonly status: WebhookDeliveryStatus;
+  readonly attempts: number;
+  readonly lastHttpStatus: number | null;
+  readonly lastError: string | null;
+  readonly createdAt: Date;
+  readonly completedAt: Date | null;
 }
 
 function toRow(row: typeof webhooks.$inferSelect): WebhookRow {
@@ -59,4 +74,48 @@ export async function setWebhookActive(
 export async function deleteWebhook(id: string, executor: Db = getDb()): Promise<boolean> {
   const rows = await executor.delete(webhooks).where(eq(webhooks.id, id)).returning({ id: webhooks.id });
   return rows.length > 0;
+}
+
+export async function createWebhookDelivery(
+  input: { id: string; webhookId: string; event: WebhookEventKind },
+  executor: Db = getDb(),
+): Promise<void> {
+  await executor.insert(webhookDeliveries).values(input);
+}
+
+export async function recordWebhookDeliveryAttempt(
+  id: string,
+  outcome: {
+    delivered: boolean;
+    exhausted: boolean;
+    httpStatus?: number;
+    error?: string;
+  },
+  executor: Db = getDb(),
+): Promise<void> {
+  const completed = outcome.delivered || outcome.exhausted;
+  await executor
+    .update(webhookDeliveries)
+    .set({
+      attempts: sql`${webhookDeliveries.attempts} + 1`,
+      status: outcome.delivered ? "delivered" : outcome.exhausted ? "failed" : "pending",
+      lastHttpStatus: outcome.httpStatus ?? null,
+      lastError: outcome.error ?? null,
+      completedAt: completed ? new Date() : null,
+    })
+    .where(eq(webhookDeliveries.id, id));
+}
+
+export async function listWebhookDeliveries(
+  webhookId: string,
+  limit: number,
+  executor: Db = getDb(),
+): Promise<WebhookDeliveryRow[]> {
+  const rows = await executor
+    .select()
+    .from(webhookDeliveries)
+    .where(eq(webhookDeliveries.webhookId, webhookId))
+    .orderBy(desc(webhookDeliveries.createdAt), desc(webhookDeliveries.id))
+    .limit(limit);
+  return rows as WebhookDeliveryRow[];
 }

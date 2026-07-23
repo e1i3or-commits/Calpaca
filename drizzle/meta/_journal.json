@@ -71,6 +71,27 @@
       "when": 1784762768759,
       "tag": "0009_real_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784777732544,
+      "tag": "0010_fuzzy_purple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784778120106,
+      "tag": "0011_yielding_star_brand",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784778782358,
+      "tag": "0012_famous_vector",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import {
   pgTable, uuid, text, integer, boolean, timestamp, jsonb,
-  pgEnum, uniqueIndex, index,
+  pgEnum, uniqueIndex, index, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -244,4 +244,37 @@ export const webhooks = pgTable("webhooks", {
   events: jsonb("events").$type<string[]>().notNull(), // kinds subscribed
   secret: text("secret").notNull(),
   active: boolean("active").notNull().default(true),
+});
+
+export const webhookDeliveries = pgTable("webhook_deliveries", {
+  id: uuid("id").primaryKey(),
+  webhookId: uuid("webhook_id").notNull().references(() => webhooks.id, { onDelete: "cascade" }),
+  event: text("event").notNull(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  lastHttpStatus: integer("last_http_status"),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (t) => [
+  index("webhook_deliveries_webhook_created_idx").on(t.webhookId, t.createdAt),
+]);
+
+export const rateLimits = pgTable("rate_limits", {
+  key: text("key").notNull(),
+  bucketStart: timestamp("bucket_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.key, t.bucketStart] }),
+]);
+
+export const timeSuggestions = pgTable("time_suggestions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventTypeId: uuid("event_type_id").notNull().references(() => eventTypes.id),
+  inviteeEmail: text("invitee_email").notNull(),
+  inviteeName: text("invitee_name").notNull(),
+  inviteeTimezone: text("invitee_timezone").notNull(),
+  proposedSlots: jsonb("proposed_slots").$type<{ start: string; end: string }[]>().notNull(),
+  message: text("message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

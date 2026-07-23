@@ -17,6 +17,7 @@ import {
   createHold as dbCreateHold,
   confirmHold as dbConfirmHold,
   confirmReschedule as dbConfirmReschedule,
+  countActiveHoldsForEventType as dbCountActiveHoldsForEventType,
   type Slot,
   type HoldRecord,
   type Invitee,
@@ -40,6 +41,12 @@ import { ok, type Result } from "../../lib/result";
 import { suggestEmailDomain } from "../../lib/email-typo";
 import { resolveTheme } from "../../core/theming/themes";
 import { enqueueInviteEmail as jobsEnqueueInviteEmail, emitBookingWebhook as jobsEmitBookingWebhook } from "../../jobs/index";
+import { bucketStart, decide, type RateLimitDecision } from "../../core/ratelimit/window";
+import { incrementRateLimit } from "../../db/rate-limit-repo";
+import {
+  createRateLimitMiddleware,
+  positiveIntegerEnv,
+} from "../rate-limit";
 
 /** Same "inject repo functions, not module bindings" convention as
  * src/api/routes/availability.ts (task 13), so tests can stub every
@@ -74,6 +81,16 @@ export interface BookingDeps {
   readonly getBookingById: (id: string) => Promise<BookingRow | null>;
   readonly getBookingHistoryForHosts: (hostUserIds: readonly string[]) => Promise<readonly BookingRecord[]>;
   readonly now: () => Temporal.Instant;
+  readonly checkRateLimit?: (
+    key: string,
+    now: Temporal.Instant,
+    limit: number,
+    windowSeconds: number,
+  ) => Promise<RateLimitDecision>;
+  readonly countActiveHoldsForEventType?: (
+    eventTypeId: string,
+    now: Temporal.Instant,
+  ) => Promise<number>;
   /** Optional so existing dep fixtures keep compiling; the default wires the
    * pg-boss invite-email queue. Must never throw into the response path. */
   readonly enqueueInviteEmail?: (bookingId: string, kind: "created" | "rescheduled" | "cancelled") => Promise<void>;
@@ -102,11 +119,20 @@ const defaultDeps: BookingDeps = {
   getBookingById: (id) => dbGetBookingById(id),
   getBookingHistoryForHosts: (hostUserIds) => dbGetBookingHistoryForHosts(hostUserIds),
   now: () => Temporal.Now.instant(),
+  checkRateLimit: async (key, now, limit, windowSeconds) => {
+    const bucket = bucketStart(now, windowSeconds);
+    const count = await incrementRateLimit(key, bucket);
+    const reset = bucket.add({ seconds: windowSeconds });
+    return decide(count, limit, now.until(reset).total({ unit: "seconds" }));
+  },
+  countActiveHoldsForEventType: (eventTypeId, now) =>
+    dbCountActiveHoldsForEventType(eventTypeId, now),
   enqueueInviteEmail: (bookingId, kind) => jobsEnqueueInviteEmail(bookingId, kind),
   emitBookingWebhook: (bookingId, kind, opts) => jobsEmitBookingWebhook(bookingId, kind, opts),
 };
 
 const HOLD_TTL_MINUTES = 10;
+const RATE_LIMIT_WINDOW_SECONDS = 60;
 
 const holdBodySchema = z.object({
   eventTypeSlug: z.string().min(1),
@@ -237,6 +263,19 @@ function confirmHoldErrorStatus(kind: ConfirmHoldError["kind"]): 404 | 409 {
 export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
   const router = new Hono();
 
+  router.use("/holds", createRateLimitMiddleware(deps, {
+    scope: "holds",
+    envName: "RATE_LIMIT_HOLDS_PER_MINUTE",
+    defaultLimit: 20,
+    windowSeconds: RATE_LIMIT_WINDOW_SECONDS,
+  }));
+  router.use("/bookings", createRateLimitMiddleware(deps, {
+    scope: "bookings",
+    envName: "RATE_LIMIT_BOOKINGS_PER_MINUTE",
+    defaultLimit: 10,
+    windowSeconds: RATE_LIMIT_WINDOW_SECONDS,
+  }));
+
   router.post("/holds", async (c) => {
     const body = await c.req.json().catch(() => null);
     const parsed = holdBodySchema.safeParse(body);
@@ -257,6 +296,15 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
     if (agent && !eventType.agentPolicy?.enabled) {
       return c.json({ error: "agent_not_allowed" }, 403);
+    }
+
+    const now = deps.now();
+    const activeHoldCeiling = positiveIntegerEnv("ACTIVE_HOLDS_PER_EVENT_TYPE", 50);
+    if (
+      deps.countActiveHoldsForEventType &&
+      (await deps.countActiveHoldsForEventType(eventType.id, now)) >= activeHoldCeiling
+    ) {
+      return c.json({ error: "holds_exhausted" }, 429);
     }
 
     const durationMinutes = slot.start.until(slot.end).total({ unit: "minutes" });
@@ -292,7 +340,6 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
 
     if (targetHostIds.length === 0) return c.json({ error: "event_type_not_found" }, 404);
 
-    const now = deps.now();
     const window = paddedWindow(slot, eventType.bufferBeforeMin, eventType.bufferAfterMin);
     const [scheduleRows, busyRows] = await Promise.all([
       deps.getSchedulesForUsers(targetHostIds),
