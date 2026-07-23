@@ -28,6 +28,9 @@ import { scoreSlots } from "../../core/availability/scoring";
 import { groupAvailability, type GroupHost } from "../../core/availability/group";
 import { resolveBookingLayout, resolveTheme } from "../../core/theming/themes";
 import { publicWorkspaceId } from "../public-workspace";
+import { getInviteeCalendarSession as dbGetInviteeCalendarSession } from "../../db/invitee-calendar-repo";
+import { rankByMutualAvailability } from "../../core/availability/mutual";
+import { getPublicWorkspaceEntitlements } from "../../db/workspace-repo";
 
 /**
  * Repo access the route needs, as plain functions rather than imported
@@ -48,6 +51,10 @@ export interface AvailabilityDeps {
   readonly getSchedulesForUsers: (userIds: readonly string[]) => Promise<HostSchedule[]>;
   readonly getBusyForUsers: (userIds: readonly string[], window: Interval) => Promise<HostBusy[]>;
   readonly now: () => Temporal.Instant;
+  readonly getInviteeCalendarSession?: (
+    capability: string,
+  ) => Promise<{ busy: { start: string; end: string }[]; expiresAt: Date } | null>;
+  readonly inviteeCalendarEnabled?: (workspaceId: string) => Promise<boolean>;
 }
 
 const defaultDeps: AvailabilityDeps = {
@@ -59,6 +66,9 @@ const defaultDeps: AvailabilityDeps = {
   getSchedulesForUsers: (userIds) => dbGetSchedulesForUsers(userIds),
   getBusyForUsers: (userIds, window) => dbGetBusyForUsers(userIds, window),
   now: () => Temporal.Now.instant(),
+  getInviteeCalendarSession: (capability) => dbGetInviteeCalendarSession(capability),
+  inviteeCalendarEnabled: async (workspaceId) =>
+    (await getPublicWorkspaceEntitlements(workspaceId))?.inviteeCalendarOverlay ?? false,
 };
 
 const querySchema = z.object({
@@ -79,6 +89,7 @@ interface SlotDto {
   readonly end: RenderedInstant;
   readonly score: number;
   readonly localHourWarning: boolean;
+  readonly mutual?: boolean;
 }
 
 const LOCAL_HOUR_MIN = 7;
@@ -90,7 +101,12 @@ function isOutsideLocalHours(instant: Temporal.Instant, timezone: string): boole
   return hour < LOCAL_HOUR_MIN || hour >= LOCAL_HOUR_MAX;
 }
 
-function renderSlot(slot: Interval, score: number, inviteeTimezone: string): SlotDto {
+function renderSlot(
+  slot: Interval,
+  score: number,
+  inviteeTimezone: string,
+  mutual?: boolean,
+): SlotDto {
   return {
     start: {
       utc: slot.start.toString(),
@@ -102,6 +118,7 @@ function renderSlot(slot: Interval, score: number, inviteeTimezone: string): Slo
     },
     score,
     localHourWarning: isOutsideLocalHours(slot.start, inviteeTimezone),
+    ...(mutual === undefined ? {} : { mutual }),
   };
 }
 
@@ -230,6 +247,9 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
               : [],
           )
         : undefined;
+    const inviteeCalendarOverlay = workspaceId && deps.inviteeCalendarEnabled
+      ? await deps.inviteeCalendarEnabled(workspaceId)
+      : undefined;
 
     return c.json({
       slug: eventType.slug,
@@ -247,6 +267,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
         ? { agentPolicy: { enabled: eventType.agentPolicy.enabled } }
         : {}),
       ...(selectableHosts ? { selectableHosts } : {}),
+      ...(inviteeCalendarOverlay === undefined ? {} : { inviteeCalendarOverlay }),
     });
   });
 
@@ -389,13 +410,40 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       scoredSlots = soloAvailability(selectedHosts, schedulesByUser, busyByUser, baseConfig, window, now);
     }
 
-    const rendered = scoredSlots.map((s) => renderSlot(s.slot, s.score, inviteeTimezone));
+    const capability = c.req.header("x-calpaca-invitee-calendar");
+    const overlay = capability && deps.getInviteeCalendarSession
+      ? await deps.getInviteeCalendarSession(capability)
+      : null;
+    const inviteeBusy = overlay
+      ? overlay.busy.flatMap((busy) => {
+          try {
+            return [{
+              start: Temporal.Instant.from(busy.start),
+              end: Temporal.Instant.from(busy.end),
+            }];
+          } catch {
+            return [];
+          }
+        })
+      : null;
+    const ranked: { slot: Interval; score: number; mutual?: boolean }[] = inviteeBusy
+      ? rankByMutualAvailability(scoredSlots, inviteeBusy)
+      : scoredSlots;
+    const rendered = ranked.map((s) =>
+      renderSlot(
+        s.slot,
+        s.score,
+        inviteeTimezone,
+        s.mutual,
+      ),
+    );
     const curated = rendered.slice(0, eventType.curatedSlotCount);
 
     return c.json({
       curated,
       all: rendered,
       ...(quorum ? { quorum } : {}),
+      ...(overlay ? { inviteeCalendar: { connected: true, expiresAt: overlay.expiresAt.toISOString() } } : {}),
     });
   });
 

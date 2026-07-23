@@ -112,6 +112,17 @@ export async function getWorkspaceContext(
   return row ? { ...row, entitlements: entitlementsFor(row.plan) } : null;
 }
 
+export async function getPublicWorkspaceEntitlements(
+  workspaceId: string,
+  executor: Db = getDb(),
+) {
+  const [row] = await executor
+    .select({ plan: workspaces.plan })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId));
+  return row ? entitlementsFor(row.plan) : null;
+}
+
 export async function listWorkspaceDomains(workspaceId: string, executor: Db = getDb()) {
   return executor
     .select({

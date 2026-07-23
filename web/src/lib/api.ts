@@ -12,6 +12,7 @@ export type SlotDto = {
   end: RenderedInstant;
   score: number;
   localHourWarning: boolean;
+  mutual?: boolean;
 };
 
 export type AvailabilityResponse = {
@@ -21,6 +22,7 @@ export type AvailabilityResponse = {
     missingHost: { id: string; name: string };
     slots: SlotDto[];
   };
+  inviteeCalendar?: { connected: true; expiresAt: string };
 };
 
 export type EventTypeProfile = {
@@ -45,6 +47,7 @@ export type EventTypeMeta = {
     image: string | null;
     role: "required" | "optional";
   }[];
+  inviteeCalendarOverlay?: boolean;
 };
 
 export type HoldResponse = {
@@ -115,6 +118,7 @@ export function getAvailability(args: {
   workspaceSlug?: string;
   hosts?: string[];
   optionalHosts?: string[];
+  inviteeCalendarToken?: string;
 }): Promise<AvailabilityResponse> {
   const params = new URLSearchParams({
     eventTypeSlug: args.eventTypeSlug,
@@ -128,7 +132,44 @@ export function getAvailability(args: {
     params.set("overrideHostRoles", "true");
     for (const host of args.optionalHosts) params.append("optionalHosts", host);
   }
-  return request(`/availability?${params}`);
+  return request(`/availability?${params}`, args.inviteeCalendarToken
+    ? { headers: {
+        "content-type": "application/json",
+        "x-calpaca-invitee-calendar": args.inviteeCalendarToken,
+      } }
+    : undefined);
+}
+
+export function startInviteeCalendarConnection(
+  returnPath: string,
+  workspaceSlug?: string,
+): Promise<{ authorizationUrl: string }> {
+  return request("/invitee-calendar/connect", {
+    method: "POST",
+    body: JSON.stringify({ returnPath, workspaceSlug }),
+  });
+}
+
+export function getInviteeCalendarStatus(capability: string): Promise<{
+  connected: boolean;
+  expiresAt?: string;
+}> {
+  return request("/invitee-calendar/status", {
+    headers: {
+      "content-type": "application/json",
+      "x-calpaca-invitee-calendar": capability,
+    },
+  });
+}
+
+export function disconnectInviteeCalendar(capability: string): Promise<{ connected: false }> {
+  return request("/invitee-calendar/session", {
+    method: "DELETE",
+    headers: {
+      "content-type": "application/json",
+      "x-calpaca-invitee-calendar": capability,
+    },
+  });
 }
 
 export function createHold(args: {

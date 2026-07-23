@@ -23,6 +23,9 @@
       "name": "Booking"
     },
     {
+      "name": "Invitee calendar"
+    },
+    {
       "name": "Routing"
     },
     {
@@ -543,6 +546,157 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/invitee-calendar/connect": {
+      "post": {
+        "operationId": "postInviteeCalendarConnect",
+        "tags": [
+          "Invitee calendar"
+        ],
+        "summary": "Start a short-lived Google free/busy connection",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/invitee-calendar/callback": {
+      "get": {
+        "operationId": "getApiInviteeCalendarCallback",
+        "tags": [
+          "Invitee calendar"
+        ],
+        "summary": "Complete Google OAuth and return to the booking page",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/invitee-calendar/status": {
+      "get": {
+        "operationId": "getInviteeCalendarStatus",
+        "tags": [
+          "Invitee calendar"
+        ],
+        "summary": "Check a calendar overlay capability",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/invitee-calendar/session": {
+      "delete": {
+        "operationId": "deleteInviteeCalendarSession",
+        "tags": [
+          "Invitee calendar"
+        ],
+        "summary": "Disconnect and erase a calendar overlay",
+        "parameters": [],
         "responses": {
           "200": {
             "description": "Successful response",

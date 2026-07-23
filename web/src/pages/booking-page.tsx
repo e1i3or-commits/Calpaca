@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowLeft, Check, Clock, Globe, Plus, Phone, Trash2, UserPlus, Video, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarCheck, Check, Clock, Globe, Plus, Phone, Trash2, UserPlus, Video, X } from "lucide-react";
 import {
   ApiError,
   confirmBooking,
   createHold,
   getEventTypeMeta,
+  startInviteeCalendarConnection,
+  getInviteeCalendarStatus,
+  disconnectInviteeCalendar,
   suggestTimes,
   type BookingConfirmation,
   type EventTypeMeta,
@@ -68,6 +71,9 @@ export function BookingPage({
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<EventTypeMeta | null>(null);
   const [hostRoles, setHostRoles] = useState<Record<string, "required" | "optional">>({});
+  const [calendarToken, setCalendarToken] = useState<string | null>(null);
+  const [calendarExpiresAt, setCalendarExpiresAt] = useState<string | null>(null);
+  const [calendarBusy, setCalendarBusy] = useState(false);
 
   useEffect(() => {
     if (window.parent === window) return;
@@ -81,6 +87,25 @@ export function BookingPage({
     observer.observe(document.documentElement);
     sendHeight();
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    const returnedToken = fragment.get("calendarSession");
+    const returnedError = fragment.get("calendarError");
+    if (returnedToken) sessionStorage.setItem("calpaca:invitee-calendar", returnedToken);
+    if (returnedError) setError("Could not connect that calendar. Try again.");
+    if (returnedToken || returnedError) history.replaceState(null, "", `${location.pathname}${location.search}`);
+    const capability = returnedToken ?? sessionStorage.getItem("calpaca:invitee-calendar");
+    if (!capability) return;
+    getInviteeCalendarStatus(capability).then((status) => {
+      if (status.connected) {
+        setCalendarToken(capability);
+        setCalendarExpiresAt(status.expiresAt ?? null);
+      } else {
+        sessionStorage.removeItem("calpaca:invitee-calendar");
+      }
+    }, () => {});
   }, []);
 
   // real title + theme; a failure here is cosmetic (the slug stands in and
@@ -172,6 +197,62 @@ export function BookingPage({
                   onChange={changeHostRoles}
                 />
               )}
+              {meta?.inviteeCalendarOverlay && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <CalendarCheck className="h-4 w-4 text-primary" />
+                  <span>
+                    {calendarToken
+                      ? "Times that work with your Google Calendar are shown first."
+                      : "See which times work with your Google Calendar."}
+                  </span>
+                </div>
+                {calendarToken ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={calendarBusy}
+                    onClick={async () => {
+                      setCalendarBusy(true);
+                      await disconnectInviteeCalendar(calendarToken).catch(() => {});
+                      sessionStorage.removeItem("calpaca:invitee-calendar");
+                      setCalendarToken(null);
+                      setCalendarExpiresAt(null);
+                      setReloadKey((key) => key + 1);
+                      setCalendarBusy(false);
+                    }}
+                  >
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={calendarBusy}
+                    onClick={async () => {
+                      setCalendarBusy(true);
+                      try {
+                        const result = await startInviteeCalendarConnection(
+                          `${location.pathname}${location.search}`,
+                          workspaceSlug,
+                        );
+                        location.assign(result.authorizationUrl);
+                      } catch (e) {
+                        setError(errorMessage(e));
+                        setCalendarBusy(false);
+                      }
+                    }}
+                  >
+                    Connect Google Calendar
+                  </Button>
+                )}
+                {calendarExpiresAt && (
+                  <span className="w-full text-xs text-muted-foreground">
+                    Connection expires {new Date(calendarExpiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.
+                  </span>
+                )}
+              </div>}
               {!meta?.selectableHosts || selectedHostIds.length > 0 ? (
                 <SlotPicker
                   slug={slug}
@@ -179,6 +260,7 @@ export function BookingPage({
                   timezone={timezone}
                   hosts={meta?.selectableHosts ? selectedHostIds : undefined}
                   optionalHosts={meta?.selectableHosts ? optionalHostIds : undefined}
+                  inviteeCalendarToken={calendarToken ?? undefined}
                   reloadKey={reloadKey}
                   onLoadError={(e) => setError(errorMessage(e))}
                   onPick={(slot, missingHostId) => {

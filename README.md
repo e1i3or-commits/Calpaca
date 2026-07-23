@@ -95,6 +95,7 @@ Copy `.env.example` to `.env.local`. The main settings are:
 | `BETTER_AUTH_SECRET` | Session-signing secret |
 | `BETTER_AUTH_URL` | Public application origin |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth and Calendar sync |
+| `INVITEE_CALENDAR_CALLBACK_URL` | Optional canonical callback for the anonymous invitee calendar overlay; defaults to `${BETTER_AUTH_URL}/api/invitee-calendar/callback` |
 | `PUBLIC_URL` | Public HTTPS origin for calendar webhooks and email links |
 | `SMTP_URL`, `EMAIL_FROM` | Booking and reminder email delivery |
 | `DISABLE_JOBS=1` | Disable in-process pg-boss workers |

@@ -127,6 +127,22 @@ export const apiTokens = pgTable("api_tokens", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("api_token_user_idx").on(t.userId)]);
 
+// Anonymous invitees may briefly connect Google Calendar while choosing a
+// time. Only opaque token hashes and free/busy ranges are retained; Google
+// credentials and event details never enter this table.
+export const inviteeCalendarSessions = pgTable("invitee_calendar_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  stateHash: text("state_hash").notNull().unique(),
+  capabilityHash: text("capability_hash").unique(),
+  returnUrl: text("return_url").notNull(),
+  status: text("status").notNull().default("pending"),
+  busy: jsonb("busy").$type<{ start: string; end: string }[]>().notNull().default([]),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("invitee_calendar_expiry_idx").on(t.expiresAt),
+]);
+
 // accounts is the OAuth token store: Google access/refresh tokens live here
 // and nowhere else. The sync worker reads them via auth.api.getAccessToken,
 // which refreshes expired tokens itself.

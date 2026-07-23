@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, CalendarCheck } from "lucide-react";
 import { getAvailability, type SlotDto } from "@/lib/api";
 import { dayKey, formatDay, formatDayTime, formatTime } from "@/lib/time";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ export function SlotPicker(props: {
   timezone: string;
   hosts?: string[];
   optionalHosts?: string[];
+  inviteeCalendarToken?: string;
   reloadKey?: number;
   onPick: (slot: SlotDto, missingHostId?: string) => void;
   onLoadError: (e: unknown) => void;
@@ -48,7 +49,7 @@ export function SlotPicker(props: {
   // capture, selected day) resets without effect-ordering choreography
   return (
     <SlotPickerInner
-      key={`${props.workspaceSlug ?? ""}|${props.slug}|${props.timezone}|${props.hosts?.join(",") ?? ""}|${props.optionalHosts?.join(",") ?? ""}|${props.reloadKey ?? 0}`}
+      key={`${props.workspaceSlug ?? ""}|${props.slug}|${props.timezone}|${props.hosts?.join(",") ?? ""}|${props.optionalHosts?.join(",") ?? ""}|${props.inviteeCalendarToken ?? ""}|${props.reloadKey ?? 0}`}
       {...props}
     />
   );
@@ -60,6 +61,7 @@ function SlotPickerInner({
   timezone,
   hosts,
   optionalHosts,
+  inviteeCalendarToken,
   onPick,
   onLoadError,
 }: {
@@ -68,6 +70,7 @@ function SlotPickerInner({
   timezone: string;
   hosts?: string[];
   optionalHosts?: string[];
+  inviteeCalendarToken?: string;
   onPick: (slot: SlotDto, missingHostId?: string) => void;
   onLoadError: (e: unknown) => void;
 }) {
@@ -106,6 +109,7 @@ function SlotPickerInner({
       inviteeTimezone: timezone,
       hosts,
       optionalHosts,
+      inviteeCalendarToken,
     })
       .then((r) => {
         if (cancelled) return;
@@ -128,7 +132,7 @@ function SlotPickerInner({
     };
     // onLoadError is deliberately not a dependency: parents pass fresh
     // closures every render and only the month in view should refetch
-  }, [slug, timezone, hosts, optionalHosts, key, months]);
+  }, [slug, workspaceSlug, timezone, hosts, optionalHosts, inviteeCalendarToken, key, months]);
 
   const byDay = useMemo(() => {
     const groups = new Map<string, SlotDto[]>();
@@ -169,6 +173,7 @@ function SlotPickerInner({
               onClick={() => onPick(slot)}
             >
               <span>{formatDayTime(slot.start.utc, timezone)}</span>
+              {slot.mutual && <CalendarCheck aria-label="Works with your calendar" className="h-4 w-4 text-primary" />}
               {slot.localHourWarning && <AlertTriangle className="h-4 w-4 text-warning" />}
             </Button>
           ))}
@@ -218,6 +223,7 @@ function SlotPickerInner({
                 {daySlots.map((slot) => (
                   <Button key={slot.start.utc} variant="outline" size="sm" onClick={() => onPick(slot)}>
                     {formatTime(slot.start.utc, timezone)}
+                    {slot.mutual && <CalendarCheck aria-label="Works with your calendar" className="h-3 w-3 text-primary" />}
                     {slot.localHourWarning && <AlertTriangle className="h-3 w-3 text-warning" />}
                   </Button>
                 ))}

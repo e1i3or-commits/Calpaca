@@ -105,6 +105,31 @@ function baseParams(slug: string): URLSearchParams {
 }
 
 describe("GET /availability", () => {
+  test("invitee overlay marks and prioritizes mutual times without hiding conflicts", async () => {
+    const router = createAvailabilityRoutes({
+      ...makeDeps(),
+      getInviteeCalendarSession: async (capability) => capability === "valid"
+        ? {
+            busy: [{ start: "2027-01-04T08:55:00Z", end: "2027-01-04T09:05:00Z" }],
+            expiresAt: new Date("2027-01-04T01:00:00Z"),
+          }
+        : null,
+    });
+    const res = await router.request(
+      `/availability?${baseParams("solo-30").toString()}`,
+      { headers: { "x-calpaca-invitee-calendar": "valid" } },
+    );
+    const body = await res.json() as AvailabilityResponse & {
+      inviteeCalendar: { connected: true };
+    };
+    const overlaySlots = body.all as (SlotDto & { mutual: boolean })[];
+
+    expect(overlaySlots).toHaveLength(3);
+    expect(overlaySlots.slice(0, 2).every((candidate) => candidate.mutual)).toBe(true);
+    expect(overlaySlots[2]?.mutual).toBe(false);
+    expect(body.inviteeCalendar.connected).toBe(true);
+  });
+
   test("solo: returns the host's own scored slots, curated to curatedSlotCount", async () => {
     const router = createAvailabilityRoutes(makeDeps());
     const res = await router.request(`/availability?${baseParams("solo-30").toString()}`);

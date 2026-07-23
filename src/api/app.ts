@@ -13,6 +13,7 @@ import { webhookRoutes } from "./routes/webhooks";
 import { suggestionRoutes } from "./routes/suggestions";
 import { userManagementRoutes } from "./routes/user-management";
 import { workspaceRoutes } from "./routes/workspace";
+import { inviteeCalendarRoutes } from "./routes/invitee-calendar";
 
 export const app = new Hono();
 
@@ -37,3 +38,4 @@ app.route("/", webhookRoutes);
 app.route("/", suggestionRoutes);
 app.route("/", userManagementRoutes);
 app.route("/", workspaceRoutes);
+app.route("/", inviteeCalendarRoutes);

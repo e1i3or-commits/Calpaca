@@ -42,6 +42,42 @@ export type WatchResult = {
   expiration: Date;
 };
 
+export async function queryFreeBusy(args: {
+  accessToken: string;
+  timeMin: string;
+  timeMax: string;
+}): Promise<Result<{ start: string; end: string }[], GoogleApiError>> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/freeBusy`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${args.accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        timeMin: args.timeMin,
+        timeMax: args.timeMax,
+        timeZone: "UTC",
+        items: [{ id: "primary" }],
+      }),
+    });
+  } catch (e) {
+    return err({ kind: "network_error", message: String(e) });
+  }
+  if (!res.ok) {
+    return err({
+      kind: "http_error",
+      status: res.status,
+      message: `freeBusy returned ${res.status}`,
+    });
+  }
+  const body = (await res.json()) as {
+    calendars?: { primary?: { busy?: { start: string; end: string }[] } };
+  };
+  return ok(body.calendars?.primary?.busy ?? []);
+}
+
 const BASE = "https://www.googleapis.com/calendar/v3";
 
 export async function listCalendars(

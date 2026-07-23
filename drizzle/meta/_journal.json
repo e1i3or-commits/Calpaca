@@ -197,6 +197,13 @@
       "when": 1784825413732,
       "tag": "0027_workspace-inference-triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1784826633787,
+      "tag": "0028_nervous_loners",
+      "breakpoints": true
     }
   ]
 }
