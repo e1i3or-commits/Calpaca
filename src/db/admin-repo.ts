@@ -106,11 +106,34 @@ export interface TeamMemberRecord {
 }
 
 export async function listTeamsForUser(userId: string, executor: Db = getDb()): Promise<TeamRecord[]> {
+  const [actor] = await executor
+    .select({ role: users.appRole, status: users.status })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (
+    actor?.status === "active"
+    && (actor.role === "owner" || actor.role === "admin")
+  ) {
+    return executor
+      .select({ id: teams.id, name: teams.name, slug: teams.slug })
+      .from(teams)
+      .orderBy(teams.name);
+  }
   return executor
     .select({ id: teams.id, name: teams.name, slug: teams.slug })
     .from(teams)
     .innerJoin(teamMembers, eq(teamMembers.teamId, teams.id))
     .where(eq(teamMembers.userId, userId));
+}
+
+export async function isAppAdmin(userId: string, executor: Db = getDb()): Promise<boolean> {
+  const [row] = await executor
+    .select({ role: users.appRole, status: users.status })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row?.status === "active" && (row.role === "owner" || row.role === "admin");
 }
 
 export async function isTeamMember(teamId: string, userId: string, executor: Db = getDb()): Promise<boolean> {

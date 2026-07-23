@@ -7,6 +7,7 @@ availability, Google Calendar sync, and an MCP server for AI-assisted booking.
 [Live demo](https://cal.tourscale.com) ·
 [Architecture](docs/ARCHITECTURE.md) ·
 [MCP setup](docs/MCP.md) ·
+[API reference](docs/API.md) ·
 [Embeds](docs/EMBEDS.md) ·
 [Self-hosting](docs/SELF-HOSTING.md) ·
 [Roadmap](docs/FEATURE-PARITY-ROADMAP.md)

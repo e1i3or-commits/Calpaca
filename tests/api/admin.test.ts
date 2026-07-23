@@ -67,6 +67,7 @@ function makeDeps(overrides: Partial<AdminDeps> = {}): AdminDeps {
     createTeam: async (input) => (input.slug === "sales" ? "slug_taken" : { ...team, ...input }),
     isTeamMember: async (teamId) => teamId === TEAM_ID,
     isTeamAdmin: async (teamId) => teamId === TEAM_ID,
+    isAppAdmin: async () => false,
     listTeamMembers: async () => [
       { userId: U1, name: "Host", email: "host@example.test", isAdmin: true },
     ],
@@ -201,6 +202,20 @@ describe("admin routes", () => {
     })).request(`/api/me/teams/${TEAM_ID}/members/${U1}`, { method: "DELETE" });
     expect(guarded.status).toBe(409);
     expect(await guarded.json()).toEqual({ error: "last_team_admin" });
+  });
+
+  test("application admins can inspect and manage teams without membership", async () => {
+    const routes = createAdminRoutes(makeDeps({
+      isTeamMember: async () => false,
+      isTeamAdmin: async () => false,
+      isAppAdmin: async () => true,
+    }));
+    expect((await routes.request(`/api/me/teams/${OTHER_TEAM}/members`)).status).toBe(200);
+    expect((await post(
+      routes,
+      `/api/me/teams/${OTHER_TEAM}/members`,
+      { userId: U2 },
+    )).status).toBe(201);
   });
 
   test("event type create enforces solo=1 host, slug shape, and team membership", async () => {

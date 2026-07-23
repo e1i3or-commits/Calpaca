@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit && tsc -p web --noEmit",
     "lint": "eslint .",
     "test": "bun test",
+    "openapi:generate": "bun run scripts-dev/generate-openapi.ts",
     "start": "bun run src/index.ts",
     "mcp": "bun run src/mcp/index.ts",
     "dev:web": "vite -c web/vite.config.ts",

@@ -23,6 +23,7 @@ function adminDeps(email: string): AdminDeps {
     addTeamMember: async () => undefined,
     removeTeamMember: async () => "not_found",
     isTeamAdmin: async () => false,
+    isAppAdmin: async () => false,
     updateTeamMemberAdmin: async () => "not_found",
     listEventTypesForUser: async () => [],
     getEventTypeForAdmin: async () => null,

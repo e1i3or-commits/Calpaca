@@ -20,6 +20,7 @@ import {
   getEventTypeForAdmin,
   isTeamMember,
   isTeamAdmin,
+  isAppAdmin,
   listEventTypesForUser,
   listSchedulesForUser,
   listTeamMembers,
@@ -77,6 +78,7 @@ export interface AdminDeps {
   }) => Promise<TeamRecord | "slug_taken">;
   readonly isTeamMember: (teamId: string, userId: string) => Promise<boolean>;
   readonly isTeamAdmin: (teamId: string, userId: string) => Promise<boolean>;
+  readonly isAppAdmin: (userId: string) => Promise<boolean>;
   readonly listTeamMembers: (teamId: string) => Promise<TeamMemberRecord[]>;
   readonly addTeamMember: (teamId: string, userId: string) => Promise<void>;
   readonly removeTeamMember: (
@@ -135,6 +137,7 @@ const defaultDeps: AdminDeps = {
   createTeam: (input) => createTeam(input),
   isTeamMember: (teamId, userId) => isTeamMember(teamId, userId),
   isTeamAdmin: (teamId, userId) => isTeamAdmin(teamId, userId),
+  isAppAdmin: (userId) => isAppAdmin(userId),
   listTeamMembers: (teamId) => listTeamMembers(teamId),
   addTeamMember: (teamId, userId) => addTeamMember(teamId, userId),
   removeTeamMember: (teamId, userId) => removeTeamMember(teamId, userId),
@@ -390,7 +393,11 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   router.get("/api/me/teams/:id/members", async (c) => {
     const teamId = c.req.param("id");
-    if (!(await deps.isTeamMember(teamId, c.get("user").id))) {
+    const userId = c.get("user").id;
+    if (
+      !(await deps.isTeamMember(teamId, userId))
+      && !(await deps.isAppAdmin(userId))
+    ) {
       return c.json({ error: "team_not_found" }, 404);
     }
     return c.json({ members: await deps.listTeamMembers(teamId) });
@@ -398,7 +405,11 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   router.post("/api/me/teams/:id/members", async (c) => {
     const teamId = c.req.param("id");
-    if (!(await deps.isTeamAdmin(teamId, c.get("user").id))) {
+    const userId = c.get("user").id;
+    if (
+      !(await deps.isTeamAdmin(teamId, userId))
+      && !(await deps.isAppAdmin(userId))
+    ) {
       return c.json({ error: "team_not_found" }, 404);
     }
     const parsed = memberBodySchema.safeParse(await c.req.json().catch(() => null));
@@ -409,7 +420,11 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   router.delete("/api/me/teams/:id/members/:userId", async (c) => {
     const teamId = c.req.param("id");
-    if (!(await deps.isTeamAdmin(teamId, c.get("user").id))) {
+    const actorId = c.get("user").id;
+    if (
+      !(await deps.isTeamAdmin(teamId, actorId))
+      && !(await deps.isAppAdmin(actorId))
+    ) {
       return c.json({ error: "team_not_found" }, 404);
     }
     const removed = await deps.removeTeamMember(teamId, c.req.param("userId"));
@@ -420,7 +435,11 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   router.patch("/api/me/teams/:id/members/:userId", async (c) => {
     const teamId = c.req.param("id");
-    if (!(await deps.isTeamAdmin(teamId, c.get("user").id))) {
+    const actorId = c.get("user").id;
+    if (
+      !(await deps.isTeamAdmin(teamId, actorId))
+      && !(await deps.isAppAdmin(actorId))
+    ) {
       return c.json({ error: "team_not_found" }, 404);
     }
     const parsed = memberRoleBodySchema.safeParse(await c.req.json().catch(() => null));

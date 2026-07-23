@@ -141,7 +141,7 @@ friction before adding new domains.
 | Analytics dashboard and CSV export over the four views | Shipped | Results match SQL views exactly |
 | Generic deployment example, vendored AGPL text, issue templates | Shipped | Portable Compose setup documented |
 | Embed v1: responsive iframe + small script launcher | Shipped | CSP, resize, and mobile checks complete |
-| OpenAPI document generated from the live contracts | M | Contract drift check in verification |
+| OpenAPI document and searchable reference | Shipped | Route and generated-document drift checks run in verification |
 
 ### P1 — Scheduling fundamentals parity
 

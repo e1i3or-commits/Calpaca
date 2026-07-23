@@ -126,6 +126,7 @@ function adminDeps(): AdminDeps {
     addTeamMember: async () => undefined,
     removeTeamMember: async () => "not_found",
     isTeamAdmin: async () => false,
+    isAppAdmin: async () => false,
     updateTeamMemberAdmin: async () => "not_found",
     listEventTypesForUser: async () => [adminEventType],
     getEventTypeForAdmin: async () => adminEventType,
