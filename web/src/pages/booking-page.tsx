@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, Check, Clock, Globe } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowLeft, Check, Clock, Globe, UserPlus, X } from "lucide-react";
 import {
   ApiError,
   confirmBooking,
@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 type Step =
   | { name: "pick" }
-  | { name: "details"; slot: SlotDto }
+  | { name: "details"; slot: SlotDto; hosts?: string[]; optionalHosts?: string[] }
   | { name: "confirmed"; slot: SlotDto; confirmation: BookingConfirmation };
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -30,6 +30,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   slot_not_available: "That time was just taken. Pick another one.",
   slot_taken: "That time was just taken. Pick another one.",
   expired: "The hold on that time expired. Pick it again.",
+  hosts_not_selectable: "That host selection is no longer available. Refresh and choose again.",
 };
 
 export function errorMessage(e: unknown): string {
@@ -50,13 +51,39 @@ export function BookingPage({
   const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<EventTypeMeta | null>(null);
+  const [hostRoles, setHostRoles] = useState<Record<string, "required" | "optional">>({});
 
   // real title + theme; a failure here is cosmetic (the slug stands in and
   // the availability load reports the 404), so it's deliberately swallowed
   useEffect(() => {
     getEventTypeMeta(slug).then(setMeta, () => {});
   }, [slug]);
+  useEffect(() => {
+    if (!meta?.selectableHosts) return;
+    setHostRoles(
+      Object.fromEntries(meta.selectableHosts.map((host) => [host.id, host.role])),
+    );
+  }, [meta?.selectableHosts]);
   useTheme(meta?.theme);
+
+  const selectedHostIds = useMemo(
+    () =>
+      meta?.selectableHosts
+        ?.filter((host) => host.id in hostRoles)
+        .map((host) => host.id) ?? [],
+    [meta?.selectableHosts, hostRoles],
+  );
+  const optionalHostIds = useMemo(
+    () => selectedHostIds.filter((id) => hostRoles[id] === "optional"),
+    [selectedHostIds, hostRoles],
+  );
+
+  function changeHostRoles(next: Record<string, "required" | "optional">) {
+    setHostRoles(next);
+    setStep({ name: "pick" });
+    setError(null);
+    setReloadKey((key) => key + 1);
+  }
 
   if (step.name === "confirmed") {
     return <Confirmation slot={step.slot} confirmation={step.confirmation} timezone={timezone} />;
@@ -85,16 +112,46 @@ export function BookingPage({
           {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
           {step.name === "pick" && (
-            <SlotPicker
-              slug={slug}
-              timezone={timezone}
-              reloadKey={reloadKey}
-              onLoadError={(e) => setError(errorMessage(e))}
-              onPick={(slot) => {
-                setError(null);
-                setStep({ name: "details", slot });
-              }}
-            />
+            <div className="flex flex-col gap-6">
+              {meta?.selectableHosts && (
+                <PublicHostPicker
+                  hosts={meta.selectableHosts}
+                  selectedRoles={hostRoles}
+                  onChange={changeHostRoles}
+                />
+              )}
+              {!meta?.selectableHosts || selectedHostIds.length > 0 ? (
+                <SlotPicker
+                  slug={slug}
+                  timezone={timezone}
+                  hosts={meta?.selectableHosts ? selectedHostIds : undefined}
+                  optionalHosts={meta?.selectableHosts ? optionalHostIds : undefined}
+                  reloadKey={reloadKey}
+                  onLoadError={(e) => setError(errorMessage(e))}
+                  onPick={(slot, missingHostId) => {
+                    setError(null);
+                    setStep({
+                      name: "details",
+                      slot,
+                      ...(meta?.selectableHosts
+                        ? {
+                            hosts: selectedHostIds.filter(
+                              (id) => id !== missingHostId,
+                            ),
+                            optionalHosts: optionalHostIds.filter(
+                              (id) => id !== missingHostId,
+                            ),
+                          }
+                        : {}),
+                    });
+                  }}
+                />
+              ) : (
+                <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  Choose at least one person to see available times.
+                </p>
+              )}
+            </div>
           )}
 
           {step.name === "details" && (
@@ -102,6 +159,8 @@ export function BookingPage({
               slot={step.slot}
               slug={slug}
               timezone={timezone}
+              hosts={step.hosts}
+              optionalHosts={step.optionalHosts}
               routingAnswers={routingAnswers}
               onBack={() => setStep({ name: "pick" })}
               onError={(e) => {
@@ -171,6 +230,130 @@ function initials(name: string): string {
     .join("");
 }
 
+function PublicHostPicker({
+  hosts,
+  selectedRoles,
+  onChange,
+}: {
+  hosts: NonNullable<EventTypeMeta["selectableHosts"]>;
+  selectedRoles: Record<string, "required" | "optional">;
+  onChange: (roles: Record<string, "required" | "optional">) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const selected = hosts.filter((host) => host.id in selectedRoles);
+  const normalizedQuery = query.trim().toLowerCase();
+  const candidates = hosts.filter(
+    (host) =>
+      !(host.id in selectedRoles) &&
+      normalizedQuery !== "" &&
+      host.name.toLowerCase().includes(normalizedQuery),
+  );
+
+  return (
+    <section className="flex min-w-0 flex-col gap-3 border-b border-border pb-6">
+      <div>
+        <h2 className="text-sm font-medium">Who should join?</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Choose people and mark whether their attendance is required.
+        </p>
+      </div>
+
+      {selected.length > 0 && (
+        <ul className="grid min-w-0 gap-2">
+          {selected.map((host) => (
+            <li
+              key={host.id}
+              className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-center"
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                {host.image ? (
+                  <img
+                    src={host.image}
+                    alt=""
+                    className="h-8 w-8 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                    {initials(host.name)}
+                  </span>
+                )}
+                <span className="min-w-0 truncate text-sm font-medium">{host.name}</span>
+              </div>
+              <div className="flex items-center gap-1 self-start rounded-md bg-muted p-1 sm:self-auto">
+                {(["required", "optional"] as const).map((role) => (
+                  <button
+                    key={role}
+                    type="button"
+                    aria-pressed={selectedRoles[host.id] === role}
+                    className={`rounded px-2 py-1 text-xs capitalize transition-colors ${
+                      selectedRoles[host.id] === role
+                        ? "bg-card font-medium text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={() =>
+                      onChange({ ...selectedRoles, [host.id]: role })
+                    }
+                  >
+                    {role}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  aria-label={`Remove ${host.name}`}
+                  className="ml-1 rounded p-1 text-muted-foreground hover:bg-card hover:text-foreground"
+                  onClick={() => {
+                    const next = { ...selectedRoles };
+                    delete next[host.id];
+                    onChange(next);
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {selected.length < hosts.length && (
+        <div className="relative min-w-0">
+          <UserPlus className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search people…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {normalizedQuery !== "" && (
+            <ul className="absolute z-10 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-border bg-card shadow-md">
+              {candidates.length === 0 && (
+                <li className="px-3 py-2 text-sm text-muted-foreground">No matches.</li>
+              )}
+              {candidates.map((host) => (
+                <li key={host.id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => {
+                      onChange({ ...selectedRoles, [host.id]: host.role });
+                      setQuery("");
+                    }}
+                  >
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium">
+                      {initials(host.name)}
+                    </span>
+                    <span className="truncate">{host.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function TimezoneSelect({ value, onChange }: { value: string; onChange: (tz: string) => void }) {
   return (
     <select
@@ -192,6 +375,8 @@ function DetailsStep({
   slot,
   slug,
   timezone,
+  hosts,
+  optionalHosts,
   routingAnswers,
   onBack,
   onError,
@@ -200,6 +385,8 @@ function DetailsStep({
   slot: SlotDto;
   slug: string;
   timezone: string;
+  hosts?: string[];
+  optionalHosts?: string[];
   routingAnswers?: RoutingAnswers;
   onBack: () => void;
   onError: (e: unknown) => void;
@@ -215,12 +402,19 @@ function DetailsStep({
     try {
       // hold-then-confirm: the server re-verifies availability inside the
       // hold transaction, the client never wins a race by itself
-      const hold = await createHold({ eventTypeSlug: slug, start: slot.start.utc, end: slot.end.utc });
+      const hold = await createHold({
+        eventTypeSlug: slug,
+        start: slot.start.utc,
+        end: slot.end.utc,
+        hosts,
+        optionalHosts,
+      });
       const confirmation = await confirmBooking({
         eventTypeSlug: slug,
         holdIds: hold.holdIds,
         invitee: { email, name, timezone, ...(notes.trim() ? { notes: notes.trim() } : {}) },
         routingAnswers,
+        hosts,
       });
       onConfirmed(confirmation);
     } catch (e) {

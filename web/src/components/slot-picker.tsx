@@ -37,30 +37,45 @@ function currentCursor(timezone: string): Cursor {
 export function SlotPicker(props: {
   slug: string;
   timezone: string;
+  hosts?: string[];
+  optionalHosts?: string[];
   reloadKey?: number;
-  onPick: (slot: SlotDto) => void;
+  onPick: (slot: SlotDto, missingHostId?: string) => void;
   onLoadError: (e: unknown) => void;
 }) {
   // remount on identity change so every piece of state (month cache, curated
   // capture, selected day) resets without effect-ordering choreography
-  return <SlotPickerInner key={`${props.slug}|${props.timezone}|${props.reloadKey ?? 0}`} {...props} />;
+  return (
+    <SlotPickerInner
+      key={`${props.slug}|${props.timezone}|${props.hosts?.join(",") ?? ""}|${props.optionalHosts?.join(",") ?? ""}|${props.reloadKey ?? 0}`}
+      {...props}
+    />
+  );
 }
 
 function SlotPickerInner({
   slug,
   timezone,
+  hosts,
+  optionalHosts,
   onPick,
   onLoadError,
 }: {
   slug: string;
   timezone: string;
-  onPick: (slot: SlotDto) => void;
+  hosts?: string[];
+  optionalHosts?: string[];
+  onPick: (slot: SlotDto, missingHostId?: string) => void;
   onLoadError: (e: unknown) => void;
 }) {
   const [nowCursor] = useState(() => currentCursor(timezone));
   const [cursor, setCursor] = useState(nowCursor);
   const [months, setMonths] = useState<ReadonlyMap<string, readonly SlotDto[]>>(new Map());
   const [curated, setCurated] = useState<readonly SlotDto[] | null>(null);
+  const [quorum, setQuorum] = useState<{
+    missingHost: { id: string; name: string };
+    slots: readonly SlotDto[];
+  } | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -85,6 +100,8 @@ function SlotPickerInner({
       start: start.toISOString(),
       end: end.toISOString(),
       inviteeTimezone: timezone,
+      hosts,
+      optionalHosts,
     })
       .then((r) => {
         if (cancelled) return;
@@ -94,6 +111,7 @@ function SlotPickerInner({
         // curated comes from the first month only: it's the server's top-N
         // for the near window, not something to overwrite while browsing
         setCurated((c) => c ?? r.curated);
+        setQuorum((current) => current ?? r.quorum ?? null);
       })
       .catch((e: unknown) => {
         if (!cancelled) {
@@ -106,7 +124,7 @@ function SlotPickerInner({
     };
     // onLoadError is deliberately not a dependency: parents pass fresh
     // closures every render and only the month in view should refetch
-  }, [slug, timezone, key, months]);
+  }, [slug, timezone, hosts, optionalHosts, key, months]);
 
   const byDay = useMemo(() => {
     const groups = new Map<string, SlotDto[]>();
@@ -145,6 +163,26 @@ function SlotPickerInner({
               size="lg"
               className="justify-between"
               onClick={() => onPick(slot)}
+            >
+              <span>{formatDayTime(slot.start.utc, timezone)}</span>
+              {slot.localHourWarning && <AlertTriangle className="h-4 w-4 text-warning" />}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {curated !== null && curated.length === 0 && quorum && quorum.slots.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border bg-muted/40 p-4">
+          <p className="text-sm font-medium">No time works for everyone.</p>
+          <p className="text-sm text-muted-foreground">
+            Best times without {quorum.missingHost.name}:
+          </p>
+          {quorum.slots.slice(0, 3).map((slot) => (
+            <Button
+              key={slot.start.utc}
+              variant="outline"
+              className="justify-between bg-card"
+              onClick={() => onPick(slot, quorum.missingHost.id)}
             >
               <span>{formatDayTime(slot.start.utc, timezone)}</span>
               {slot.localHourWarning && <AlertTriangle className="h-4 w-4 text-warning" />}

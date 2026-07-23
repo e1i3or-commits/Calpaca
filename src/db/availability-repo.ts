@@ -16,6 +16,7 @@ export interface EventTypeConfig {
   // the repo always populates both
   readonly title?: string;
   readonly theme?: string;
+  readonly mode?: AssignmentMode;
   readonly durationMinutes: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -24,6 +25,10 @@ export interface EventTypeConfig {
   readonly maxPerDay: number | null;
   readonly curatedSlotCount: number;
   readonly publicSelectableHostIds: readonly string[];
+  readonly agentPolicy?: {
+    readonly enabled: boolean;
+    readonly autoExpireHoldsMin?: number;
+  };
 }
 
 export type AssignmentMode = "solo" | "round_robin" | "group";
@@ -41,6 +46,10 @@ export interface BookingEventTypeConfig {
   readonly minimumNoticeMin: number;
   readonly mode: AssignmentMode;
   readonly publicSelectableHostIds: readonly string[];
+  readonly agentPolicy?: {
+    readonly enabled: boolean;
+    readonly autoExpireHoldsMin?: number;
+  };
 }
 
 function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingEventTypeConfig {
@@ -54,6 +63,7 @@ function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingE
     minimumNoticeMin: row.minimumNoticeMin,
     mode: row.mode,
     publicSelectableHostIds: row.publicSelectableHostIds,
+    agentPolicy: row.agentPolicy,
   };
 }
 
@@ -61,6 +71,9 @@ export interface EventTypeHostRecord {
   readonly userId: string;
   readonly role: "member" | "required" | "optional";
   readonly weight: number;
+  /** Optional so existing injected fixtures remain valid; the real repo joins both. */
+  readonly name?: string;
+  readonly image?: string | null;
 }
 
 export interface HostSchedule {
@@ -95,6 +108,7 @@ export async function getEventTypeBySlug(
     slug: row.slug,
     title: row.title,
     theme: row.theme,
+    mode: row.mode,
     durationMinutes: row.durationMinutes,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
@@ -103,6 +117,7 @@ export async function getEventTypeBySlug(
     maxPerDay: row.maxPerDay,
     curatedSlotCount: row.curatedSlotCount,
     publicSelectableHostIds: row.publicSelectableHostIds,
+    agentPolicy: row.agentPolicy,
   };
 }
 
@@ -160,8 +175,15 @@ export async function getEventTypeHosts(
   executor: Db = getDb(),
 ): Promise<EventTypeHostRecord[]> {
   return executor
-    .select({ userId: eventTypeHosts.userId, role: eventTypeHosts.role, weight: eventTypeHosts.weight })
+    .select({
+      userId: eventTypeHosts.userId,
+      role: eventTypeHosts.role,
+      weight: eventTypeHosts.weight,
+      name: users.name,
+      image: users.image,
+    })
     .from(eventTypeHosts)
+    .innerJoin(users, eq(eventTypeHosts.userId, users.id))
     .where(eq(eventTypeHosts.eventTypeId, eventTypeId));
 }
 

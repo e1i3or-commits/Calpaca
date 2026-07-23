@@ -185,6 +185,10 @@ export interface AdminEventType {
   readonly scheduleId: string | null;
   /** optional so pre-theming test fixtures stay valid; reads always set it */
   readonly theme?: string;
+  readonly agentPolicy?: {
+    readonly enabled: boolean;
+    readonly autoExpireHoldsMin?: number;
+  };
   readonly hosts: readonly (EventTypeHostInput & { name: string; email: string })[];
 }
 
@@ -230,6 +234,7 @@ function toAdminEventType(
     mode: row.mode,
     scheduleId: row.scheduleId,
     theme: row.theme,
+    agentPolicy: row.agentPolicy,
     hosts,
   };
 }
@@ -276,6 +281,11 @@ export interface EventTypeInput {
   readonly teamId: string | null;
   /** undefined keeps the column default (create) or leaves it unchanged (update) */
   readonly theme?: string;
+  /** Same compatibility behavior as theme for dashboard clients predating agent policy. */
+  readonly agentPolicy?: {
+    readonly enabled: boolean;
+    readonly autoExpireHoldsMin?: number;
+  };
   readonly hosts: readonly EventTypeHostInput[];
 }
 
@@ -325,6 +335,7 @@ export async function updateEventType(
         scheduleId: input.scheduleId,
         teamId: input.teamId,
         theme: input.theme,
+        agentPolicy: input.agentPolicy,
       })
       .where(eq(eventTypes.id, id))
       .returning();

@@ -17,6 +17,10 @@ export type SlotDto = {
 export type AvailabilityResponse = {
   curated: SlotDto[];
   all: SlotDto[];
+  quorum?: {
+    missingHost: { id: string; name: string };
+    slots: SlotDto[];
+  };
 };
 
 export type EventTypeProfile = {
@@ -31,6 +35,12 @@ export type EventTypeMeta = {
   theme: string;
   /** absent only from pre-profile servers */
   profile?: EventTypeProfile;
+  selectableHosts?: {
+    id: string;
+    name: string;
+    image: string | null;
+    role: "required" | "optional";
+  }[];
 };
 
 export type HoldResponse = {
@@ -92,6 +102,7 @@ export function getAvailability(args: {
   end: string;
   inviteeTimezone: string;
   hosts?: string[];
+  optionalHosts?: string[];
 }): Promise<AvailabilityResponse> {
   const params = new URLSearchParams({
     eventTypeSlug: args.eventTypeSlug,
@@ -100,6 +111,10 @@ export function getAvailability(args: {
     inviteeTimezone: args.inviteeTimezone,
   });
   for (const host of args.hosts ?? []) params.append("hosts", host);
+  if (args.optionalHosts) {
+    params.set("overrideHostRoles", "true");
+    for (const host of args.optionalHosts) params.append("optionalHosts", host);
+  }
   return request(`/availability?${params}`);
 }
 
@@ -108,6 +123,7 @@ export function createHold(args: {
   start: string;
   end: string;
   hosts?: string[];
+  optionalHosts?: string[];
 }): Promise<HoldResponse> {
   return request("/holds", { method: "POST", body: JSON.stringify(args) });
 }
@@ -117,6 +133,7 @@ export function confirmBooking(args: {
   holdIds: string[];
   invitee: { email: string; name: string; timezone: string; notes?: string };
   routingAnswers?: RoutingAnswers;
+  hosts?: string[];
 }): Promise<BookingConfirmation> {
   return request("/bookings", { method: "POST", body: JSON.stringify(args) });
 }

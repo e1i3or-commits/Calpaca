@@ -132,6 +132,12 @@ const eventTypeBodySchema = z
     scheduleId: z.string().uuid().nullable(),
     teamId: z.string().uuid().nullable(),
     theme: z.enum(themeNames).default("default"),
+    agentPolicy: z
+      .object({
+        enabled: z.boolean(),
+        autoExpireHoldsMin: z.number().int().min(1).max(1440).optional(),
+      })
+      .optional(),
     hosts: z
       .array(
         z.object({

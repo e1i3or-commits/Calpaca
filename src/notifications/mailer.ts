@@ -26,6 +26,7 @@ export interface InviteMail {
   readonly cc?: readonly string[];
   readonly subject: string;
   readonly text: string;
+  readonly html: string;
   /** RFC 5322 Message-ID, angle brackets included. Set by buildMail to a
    * value that embeds the booking id so provider bounce/delivery
    * notifications can be correlated back (see /api/webhooks/email-delivery). */
@@ -53,6 +54,7 @@ export async function sendInviteMail(mail: InviteMail): Promise<SendResult> {
     cc: mail.cc && mail.cc.length > 0 ? [...mail.cc] : undefined,
     subject: mail.subject,
     text: mail.text,
+    html: mail.html,
     messageId: mail.messageId,
     ...(mail.ics
       ? {

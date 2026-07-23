@@ -9,11 +9,13 @@
     "lint": "eslint .",
     "test": "bun test",
     "start": "bun run src/index.ts",
+    "mcp": "bun run src/mcp/index.ts",
     "dev:web": "vite -c web/vite.config.ts",
     "build:web": "vite build -c web/vite.config.ts"
   },
   "dependencies": {
     "@js-temporal/polyfill": "^0.5.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@tanstack/react-router": "^1.170.18",
     "better-auth": "^1.6.24",
     "class-variance-authority": "^0.7.1",

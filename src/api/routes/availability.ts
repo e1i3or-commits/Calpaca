@@ -155,6 +155,22 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     const profile = deps.getEventTypeProfile
       ? await deps.getEventTypeProfile(eventType.id)
       : undefined;
+    const selectableHosts =
+      eventType.mode === "group" && eventType.publicSelectableHostIds.length > 0
+        ? (await deps.getEventTypeHosts(eventType.id)).flatMap((host) =>
+            eventType.publicSelectableHostIds.includes(host.userId) &&
+            host.name !== undefined
+              ? [
+                  {
+                    id: host.userId,
+                    name: host.name,
+                    image: host.image ?? null,
+                    role: groupHostRole(host.role),
+                  },
+                ]
+              : [],
+          )
+        : undefined;
 
     return c.json({
       slug: eventType.slug,
@@ -162,6 +178,10 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       durationMinutes: eventType.durationMinutes,
       theme: resolveTheme(eventType.theme),
       ...(profile ? { profile } : {}),
+      ...(eventType.agentPolicy
+        ? { agentPolicy: { enabled: eventType.agentPolicy.enabled } }
+        : {}),
+      ...(selectableHosts ? { selectableHosts } : {}),
     });
   });
 
@@ -177,6 +197,8 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     }
     const { eventTypeSlug, start, end, inviteeTimezone } = parsedQuery.data;
     const requestedHosts = c.req.queries("hosts");
+    const requestedOptionalHosts = c.req.queries("optionalHosts") ?? [];
+    const overrideHostRoles = c.req.query("overrideHostRoles") === "true";
 
     let windowStart: Temporal.Instant;
     let windowEnd: Temporal.Instant;
@@ -208,7 +230,20 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     }
 
     const allHosts = await deps.getEventTypeHosts(eventType.id);
-    const selectedHosts = isGroup ? allHosts.filter((h) => requestedHosts.includes(h.userId)) : allHosts;
+    const selectedHosts = isGroup
+      ? allHosts
+          .filter((h) => requestedHosts.includes(h.userId))
+          .map((host) =>
+            overrideHostRoles
+              ? {
+                  ...host,
+                  role: requestedOptionalHosts.includes(host.userId)
+                    ? ("optional" as const)
+                    : ("required" as const),
+                }
+              : host,
+          )
+      : allHosts;
 
     const userIds = selectedHosts.map((h) => h.userId);
     const [scheduleRows, busyRows] = await Promise.all([
@@ -230,6 +265,12 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     };
 
     let scoredSlots: { slot: Interval; score: number }[];
+    let quorum:
+      | {
+          missingHost: { id: string; name: string };
+          slots: SlotDto[];
+        }
+      | undefined;
     if (isGroup) {
       const groupHosts: GroupHost[] = selectedHosts.flatMap((host) => {
         const schedule = schedulesByUser.get(host.userId);
@@ -249,7 +290,23 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
         ...baseConfig,
         timezone: groupHosts[0]?.timezone ?? baseConfig.timezone,
       };
-      scoredSlots = [...groupAvailability(groupHosts, groupConfig, now).full];
+      const groupResult = groupAvailability(groupHosts, groupConfig, now);
+      scoredSlots = [...groupResult.full];
+      const [bestFallback] = groupResult.fallback;
+      if (scoredSlots.length === 0 && bestFallback) {
+        const missingHost = selectedHosts.find(
+          (host) => host.userId === bestFallback.missingUserId,
+        );
+        quorum = {
+          missingHost: {
+            id: bestFallback.missingUserId,
+            name: missingHost?.name ?? bestFallback.missingUserId,
+          },
+          slots: bestFallback.slots.map((s) =>
+            renderSlot(s.slot, s.score, inviteeTimezone),
+          ),
+        };
+      }
     } else {
       scoredSlots = soloAvailability(selectedHosts, schedulesByUser, busyByUser, baseConfig, window, now);
     }
@@ -257,7 +314,11 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     const rendered = scoredSlots.map((s) => renderSlot(s.slot, s.score, inviteeTimezone));
     const curated = rendered.slice(0, eventType.curatedSlotCount);
 
-    return c.json({ curated, all: rendered });
+    return c.json({
+      curated,
+      all: rendered,
+      ...(quorum ? { quorum } : {}),
+    });
   });
 
   return router;

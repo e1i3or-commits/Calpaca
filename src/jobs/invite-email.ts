@@ -271,6 +271,7 @@ export function buildMail(
     cc: hosts.map((h) => h.email),
     subject: email.subject,
     text: email.text,
+    html: email.html,
     // unique per send, booking id parseable from it: providers echo the
     // original Message-ID in bounce/delivery notifications, which is how an
     // n8n flow correlates them back to POST /api/webhooks/email-delivery

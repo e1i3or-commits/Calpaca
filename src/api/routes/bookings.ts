@@ -113,6 +113,8 @@ const holdBodySchema = z.object({
   start: z.string().min(1),
   end: z.string().min(1),
   hosts: z.array(z.string().min(1)).optional(),
+  optionalHosts: z.array(z.string().min(1)).optional(),
+  agent: z.literal(true).optional(),
 });
 
 const bookingBodySchema = z.object({
@@ -133,6 +135,7 @@ const bookingBodySchema = z.object({
   routingAnswers: z
     .record(z.string(), z.union([z.string().max(1000), z.array(z.string().max(200)).max(50)]))
     .optional(),
+  agent: z.literal(true).optional(),
 });
 
 const rescheduleBodySchema = z.object({
@@ -238,13 +241,23 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     const body = await c.req.json().catch(() => null);
     const parsed = holdBodySchema.safeParse(body);
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
-    const { eventTypeSlug, start, end, hosts: requestedHosts } = parsed.data;
+    const {
+      eventTypeSlug,
+      start,
+      end,
+      hosts: requestedHosts,
+      optionalHosts: requestedOptionalHosts,
+      agent,
+    } = parsed.data;
 
     const slot = parseSlot(start, end);
     if (!slot) return c.json({ error: "invalid_window" }, 400);
 
     const eventType = await deps.getEventTypeForBooking(eventTypeSlug);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+    if (agent && !eventType.agentPolicy?.enabled) {
+      return c.json({ error: "agent_not_allowed" }, 403);
+    }
 
     const durationMinutes = slot.start.until(slot.end).total({ unit: "minutes" });
     if (durationMinutes !== eventType.durationMinutes) {
@@ -256,12 +269,20 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     let targetHostIds: string[];
     if (eventType.mode === "group") {
       const required = allHosts.filter((h) => h.role === "required").map((h) => h.userId);
-      const extra = requestedHosts ?? [];
-      const disallowed = extra.filter((id) => !eventType.publicSelectableHostIds.includes(id));
+      const selected = requestedHosts ?? required;
+      const disallowed = requestedHosts
+        ? selected.filter((id) => !eventType.publicSelectableHostIds.includes(id))
+        : [];
       if (disallowed.length > 0) {
         return c.json({ error: "hosts_not_selectable", hosts: disallowed }, 403);
       }
-      targetHostIds = [...new Set([...required, ...extra])];
+      const invalidOptional = (requestedOptionalHosts ?? []).filter(
+        (id) => !selected.includes(id),
+      );
+      if (invalidOptional.length > 0) {
+        return c.json({ error: "hosts_not_selectable", hosts: invalidOptional }, 403);
+      }
+      targetHostIds = [...new Set(selected)];
     } else if (eventType.mode === "round_robin") {
       targetHostIds = allHosts.filter((h) => h.role !== "optional").map((h) => h.userId);
     } else {
@@ -294,13 +315,29 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       );
     });
 
+    const requiredTargetHostIds =
+      eventType.mode === "group" && requestedOptionalHosts
+        ? targetHostIds.filter((id) => !requestedOptionalHosts.includes(id))
+        : targetHostIds;
     const requiresEveryone = eventType.mode !== "round_robin";
-    if (requiresEveryone ? freeHostIds.length !== targetHostIds.length : freeHostIds.length === 0) {
+    const requiredHostsFree = requiredTargetHostIds.every((id) =>
+      freeHostIds.includes(id),
+    );
+    if (requiresEveryone ? !requiredHostsFree : freeHostIds.length === 0) {
       return c.json({ error: "slot_not_available" }, 409);
     }
 
-    const hostUserIdsToHold = requiresEveryone ? targetHostIds : freeHostIds;
-    const ttl = Temporal.Duration.from({ minutes: HOLD_TTL_MINUTES });
+    const hostUserIdsToHold =
+      eventType.mode === "group" && requestedOptionalHosts
+        ? freeHostIds
+        : requiresEveryone
+          ? targetHostIds
+          : freeHostIds;
+    const ttlMinutes =
+      agent && eventType.agentPolicy?.autoExpireHoldsMin !== undefined
+        ? Math.min(HOLD_TTL_MINUTES, eventType.agentPolicy.autoExpireHoldsMin)
+        : HOLD_TTL_MINUTES;
+    const ttl = Temporal.Duration.from({ minutes: ttlMinutes });
     const created = await deps.createHold(eventType.id, hostUserIdsToHold, slot, ttl);
     if (!created.ok) return c.json({ error: created.error.kind }, 409);
 
@@ -317,10 +354,13 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     const body = await c.req.json().catch(() => null);
     const parsed = bookingBodySchema.safeParse(body);
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
-    const { eventTypeSlug, holdIds, invitee, routingAnswers } = parsed.data;
+    const { eventTypeSlug, holdIds, invitee, routingAnswers, agent } = parsed.data;
 
     const eventType = await deps.getEventTypeForBooking(eventTypeSlug);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+    if (agent && !eventType.agentPolicy?.enabled) {
+      return c.json({ error: "agent_not_allowed" }, 403);
+    }
 
     let assignment: RoundRobinAssignment | undefined;
     if (eventType.mode === "round_robin") {
