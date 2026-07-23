@@ -145,4 +145,46 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("availability-repo getBusyForUse
       await pool.end();
     }
   });
+
+  test("calendar connections excluded from conflict checking do not block", async () => {
+    const { pool, db, host1 } = await setup();
+    try {
+      const [enabled, ignored] = await db
+        .insert(schema.calendarConnections)
+        .values([
+          {
+            userId: host1.id,
+            externalCalendarId: "primary",
+            conflictEnabled: true,
+          },
+          {
+            userId: host1.id,
+            externalCalendarId: "holidays",
+            conflictEnabled: false,
+          },
+        ])
+        .returning();
+      await db.insert(schema.calendarBusyCache).values([
+        {
+          connectionId: enabled!.id,
+          externalEventId: "work",
+          startsAt: new Date("2027-05-01T09:00Z"),
+          endsAt: new Date("2027-05-01T09:30Z"),
+        },
+        {
+          connectionId: ignored!.id,
+          externalEventId: "holiday",
+          startsAt: new Date("2027-05-01T10:00Z"),
+          endsAt: new Date("2027-05-01T10:30Z"),
+        },
+      ]);
+
+      const busy = await getBusyForUsers([host1.id], window, db);
+      expect(busy[0]?.intervals.map((interval) => interval.start.toString())).toEqual([
+        "2027-05-01T09:00:00Z",
+      ]);
+    } finally {
+      await pool.end();
+    }
+  });
 });

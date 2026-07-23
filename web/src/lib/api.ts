@@ -69,6 +69,10 @@ export type CalendarEntry = {
   accessRole: string;
   connected: boolean;
   connectionId: string | null;
+  conflictEnabled: boolean;
+  isWriteDestination: boolean;
+  syncHealthy: boolean | null;
+  lastSyncedAt: string | null;
 };
 
 export type AnswerIssue = { field: string; reason: string };
@@ -213,6 +217,20 @@ export function disconnectCalendar(connectionId: string): Promise<{ ok: true }> 
   });
 }
 
+export function updateCalendarConnection(
+  connectionId: string,
+  patch: { conflictEnabled?: boolean; isWriteDestination?: true },
+): Promise<{ connection: {
+  id: string;
+  conflictEnabled: boolean;
+  isWriteDestination: boolean;
+} }> {
+  return request(`/api/me/calendars/connections/${encodeURIComponent(connectionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
 // ---- dashboard admin surface (/api/me/*) ----
 
 export type DirectoryUser = {
@@ -223,6 +241,14 @@ export type DirectoryUser = {
 };
 
 export type ScheduleRule = { dow: number; start: string; end: string };
+export type ScheduleOverride = {
+  startDate: string;
+  endDate: string;
+  kind: "available" | "unavailable";
+  start?: string;
+  end?: string;
+  forwardToUserId?: string | null;
+};
 
 export type Schedule = {
   id: string;
@@ -230,6 +256,7 @@ export type Schedule = {
   name: string;
   timezone: string;
   rules: ScheduleRule[];
+  overrides: ScheduleOverride[];
 };
 
 export type ScheduleInput = Omit<Schedule, "id" | "userId">;
@@ -257,6 +284,111 @@ export type UserManagementDirectory = {
   users: ManagedUser[];
   invitations: UserInvitation[];
 };
+
+export type UserProfile = {
+  id: string;
+  name: string;
+  email: string;
+  timezone: string;
+  image: string | null;
+};
+
+export type ApiTokenRecord = {
+  id: string;
+  name: string;
+  prefix: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+};
+
+export type WorkspaceContext = {
+  id: string;
+  name: string;
+  slug: string;
+  plan: "free" | "pro" | "business" | "self_hosted";
+  role: AppRole;
+  entitlements: {
+    memberLimit: number | null;
+    customDomains: boolean;
+    whitelabel: boolean;
+    inviteeCalendarOverlay: boolean;
+    meetingPolls: boolean;
+  };
+};
+
+export type WorkspaceDomain = {
+  id: string;
+  hostname: string;
+  status: "pending" | "verified";
+  isPrimary: boolean;
+  createdAt: string;
+};
+
+export function getWorkspace(): Promise<{
+  workspace: WorkspaceContext;
+  domains: WorkspaceDomain[];
+  deploymentMode: "hosted" | "self_hosted";
+}> {
+  return request("/api/me/workspace");
+}
+
+export function updateWorkspace(name: string): Promise<{
+  workspace: { id: string; name: string };
+}> {
+  return request("/api/me/workspace", {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function addWorkspaceDomain(hostname: string): Promise<{
+  domain: WorkspaceDomain & {
+    dnsRecord: { type: "TXT"; name: string; value: string };
+  };
+}> {
+  return request("/api/me/workspace/domains", {
+    method: "POST",
+    body: JSON.stringify({ hostname }),
+  });
+}
+
+export function removeWorkspaceDomain(id: string): Promise<{ ok: true }> {
+  return request(`/api/me/workspace/domains/${id}`, { method: "DELETE" });
+}
+
+export function getProfile(): Promise<{ profile: UserProfile }> {
+  return request("/api/me/profile");
+}
+
+export function updateProfile(input: {
+  name: string;
+  timezone: string;
+  image: string | null;
+}): Promise<{ profile: UserProfile }> {
+  return request("/api/me/profile", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listApiTokens(): Promise<{ tokens: ApiTokenRecord[] }> {
+  return request("/api/me/api-tokens");
+}
+
+export function createApiToken(input: {
+  name: string;
+  expiresAt: string | null;
+}): Promise<{ token: string; record: ApiTokenRecord }> {
+  return request("/api/me/api-tokens", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function revokeApiToken(id: string): Promise<{ ok: true }> {
+  return request(`/api/me/api-tokens/${id}`, { method: "DELETE" });
+}
 
 export type EventTypeHost = {
   userId: string;

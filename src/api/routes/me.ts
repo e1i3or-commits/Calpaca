@@ -10,6 +10,7 @@ import {
   createConnection,
   deleteConnection,
   getConnection,
+  updateConnectionPreferences,
   type ConnectionRow,
 } from "../../db/sync-repo";
 import { listCalendars, stopChannel, type GoogleApiError, type GoogleCalendar } from "../../sync/google";
@@ -25,10 +26,15 @@ export interface CalendarRouteDeps {
   readonly listCalendars: (accessToken: string) => Promise<Result<GoogleCalendar[], GoogleApiError>>;
   readonly listConnections: (
     userId: string,
-  ) => Promise<{ id: string; externalCalendarId: string }[]>;
+  ) => Promise<ConnectionRow[]>;
   readonly createConnection: (userId: string, externalCalendarId: string) => Promise<ConnectionRow>;
   readonly getConnection: (connectionId: string) => Promise<ConnectionRow | null>;
   readonly deleteConnection: (connectionId: string) => Promise<void>;
+  readonly updateConnectionPreferences: (
+    connectionId: string,
+    userId: string,
+    patch: { conflictEnabled?: boolean; isWriteDestination?: boolean },
+  ) => Promise<ConnectionRow | null>;
   readonly stopChannel: (args: {
     accessToken: string;
     channelId: string;
@@ -48,20 +54,25 @@ const defaultDeps: CalendarRouteDeps = {
   listCalendars: (accessToken) => listCalendars(accessToken),
   listConnections: (userId) =>
     getDb()
-      .select({
-        id: calendarConnections.id,
-        externalCalendarId: calendarConnections.externalCalendarId,
-      })
+      .select()
       .from(calendarConnections)
       .where(eq(calendarConnections.userId, userId)),
   createConnection: (userId, externalCalendarId) => createConnection(userId, externalCalendarId),
   getConnection: (connectionId) => getConnection(connectionId),
   deleteConnection: (connectionId) => deleteConnection(connectionId),
+  updateConnectionPreferences: (connectionId, userId, patch) =>
+    updateConnectionPreferences(connectionId, userId, patch),
   stopChannel: (args) => stopChannel(args),
   enqueueSync: (connectionId) => enqueueSync(connectionId),
 };
 
 const connectBodySchema = z.object({ calendarId: z.string().min(1) });
+const preferencesSchema = z.object({
+  conflictEnabled: z.boolean().optional(),
+  isWriteDestination: z.literal(true).optional(),
+}).refine((value) =>
+  value.conflictEnabled !== undefined || value.isWriteDestination !== undefined
+);
 
 /** The OAuth seed connection stores the "primary" alias while calendarList
  * returns the real id with primary=true — treat both as the same calendar. */
@@ -74,6 +85,13 @@ function connectionIdFor(
       conn.externalCalendarId === cal.id || (cal.primary && conn.externalCalendarId === "primary"),
   );
   return match?.id ?? null;
+}
+
+function effectiveWriteDestination(connections: readonly ConnectionRow[]): string | null {
+  return connections.find((connection) => connection.isWriteDestination)?.id
+    ?? connections.find((connection) => connection.externalCalendarId === "primary")?.id
+    ?? connections[0]?.id
+    ?? null;
 }
 
 export function createCalendarRoutes(deps: CalendarRouteDeps = defaultDeps): Hono<AuthEnv> {
@@ -99,10 +117,20 @@ export function createCalendarRoutes(deps: CalendarRouteDeps = defaultDeps): Hon
     }
 
     const connections = await deps.listConnections(user.id);
+    const writeDestinationId = effectiveWriteDestination(connections);
     return c.json({
       calendars: calendars.value.map((cal) => {
         const connectionId = connectionIdFor(cal, connections);
-        return { ...cal, connected: connectionId !== null, connectionId };
+        const connection = connections.find((row) => row.id === connectionId);
+        return {
+          ...cal,
+          connected: connectionId !== null,
+          connectionId,
+          conflictEnabled: connection?.conflictEnabled ?? false,
+          isWriteDestination: connectionId === writeDestinationId,
+          syncHealthy: connection?.syncHealthy ?? null,
+          lastSyncedAt: connection?.lastSyncedAt?.toISOString() ?? null,
+        };
       }),
     });
   });
@@ -148,6 +176,13 @@ export function createCalendarRoutes(deps: CalendarRouteDeps = defaultDeps): Hon
 
     const conn = await deps.getConnection(id);
     if (!conn || conn.userId !== user.id) return c.json({ error: "not_found" }, 404);
+    const connections = await deps.listConnections(user.id);
+    if (
+      effectiveWriteDestination(connections) === conn.id &&
+      connections.some((connection) => connection.id !== conn.id)
+    ) {
+      return c.json({ error: "write_destination_required" }, 409);
+    }
 
     // best-effort: a dangling channel expires on its own within a week, and
     // pushes for a deleted connection are dropped by the webhook route
@@ -167,6 +202,46 @@ export function createCalendarRoutes(deps: CalendarRouteDeps = defaultDeps): Hon
 
     await deps.deleteConnection(conn.id); // busy cache rows cascade
     return c.json({ ok: true });
+  });
+
+  router.patch("/api/me/calendars/connections/:id", async (c) => {
+    const parsed = preferencesSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body" }, 400);
+    const connectionId = c.req.param("id");
+    if (parsed.data.isWriteDestination) {
+      const connection = await deps.getConnection(connectionId);
+      if (!connection || connection.userId !== c.get("user").id) {
+        return c.json({ error: "not_found" }, 404);
+      }
+      let accessToken: string;
+      try {
+        accessToken = await deps.getAccessToken(c.get("user").id);
+      } catch {
+        return c.json({ error: "no_google_connection" }, 409);
+      }
+      const calendars = await deps.listCalendars(accessToken);
+      if (!calendars.ok) return c.json({ error: "google_unreachable" }, 502);
+      const calendar = calendars.value.find((item) =>
+        item.id === connection.externalCalendarId ||
+        (item.primary && connection.externalCalendarId === "primary")
+      );
+      if (!calendar || !["owner", "writer"].includes(calendar.accessRole)) {
+        return c.json({ error: "calendar_not_writable" }, 409);
+      }
+    }
+    const connection = await deps.updateConnectionPreferences(
+      connectionId,
+      c.get("user").id,
+      parsed.data,
+    );
+    if (!connection) return c.json({ error: "not_found" }, 404);
+    return c.json({
+      connection: {
+        id: connection.id,
+        conflictEnabled: connection.conflictEnabled,
+        isWriteDestination: connection.isWriteDestination,
+      },
+    });
   });
 
   return router;

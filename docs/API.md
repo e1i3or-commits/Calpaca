@@ -8,9 +8,18 @@ installation:
 - [OpenAPI JSON](https://cal.tourscale.com/openapi.json)
 
 The checked-in [`openapi.json`](openapi.json) is suitable for client
-generation and offline tooling. Organizer endpoints use the browser session
-created by Google sign-in. Public booking endpoints do not require a session.
-Provider webhook authentication is described per operation.
+generation and offline tooling. Organizer endpoints accept the browser session
+created by Google sign-in. Personal API tokens can also authenticate organizer
+requests:
+
+```http
+Authorization: Bearer calpaca_your_token
+```
+
+Generate tokens under **Profile & API** in the organizer dashboard. The full
+secret is shown once, stored only as a SHA-256 hash, and can be revoked at any
+time. Public booking endpoints do not require a session. Provider webhook
+authentication is described per operation.
 
 ## Updating the document
 

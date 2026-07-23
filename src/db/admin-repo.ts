@@ -3,6 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
 import * as schema from "./schema";
 import { eventTypeHosts, eventTypes, schedules, teamMembers, teams, users } from "./schema";
+import type { ScheduleOverride } from "../core/availability/overrides";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -19,7 +20,26 @@ export interface DirectoryUser {
   readonly timezone: string;
 }
 
-export async function listUsers(executor: Db = getDb()): Promise<DirectoryUser[]> {
+export async function listUsers(
+  executor: Db = getDb(),
+  workspaceId?: string,
+): Promise<DirectoryUser[]> {
+  if (workspaceId) {
+    return executor
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        timezone: users.timezone,
+      })
+      .from(schema.workspaceMembers)
+      .innerJoin(users, eq(schema.workspaceMembers.userId, users.id))
+      .where(and(
+        eq(schema.workspaceMembers.workspaceId, workspaceId),
+        eq(schema.workspaceMembers.status, "active"),
+      ))
+      .orderBy(users.name);
+  }
   const rows = await executor
     .select({ id: users.id, name: users.name, email: users.email, timezone: users.timezone })
     .from(users)
@@ -42,6 +62,7 @@ export interface ScheduleRecord {
   readonly name: string;
   readonly timezone: string;
   readonly rules: readonly ScheduleRule[];
+  readonly overrides?: readonly ScheduleOverride[];
 }
 
 export async function listSchedulesForUser(userId: string, executor: Db = getDb()): Promise<ScheduleRecord[]> {
@@ -49,7 +70,13 @@ export async function listSchedulesForUser(userId: string, executor: Db = getDb(
 }
 
 export async function createSchedule(
-  input: { userId: string; name: string; timezone: string; rules: ScheduleRule[] },
+  input: {
+    userId: string;
+    name: string;
+    timezone: string;
+    rules: ScheduleRule[];
+    overrides: ScheduleOverride[];
+  },
   executor: Db = getDb(),
 ): Promise<ScheduleRecord> {
   const [row] = await executor.insert(schedules).values(input).returning();
@@ -59,7 +86,12 @@ export async function createSchedule(
 export async function updateSchedule(
   id: string,
   userId: string,
-  patch: Partial<{ name: string; timezone: string; rules: ScheduleRule[] }>,
+  patch: Partial<{
+    name: string;
+    timezone: string;
+    rules: ScheduleRule[];
+    overrides: ScheduleOverride[];
+  }>,
   executor: Db = getDb(),
 ): Promise<ScheduleRecord | null> {
   const [row] = await executor
@@ -105,29 +137,66 @@ export interface TeamMemberRecord {
   readonly isAdmin: boolean;
 }
 
-export async function listTeamsForUser(userId: string, executor: Db = getDb()): Promise<TeamRecord[]> {
+export async function listTeamsForUser(
+  userId: string,
+  executor: Db = getDb(),
+  workspaceId?: string,
+): Promise<TeamRecord[]> {
   const [actor] = await executor
     .select({ role: users.appRole, status: users.status })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
+  const [membership] = workspaceId
+    ? await executor
+        .select({ role: schema.workspaceMembers.role, status: schema.workspaceMembers.status })
+        .from(schema.workspaceMembers)
+        .where(and(
+          eq(schema.workspaceMembers.workspaceId, workspaceId),
+          eq(schema.workspaceMembers.userId, userId),
+        ))
+        .limit(1)
+    : [];
   if (
+    (workspaceId && membership?.status === "active" &&
+      (membership.role === "owner" || membership.role === "admin")) ||
+    (!workspaceId &&
     actor?.status === "active"
-    && (actor.role === "owner" || actor.role === "admin")
+    && (actor.role === "owner" || actor.role === "admin"))
   ) {
-    return executor
+    const query = executor
       .select({ id: teams.id, name: teams.name, slug: teams.slug })
-      .from(teams)
-      .orderBy(teams.name);
+      .from(teams);
+    return workspaceId
+      ? query.where(eq(teams.workspaceId, workspaceId)).orderBy(teams.name)
+      : query.orderBy(teams.name);
   }
   return executor
     .select({ id: teams.id, name: teams.name, slug: teams.slug })
     .from(teams)
     .innerJoin(teamMembers, eq(teamMembers.teamId, teams.id))
-    .where(eq(teamMembers.userId, userId));
+    .where(and(
+      eq(teamMembers.userId, userId),
+      ...(workspaceId ? [eq(teams.workspaceId, workspaceId)] : []),
+    ));
 }
 
-export async function isAppAdmin(userId: string, executor: Db = getDb()): Promise<boolean> {
+export async function isAppAdmin(
+  userId: string,
+  executor: Db = getDb(),
+  workspaceId?: string,
+): Promise<boolean> {
+  if (workspaceId) {
+    const [membership] = await executor
+      .select({ role: schema.workspaceMembers.role, status: schema.workspaceMembers.status })
+      .from(schema.workspaceMembers)
+      .where(and(
+        eq(schema.workspaceMembers.workspaceId, workspaceId),
+        eq(schema.workspaceMembers.userId, userId),
+      ));
+    return membership?.status === "active"
+      && (membership.role === "owner" || membership.role === "admin");
+  }
   const [row] = await executor
     .select({ role: users.appRole, status: users.status })
     .from(users)
@@ -158,13 +227,20 @@ export async function isTeamAdmin(teamId: string, userId: string, executor: Db =
 
 /** Creator becomes the first (admin) member. */
 export async function createTeam(
-  input: { name: string; slug: string; creatorUserId: string },
+  input: { name: string; slug: string; creatorUserId: string; workspaceId?: string },
   executor: Db = getDb(),
 ): Promise<TeamRecord | "slug_taken"> {
   return executor.transaction(async (tx) => {
-    const [existing] = await tx.select({ id: teams.id }).from(teams).where(eq(teams.slug, input.slug));
+    const [existing] = await tx.select({ id: teams.id }).from(teams).where(and(
+      eq(teams.slug, input.slug),
+      ...(input.workspaceId ? [eq(teams.workspaceId, input.workspaceId)] : []),
+    ));
     if (existing) return "slug_taken";
-    const [team] = await tx.insert(teams).values({ name: input.name, slug: input.slug }).returning();
+    const [team] = await tx.insert(teams).values({
+      name: input.name,
+      slug: input.slug,
+      workspaceId: input.workspaceId,
+    }).returning();
     await tx.insert(teamMembers).values({ teamId: team!.id, userId: input.creatorUserId, isAdmin: true });
     return { id: team!.id, name: team!.name, slug: team!.slug };
   });

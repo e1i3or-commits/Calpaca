@@ -38,6 +38,7 @@ import {
   type TeamMemberRecord,
   type TeamRecord,
 } from "../../db/admin-repo";
+import type { ScheduleOverride } from "../../core/availability/overrides";
 import {
   getBookingDetailForUser,
   getAssignmentExplanationForUser,
@@ -49,6 +50,7 @@ import {
 import type { AssignmentExplanation } from "../../core/assignment/round-robin";
 import type { BookingState, BookingStateError } from "../../core/booking/state";
 import type { Result } from "../../lib/result";
+import { isIanaZone } from "../../lib/timezone";
 import { emitBookingWebhook as jobsEmitBookingWebhook } from "../../jobs/index";
 
 /** The dashboard settings surface: event types, schedules, teams, and the
@@ -56,29 +58,36 @@ import { emitBookingWebhook as jobsEmitBookingWebhook } from "../../jobs/index";
  * the other route modules. */
 export interface AdminDeps {
   readonly requireAuth: MiddlewareHandler<AuthEnv>;
-  readonly listUsers: () => Promise<DirectoryUser[]>;
+  readonly listUsers: (workspaceId?: string) => Promise<DirectoryUser[]>;
   readonly listSchedulesForUser: (userId: string) => Promise<ScheduleRecord[]>;
   readonly createSchedule: (input: {
     userId: string;
     name: string;
     timezone: string;
     rules: ScheduleRule[];
+    overrides: ScheduleOverride[];
   }) => Promise<ScheduleRecord>;
   readonly updateSchedule: (
     id: string,
     userId: string,
-    patch: Partial<{ name: string; timezone: string; rules: ScheduleRule[] }>,
+    patch: Partial<{
+      name: string;
+      timezone: string;
+      rules: ScheduleRule[];
+      overrides: ScheduleOverride[];
+    }>,
   ) => Promise<ScheduleRecord | null>;
   readonly deleteSchedule: (id: string, userId: string) => Promise<"deleted" | "not_found" | "in_use">;
-  readonly listTeamsForUser: (userId: string) => Promise<TeamRecord[]>;
+  readonly listTeamsForUser: (userId: string, workspaceId?: string) => Promise<TeamRecord[]>;
   readonly createTeam: (input: {
     name: string;
     slug: string;
     creatorUserId: string;
+    workspaceId?: string;
   }) => Promise<TeamRecord | "slug_taken">;
   readonly isTeamMember: (teamId: string, userId: string) => Promise<boolean>;
   readonly isTeamAdmin: (teamId: string, userId: string) => Promise<boolean>;
-  readonly isAppAdmin: (userId: string) => Promise<boolean>;
+  readonly isAppAdmin: (userId: string, workspaceId?: string) => Promise<boolean>;
   readonly listTeamMembers: (teamId: string) => Promise<TeamMemberRecord[]>;
   readonly addTeamMember: (teamId: string, userId: string) => Promise<void>;
   readonly removeTeamMember: (
@@ -128,16 +137,17 @@ export interface AdminDeps {
 
 const defaultDeps: AdminDeps = {
   requireAuth: requireSession,
-  listUsers: () => listUsers(),
+  listUsers: (workspaceId) => listUsers(undefined, workspaceId),
   listSchedulesForUser: (userId) => listSchedulesForUser(userId),
   createSchedule: (input) => createSchedule(input),
   updateSchedule: (id, userId, patch) => updateSchedule(id, userId, patch),
   deleteSchedule: (id, userId) => deleteSchedule(id, userId),
-  listTeamsForUser: (userId) => listTeamsForUser(userId),
+  listTeamsForUser: (userId, workspaceId) =>
+    listTeamsForUser(userId, undefined, workspaceId),
   createTeam: (input) => createTeam(input),
   isTeamMember: (teamId, userId) => isTeamMember(teamId, userId),
   isTeamAdmin: (teamId, userId) => isTeamAdmin(teamId, userId),
-  isAppAdmin: (userId) => isAppAdmin(userId),
+  isAppAdmin: (userId, workspaceId) => isAppAdmin(userId, undefined, workspaceId),
   listTeamMembers: (teamId) => listTeamMembers(teamId),
   addTeamMember: (teamId, userId) => addTeamMember(teamId, userId),
   removeTeamMember: (teamId, userId) => removeTeamMember(teamId, userId),
@@ -161,15 +171,6 @@ const defaultDeps: AdminDeps = {
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-function isIanaZone(tz: string): boolean {
-  try {
-    Temporal.Now.instant().toZonedDateTimeISO(tz);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 const bookingListQuerySchema = z.object({
   filter: z.enum(["upcoming", "past"]).default("upcoming"),
@@ -212,6 +213,30 @@ const scheduleBodySchema = z.object({
   name: z.string().min(1).max(100),
   timezone: z.string().refine(isIanaZone, "must be an IANA timezone"),
   rules: z.array(ruleSchema).max(50),
+  overrides: z.array(z.object({
+    startDate: z.string().date(),
+    endDate: z.string().date(),
+    kind: z.enum(["available", "unavailable"]),
+    start: z.string().regex(HHMM_RE).optional(),
+    end: z.string().regex(HHMM_RE).optional(),
+    forwardToUserId: z.string().uuid().nullable().optional(),
+  }).superRefine((value, context) => {
+    if (value.endDate < value.startDate) {
+      context.addIssue({ code: "custom", message: "end date must not precede start date" });
+    }
+    if (value.kind === "available" && (!value.start || !value.end)) {
+      context.addIssue({ code: "custom", message: "available overrides require start and end times" });
+    }
+    if ((value.start === undefined) !== (value.end === undefined)) {
+      context.addIssue({ code: "custom", message: "start and end times must be provided together" });
+    }
+    if (value.start && value.end && value.start >= value.end) {
+      context.addIssue({ code: "custom", message: "start must be before end" });
+    }
+    if (value.forwardToUserId && value.kind !== "unavailable") {
+      context.addIssue({ code: "custom", message: "only unavailable time can be forwarded" });
+    }
+  })).max(100).default([]),
 });
 
 const eventTypeBodySchema = z
@@ -279,7 +304,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
   // ---- directory ----
 
   router.get("/api/me/users", async (c) => {
-    return c.json({ users: await deps.listUsers() });
+    return c.json({ users: await deps.listUsers(c.get("user").workspaceId) });
   });
 
   // ---- booking assignment transparency ----
@@ -358,14 +383,22 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
   router.post("/api/me/schedules", async (c) => {
     const parsed = scheduleBodySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
-    const row = await deps.createSchedule({ userId: c.get("user").id, ...parsed.data });
+    const userId = c.get("user").id;
+    if (parsed.data.overrides.some((override) => override.forwardToUserId === userId)) {
+      return c.json({ error: "cannot_forward_to_self" }, 409);
+    }
+    const row = await deps.createSchedule({ userId, ...parsed.data });
     return c.json(row, 201);
   });
 
   router.put("/api/me/schedules/:id", async (c) => {
     const parsed = scheduleBodySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
-    const row = await deps.updateSchedule(c.req.param("id"), c.get("user").id, parsed.data);
+    const userId = c.get("user").id;
+    if (parsed.data.overrides.some((override) => override.forwardToUserId === userId)) {
+      return c.json({ error: "cannot_forward_to_self" }, 409);
+    }
+    const row = await deps.updateSchedule(c.req.param("id"), userId, parsed.data);
     if (!row) return c.json({ error: "schedule_not_found" }, 404);
     return c.json(row);
   });
@@ -380,13 +413,19 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
   // ---- teams ----
 
   router.get("/api/me/teams", async (c) => {
-    return c.json({ teams: await deps.listTeamsForUser(c.get("user").id) });
+    const user = c.get("user");
+    return c.json({ teams: await deps.listTeamsForUser(user.id, user.workspaceId) });
   });
 
   router.post("/api/me/teams", async (c) => {
     const parsed = teamBodySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
-    const result = await deps.createTeam({ ...parsed.data, creatorUserId: c.get("user").id });
+    const user = c.get("user");
+    const result = await deps.createTeam({
+      ...parsed.data,
+      creatorUserId: user.id,
+      workspaceId: user.workspaceId,
+    });
     if (result === "slug_taken") return c.json({ error: "slug_taken" }, 409);
     return c.json(result, 201);
   });
@@ -396,7 +435,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     const userId = c.get("user").id;
     if (
       !(await deps.isTeamMember(teamId, userId))
-      && !(await deps.isAppAdmin(userId))
+      && !(await deps.isAppAdmin(userId, c.get("user").workspaceId))
     ) {
       return c.json({ error: "team_not_found" }, 404);
     }
@@ -408,7 +447,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     const userId = c.get("user").id;
     if (
       !(await deps.isTeamAdmin(teamId, userId))
-      && !(await deps.isAppAdmin(userId))
+      && !(await deps.isAppAdmin(userId, c.get("user").workspaceId))
     ) {
       return c.json({ error: "team_not_found" }, 404);
     }
@@ -423,7 +462,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     const actorId = c.get("user").id;
     if (
       !(await deps.isTeamAdmin(teamId, actorId))
-      && !(await deps.isAppAdmin(actorId))
+      && !(await deps.isAppAdmin(actorId, c.get("user").workspaceId))
     ) {
       return c.json({ error: "team_not_found" }, 404);
     }
@@ -438,7 +477,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     const actorId = c.get("user").id;
     if (
       !(await deps.isTeamAdmin(teamId, actorId))
-      && !(await deps.isAppAdmin(actorId))
+      && !(await deps.isAppAdmin(actorId, c.get("user").workspaceId))
     ) {
       return c.json({ error: "team_not_found" }, 404);
     }

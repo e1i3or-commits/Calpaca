@@ -10,6 +10,7 @@ import {
   Copy,
   Download,
   Home,
+  KeyRound,
   LogOut,
   Menu,
   Pencil,
@@ -18,14 +19,17 @@ import {
   ShieldCheck,
   Trash2,
   UserPlus,
+  UserRound,
   Users,
 } from "lucide-react";
 import {
   ApiError,
   addTeamMember,
+  addWorkspaceDomain,
   analyticsCsvUrl,
   connectCalendar,
   createEventType,
+  createApiToken,
   createRoutingForm,
   createSchedule,
   createTeam,
@@ -38,8 +42,11 @@ import {
   getAnalytics,
   getBookingAssignment,
   getUserManagement,
+  getProfile,
+  getWorkspace,
   inviteUser,
   listAdminBookings,
+  listApiTokens,
   listEventTypes,
   listPresentationOptions,
   listRoutingForms,
@@ -49,10 +56,15 @@ import {
   listUsers,
   removeTeamMember,
   revokeUserInvitation,
+  revokeApiToken,
+  removeWorkspaceDomain,
   markBookingNoShow,
   signOut,
   updateEventType,
   updateManagedUser,
+  updateCalendarConnection,
+  updateProfile,
+  updateWorkspace,
   updateRoutingForm,
   updateSchedule,
   updateTeamMemberRole,
@@ -60,6 +72,7 @@ import {
   type AdminBooking,
   type AdminBookingDetail,
   type AnalyticsReport,
+  type ApiTokenRecord,
   type AppRole,
   type AssignmentExplanation,
   type CalendarEntry,
@@ -72,10 +85,14 @@ import {
   type RoutingFormInput,
   type Schedule,
   type ScheduleInput,
+  type ScheduleOverride,
   type ScheduleRule,
   type Team,
   type TeamMember,
   type UserManagementDirectory,
+  type UserProfile,
+  type WorkspaceContext,
+  type WorkspaceDomain,
 } from "@/lib/api";
 import { themeOptions } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
@@ -92,6 +109,7 @@ const TABS = [
   { key: "event-types", label: "Scheduling", icon: CalendarDays, group: "primary" },
   { key: "bookings", label: "Bookings", icon: CalendarRange, group: "primary" },
   { key: "analytics", label: "Analytics", icon: ChartNoAxesCombined, group: "primary" },
+  { key: "profile", label: "Profile & API", icon: UserRound, group: "setup" },
   { key: "schedules", label: "Availability", icon: Clock3, group: "setup" },
   { key: "routing", label: "Routing", icon: Route, group: "setup" },
   { key: "team", label: "People & teams", icon: Users, group: "setup" },
@@ -103,6 +121,9 @@ type TabKey = (typeof TABS)[number]["key"];
 const ERROR_TEXT: Record<string, string> = {
   slug_taken: "That slug is already taken.",
   schedule_in_use: "Event types still use this schedule.",
+  cannot_forward_to_self: "Choose another person for forwarding.",
+  write_destination_required: "Choose another booking destination before disconnecting this calendar.",
+  calendar_not_writable: "Google does not allow this account to create events on that calendar.",
   event_type_in_use: "This event type has bookings; it can't be deleted.",
   invalid_body: "Some fields are invalid — check the form.",
   team_not_found: "Team not found.",
@@ -185,6 +206,7 @@ export function DashboardPage() {
               {tab === "event-types" && <EventTypesTab users={users} />}
               {tab === "bookings" && <BookingsTab users={users} />}
               {tab === "analytics" && <AnalyticsTab />}
+              {tab === "profile" && <ProfileTab />}
               {tab === "schedules" && <SchedulesTab />}
               {tab === "routing" && <RoutingTab users={users} />}
               {tab === "team" && <TeamTab users={users} />}
@@ -258,6 +280,7 @@ const PAGE_COPY: Record<TabKey, { title: string; description: string }> = {
   "event-types": { title: "Scheduling", description: "Booking links and the people behind them." },
   bookings: { title: "Bookings", description: "Upcoming conversations and recent history." },
   analytics: { title: "Analytics", description: "A clear view of volume, outcomes, and team balance." },
+  profile: { title: "Profile & API", description: "Your public identity and personal integration tokens." },
   schedules: { title: "Availability", description: "The recurring hours your booking links can offer." },
   routing: { title: "Routing", description: "Send each invitee to the right conversation." },
   team: { title: "People & teams", description: "Hosts, membership, and shared scheduling." },
@@ -1396,6 +1419,351 @@ function EventTypeForm({
   );
 }
 
+// ---- profile and API tokens ----
+
+function ProfileTab() {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [tokens, setTokens] = useState<ApiTokenRecord[]>([]);
+  const [tokenName, setTokenName] = useState("");
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const reloadTokens = useCallback(() => {
+    listApiTokens()
+      .then((result) => setTokens(result.tokens))
+      .catch((reason: unknown) => setError(errorText(reason)));
+  }, []);
+
+  useEffect(() => {
+    getProfile()
+      .then((result) => setProfile(result.profile))
+      .catch((reason: unknown) => setError(errorText(reason)));
+    reloadTokens();
+  }, [reloadTokens]);
+
+  const saveProfile = async () => {
+    if (!profile) return;
+    setError(null);
+    try {
+      const result = await updateProfile({
+        name: profile.name,
+        timezone: profile.timezone,
+        image: profile.image,
+      });
+      setProfile(result.profile);
+    } catch (reason) {
+      setError(errorText(reason));
+    }
+  };
+
+  const readImage = (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > 500_000) {
+      setError("Profile images must be 500 KB or smaller.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string" && profile) {
+        setProfile({ ...profile, image: reader.result });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const generate = async () => {
+    if (!tokenName.trim()) return;
+    setError(null);
+    try {
+      const result = await createApiToken({ name: tokenName, expiresAt: null });
+      setNewToken(result.token);
+      setTokenName("");
+      reloadTokens();
+    } catch (reason) {
+      setError(errorText(reason));
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-xl">Profile</CardTitle>
+          <CardDescription>This identity appears on your public booking pages.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {!profile ? <p className="text-sm text-muted-foreground">Loading…</p> : (
+            <>
+              <div className="flex items-center gap-4">
+                {profile.image ? (
+                  <img
+                    src={profile.image}
+                    alt=""
+                    className="h-16 w-16 rounded-full border border-border object-cover"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                    <UserRound className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex flex-col gap-2">
+                  <Input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    aria-label="Upload profile image"
+                    onChange={(event) => readImage(event.target.files?.[0])}
+                  />
+                  {profile.image && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="self-start"
+                      onClick={() => setProfile({ ...profile, image: null })}
+                    >
+                      Remove image
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="profile-name">Name</Label>
+                <Input
+                  id="profile-name"
+                  value={profile.name}
+                  onChange={(event) => setProfile({ ...profile, name: event.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Email</Label>
+                <Input value={profile.email} disabled />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Timezone</Label>
+                <div className="flex h-9 items-center rounded-md border border-border bg-card px-3">
+                  <TimezoneSelect
+                    value={profile.timezone}
+                    onChange={(timezone) => setProfile({ ...profile, timezone })}
+                  />
+                </div>
+              </div>
+              <Button
+                className="self-start"
+                disabled={!profile.name.trim()}
+                onClick={() => void saveProfile()}
+              >
+                Save profile
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <KeyRound className="h-5 w-5" /> API tokens
+          </CardTitle>
+          <CardDescription>
+            Personal bearer tokens have your account access. Store them like passwords.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {newToken && (
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+              <p className="text-sm font-medium">Copy this token now</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                It will not be shown again.
+              </p>
+              <code className="mt-3 block overflow-x-auto rounded bg-card p-2 text-xs">
+                {newToken}
+              </code>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2"
+                onClick={() => void navigator.clipboard.writeText(newToken)}
+              >
+                <Copy className="mr-1 h-3.5 w-3.5" /> Copy
+              </Button>
+            </div>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              value={tokenName}
+              onChange={(event) => setTokenName(event.target.value)}
+              placeholder="Token name, e.g. n8n"
+              aria-label="Token name"
+            />
+            <Button disabled={!tokenName.trim()} onClick={() => void generate()}>
+              Generate
+            </Button>
+          </div>
+          {tokens.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No personal tokens.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {tokens.map((token) => (
+                <li
+                  key={token.id}
+                  className="flex items-center gap-3 rounded-md border border-border p-3 text-sm"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">{token.name}</span>
+                    <code className="text-xs text-muted-foreground">{token.prefix}…</code>
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void revokeApiToken(token.id).then(reloadTokens)}
+                  >
+                    Revoke
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+      <WorkspaceCard />
+    </div>
+  );
+}
+
+function WorkspaceCard() {
+  const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
+  const [domains, setDomains] = useState<WorkspaceDomain[]>([]);
+  const [deploymentMode, setDeploymentMode] = useState<"hosted" | "self_hosted">("self_hosted");
+  const [hostname, setHostname] = useState("");
+  const [dnsRecord, setDnsRecord] = useState<{ name: string; value: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(() => {
+    getWorkspace()
+      .then((result) => {
+        setWorkspace(result.workspace);
+        setDomains(result.domains);
+        setDeploymentMode(result.deploymentMode);
+      })
+      .catch((reason: unknown) => setError(errorText(reason)));
+  }, []);
+
+  useEffect(() => reload(), [reload]);
+
+  const addDomain = async () => {
+    setError(null);
+    try {
+      const result = await addWorkspaceDomain(hostname);
+      setDnsRecord(result.domain.dnsRecord);
+      setHostname("");
+      reload();
+    } catch (reason) {
+      setError(errorText(reason));
+    }
+  };
+
+  return (
+    <Card className="xl:col-span-2">
+      <CardHeader>
+        <CardTitle className="text-xl">Workspace</CardTitle>
+        <CardDescription>
+          Plan, deployment mode, and verified booking domains.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {!workspace ? <p className="text-sm text-muted-foreground">Loading…</p> : (
+          <>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="workspace-name">Workspace name</Label>
+                <Input
+                  id="workspace-name"
+                  value={workspace.name}
+                  onChange={(event) => setWorkspace({ ...workspace, name: event.target.value })}
+                  disabled={!["owner", "admin"].includes(workspace.role)}
+                />
+              </div>
+              <Button
+                variant="outline"
+                disabled={!workspace.name.trim() || !["owner", "admin"].includes(workspace.role)}
+                onClick={() => void updateWorkspace(workspace.name).then(reload)}
+              >
+                Save
+              </Button>
+              <span className="rounded-md bg-muted px-3 py-2 text-center text-xs font-medium">
+                {workspace.plan.replace("_", " ")} · {deploymentMode.replace("_", "-")}
+              </span>
+            </div>
+
+            <div className="border-t border-border pt-4">
+              <p className="text-sm font-medium">Custom domains</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Add the hostname here first. DNS remains under your control until verification.
+              </p>
+              {workspace.entitlements.customDomains ? (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    value={hostname}
+                    onChange={(event) => setHostname(event.target.value.toLowerCase())}
+                    placeholder="cal.example.com"
+                    aria-label="Custom hostname"
+                  />
+                  <Button
+                    disabled={!hostname.trim() || !["owner", "admin"].includes(workspace.role)}
+                    onClick={() => void addDomain()}
+                  >
+                    Add domain
+                  </Button>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Custom domains require a paid hosted plan.
+                </p>
+              )}
+            </div>
+
+            {dnsRecord && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+                <p className="font-medium">Add this DNS verification record</p>
+                <code className="mt-2 block overflow-x-auto text-xs">
+                  TXT {dnsRecord.name} {dnsRecord.value}
+                </code>
+              </div>
+            )}
+
+            {domains.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {domains.map((domain) => (
+                  <li
+                    key={domain.id}
+                    className="flex items-center gap-3 rounded-md border border-border p-3 text-sm"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{domain.hostname}</span>
+                      <span className="text-xs text-muted-foreground">{domain.status}</span>
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!["owner", "admin"].includes(workspace.role)}
+                      onClick={() => void removeWorkspaceDomain(domain.id).then(reload)}
+                    >
+                      Remove
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ---- schedules ----
 
 const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -1404,11 +1772,13 @@ const DEFAULT_SCHEDULE: ScheduleInput = {
   name: "",
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   rules: [1, 2, 3, 4, 5].map((dow) => ({ dow, start: "09:00", end: "17:00" })),
+  overrides: [],
 };
 
 function SchedulesTab() {
   const [schedules, setSchedules] = useState<Schedule[] | null>(null);
   const [editing, setEditing] = useState<{ id: string | null; form: ScheduleInput } | null>(null);
+  const [people, setPeople] = useState<DirectoryUser[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
@@ -1418,6 +1788,9 @@ function SchedulesTab() {
   }, []);
 
   useEffect(() => reload(), [reload]);
+  useEffect(() => {
+    listUsers().then((result) => setPeople(result.users)).catch(() => undefined);
+  }, []);
 
   const save = async () => {
     if (!editing) return;
@@ -1463,6 +1836,7 @@ function SchedulesTab() {
             onChange={(form) => setEditing({ ...editing, form })}
             onCancel={() => setEditing(null)}
             onSave={() => void save()}
+            people={people}
           />
         ) : !schedules ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
@@ -1488,7 +1862,12 @@ function SchedulesTab() {
                   onClick={() =>
                     setEditing({
                       id: s.id,
-                      form: { name: s.name, timezone: s.timezone, rules: s.rules },
+                      form: {
+                        name: s.name,
+                        timezone: s.timezone,
+                        rules: s.rules,
+                        overrides: s.overrides ?? [],
+                      },
                     })
                   }
                 >
@@ -1516,11 +1895,13 @@ function ScheduleForm({
   onChange,
   onCancel,
   onSave,
+  people,
 }: {
   form: ScheduleInput;
   onChange: (form: ScheduleInput) => void;
   onCancel: () => void;
   onSave: () => void;
+  people: DirectoryUser[];
 }) {
   const ruleFor = (dow: number): ScheduleRule | undefined => form.rules.find((r) => r.dow === dow);
 
@@ -1542,7 +1923,38 @@ function ScheduleForm({
   };
 
   const valid =
-    form.name.trim() !== "" && form.rules.length > 0 && form.rules.every((r) => r.start < r.end);
+    form.name.trim() !== "" &&
+    form.rules.length > 0 &&
+    form.rules.every((r) => r.start < r.end) &&
+    form.overrides.every((override) =>
+      override.startDate !== "" &&
+      override.endDate >= override.startDate &&
+      (override.kind === "unavailable" || (
+        !!override.start &&
+        !!override.end &&
+        override.start < override.end
+      )),
+    );
+
+  const addOverride = () => {
+    const date = new Date().toISOString().slice(0, 10);
+    onChange({
+      ...form,
+      overrides: [
+        ...form.overrides,
+        { startDate: date, endDate: date, kind: "unavailable" },
+      ],
+    });
+  };
+
+  const updateOverride = (index: number, patch: Partial<ScheduleOverride>) => {
+    onChange({
+      ...form,
+      overrides: form.overrides.map((override, current) =>
+        current === index ? { ...override, ...patch } : override,
+      ),
+    });
+  };
 
   return (
     <form
@@ -1606,6 +2018,131 @@ function ScheduleForm({
             </div>
           );
         })}
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-border pt-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">Date overrides</p>
+            <p className="text-xs text-muted-foreground">
+              Block time off or replace recurring hours on specific dates.
+            </p>
+          </div>
+          <Button type="button" size="sm" variant="outline" onClick={addOverride}>
+            <Plus className="mr-1 h-3.5 w-3.5" /> Add
+          </Button>
+        </div>
+
+        {form.overrides.length === 0 ? (
+          <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+            No date-specific changes.
+          </p>
+        ) : form.overrides.map((override, index) => (
+          <div
+            key={`${index}-${override.startDate}`}
+            className="grid grid-cols-1 gap-3 rounded-md border border-border p-3 sm:grid-cols-2"
+          >
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`override-kind-${index}`}>Type</Label>
+              <select
+                id={`override-kind-${index}`}
+                className="h-9 rounded-md border border-border bg-card px-3 text-sm"
+                value={override.kind}
+                onChange={(event) => {
+                  const kind = event.target.value as ScheduleOverride["kind"];
+                  updateOverride(index, kind === "available"
+                    ? {
+                        kind,
+                        start: override.start ?? "09:00",
+                        end: override.end ?? "17:00",
+                        forwardToUserId: null,
+                      }
+                    : { kind });
+                }}
+              >
+                <option value="unavailable">Time off</option>
+                <option value="available">Alternate hours</option>
+              </select>
+            </div>
+            <div className="flex items-end justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => onChange({
+                  ...form,
+                  overrides: form.overrides.filter((_, current) => current !== index),
+                })}
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" /> Remove
+              </Button>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`override-start-date-${index}`}>From</Label>
+              <Input
+                id={`override-start-date-${index}`}
+                type="date"
+                value={override.startDate}
+                onChange={(event) => updateOverride(index, {
+                  startDate: event.target.value,
+                  ...(override.endDate < event.target.value ? { endDate: event.target.value } : {}),
+                })}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`override-end-date-${index}`}>Through</Label>
+              <Input
+                id={`override-end-date-${index}`}
+                type="date"
+                min={override.startDate}
+                value={override.endDate}
+                onChange={(event) => updateOverride(index, { endDate: event.target.value })}
+              />
+            </div>
+            {override.kind === "available" && (
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`override-start-${index}`}>Start</Label>
+                  <Input
+                    id={`override-start-${index}`}
+                    type="time"
+                    value={override.start ?? ""}
+                    onChange={(event) => updateOverride(index, { start: event.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor={`override-end-${index}`}>End</Label>
+                  <Input
+                    id={`override-end-${index}`}
+                    type="time"
+                    value={override.end ?? ""}
+                    onChange={(event) => updateOverride(index, { end: event.target.value })}
+                  />
+                </div>
+              </>
+            )}
+            {override.kind === "unavailable" && (
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <Label htmlFor={`override-forward-${index}`}>Forward bookings (optional)</Label>
+                <select
+                  id={`override-forward-${index}`}
+                  className="h-9 rounded-md border border-border bg-card px-3 text-sm"
+                  value={override.forwardToUserId ?? ""}
+                  onChange={(event) => updateOverride(index, {
+                    forwardToUserId: event.target.value || null,
+                  })}
+                >
+                  <option value="">Do not forward</option>
+                  {people.map((person) => (
+                    <option key={person.id} value={person.id}>
+                      {person.name} · {person.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       <div className="flex gap-2">
@@ -2617,11 +3154,30 @@ function CalendarsTab() {
     }
   }
 
+  async function updateConnection(
+    cal: CalendarEntry,
+    patch: { conflictEnabled?: boolean; isWriteDestination?: true },
+  ) {
+    if (!cal.connectionId) return;
+    setBusyId(cal.id);
+    setError(null);
+    try {
+      await updateCalendarConnection(cal.connectionId, patch);
+      refresh();
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-xl">Your calendars</CardTitle>
-        <CardDescription>Busy times sync from connected calendars.</CardDescription>
+        <CardDescription>
+          Choose calendars that block availability and where new bookings are written.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
@@ -2631,25 +3187,61 @@ function CalendarsTab() {
             {calendars.map((cal) => (
               <li
                 key={cal.id}
-                className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                className="flex flex-col gap-3 rounded-md border border-border px-3 py-3 text-sm sm:flex-row sm:items-center"
               >
-                <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="flex-1">
-                  {cal.summary}
-                  {cal.primary && <span className="ml-2 text-xs text-muted-foreground">primary</span>}
-                </span>
-                {cal.connected && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-primary" /> syncing
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{cal.summary}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {cal.primary ? "Google primary · " : ""}
+                      {!cal.connected
+                        ? "Not connected"
+                        : cal.syncHealthy === false
+                          ? "Sync needs attention"
+                          : cal.lastSyncedAt
+                            ? `Synced ${new Date(cal.lastSyncedAt).toLocaleString()}`
+                            : "Initial sync pending"}
+                    </span>
                   </span>
+                </div>
+                {cal.connected && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={cal.conflictEnabled}
+                        disabled={busyId !== null}
+                        onChange={(event) => void updateConnection(cal, {
+                          conflictEnabled: event.target.checked,
+                        })}
+                      />
+                      Check conflicts
+                    </label>
+                    <Button
+                      size="sm"
+                      variant={cal.isWriteDestination ? "default" : "outline"}
+                      disabled={
+                        busyId !== null ||
+                        cal.isWriteDestination ||
+                        !["owner", "writer"].includes(cal.accessRole)
+                      }
+                      onClick={() => void updateConnection(cal, { isWriteDestination: true })}
+                    >
+                      {cal.isWriteDestination ? "Booking destination" : "Set destination"}
+                    </Button>
+                    {cal.syncHealthy !== false && (
+                      <CheckCircle2 className="h-4 w-4 text-primary" aria-label="Calendar sync healthy" />
+                    )}
+                  </div>
                 )}
                 <Button
                   size="sm"
-                  variant={cal.connected ? "outline" : "default"}
+                  variant="outline"
                   disabled={busyId !== null}
                   onClick={() => void toggle(cal)}
                 >
-                  {busyId === cal.id ? "…" : cal.connected ? "Stop syncing" : "Sync"}
+                  {busyId === cal.id ? "…" : cal.connected ? "Disconnect" : "Connect"}
                 </Button>
               </li>
             ))}

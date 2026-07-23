@@ -5,6 +5,10 @@ import * as schema from "../../src/db/schema";
 const expectedTables: Record<string, string> = {
   users: "users",
   sessions: "sessions",
+  apiTokens: "api_tokens",
+  workspaces: "workspaces",
+  workspaceMembers: "workspace_members",
+  workspaceDomains: "workspace_domains",
   accounts: "accounts",
   verifications: "verifications",
   teams: "teams",
@@ -36,5 +40,7 @@ describe("schema", () => {
     expect(schema.assignmentMode).toBeDefined();
     expect(schema.hostRole).toBeDefined();
     expect(schema.holdStatus).toBeDefined();
+    expect(schema.workspacePlan).toBeDefined();
+    expect(schema.domainStatus).toBeDefined();
   });
 });

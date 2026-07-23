@@ -32,21 +32,27 @@ type InviteResult =
 
 export interface UserManagementDeps {
   readonly requireAuth: MiddlewareHandler<AuthEnv>;
-  readonly getDirectory: (userId: string) => Promise<ManagementDirectory | null>;
+  readonly getDirectory: (
+    userId: string,
+    workspaceId?: string,
+  ) => Promise<ManagementDirectory | null>;
   readonly invite: (
     actorId: string,
     email: string,
     role: AppRole,
     expiresAt: Date,
+    workspaceId?: string,
   ) => Promise<InviteResult>;
   readonly updateUser: (
     actorId: string,
     targetId: string,
     patch: { role?: AppRole; status?: UserStatus },
+    workspaceId?: string,
   ) => Promise<ManagedUser | "forbidden" | "not_found" | "self_deactivation" | "last_owner">;
   readonly revokeInvitation: (
     actorId: string,
     invitationId: string,
+    workspaceId?: string,
   ) => Promise<"revoked" | "forbidden" | "not_found">;
   readonly sendMail: typeof sendInviteMail;
   readonly mailConfigured: () => boolean;
@@ -56,13 +62,13 @@ export interface UserManagementDeps {
 
 const defaultDeps: UserManagementDeps = {
   requireAuth: requireSession,
-  getDirectory: (userId) => getManagementDirectory(userId),
-  invite: (actorId, email, role, expiresAt) =>
-    createUserInvitation(actorId, email, role, expiresAt),
-  updateUser: (actorId, targetId, patch) =>
-    updateManagedUser(actorId, targetId, patch),
-  revokeInvitation: (actorId, invitationId) =>
-    revokeUserInvitation(actorId, invitationId),
+  getDirectory: (userId, workspaceId) => getManagementDirectory(userId, workspaceId),
+  invite: (actorId, email, role, expiresAt, workspaceId) =>
+    createUserInvitation(actorId, email, role, expiresAt, workspaceId),
+  updateUser: (actorId, targetId, patch, workspaceId) =>
+    updateManagedUser(actorId, targetId, patch, workspaceId),
+  revokeInvitation: (actorId, invitationId, workspaceId) =>
+    revokeUserInvitation(actorId, invitationId, workspaceId),
   sendMail: sendInviteMail,
   mailConfigured: isMailerConfigured,
   now: () => Temporal.Now.instant(),
@@ -98,7 +104,8 @@ export function createUserManagementRoutes(
   router.use("/api/me/user-management/*", deps.requireAuth);
 
   router.get("/api/me/user-management", async (c) => {
-    const directory = await deps.getDirectory(c.get("user").id);
+    const user = c.get("user");
+    const directory = await deps.getDirectory(user.id, user.workspaceId);
     if (!directory) return c.json({ error: "forbidden" }, 403);
     return c.json(serializeDirectory(directory));
   });
@@ -112,6 +119,7 @@ export function createUserManagementRoutes(
       parsed.data.email,
       parsed.data.role,
       new Date(expiresAt.epochMilliseconds),
+      c.get("user").workspaceId,
     );
     if (typeof result === "string") {
       return c.json({ error: result }, statusFor(result));
@@ -147,7 +155,13 @@ export function createUserManagementRoutes(
   router.patch("/api/me/user-management/users/:id", async (c) => {
     const parsed = updateSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
-    const result = await deps.updateUser(c.get("user").id, c.req.param("id"), parsed.data);
+    const user = c.get("user");
+    const result = await deps.updateUser(
+      user.id,
+      c.req.param("id"),
+      parsed.data,
+      user.workspaceId,
+    );
     if (typeof result === "string") {
       return c.json({ error: result }, statusFor(result));
     }
@@ -155,7 +169,12 @@ export function createUserManagementRoutes(
   });
 
   router.delete("/api/me/user-management/invitations/:id", async (c) => {
-    const result = await deps.revokeInvitation(c.get("user").id, c.req.param("id"));
+    const user = c.get("user");
+    const result = await deps.revokeInvitation(
+      user.id,
+      c.req.param("id"),
+      user.workspaceId,
+    );
     if (result !== "revoked") return c.json({ error: result }, statusFor(result));
     return c.json({ ok: true });
   });

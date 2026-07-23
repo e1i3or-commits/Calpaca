@@ -120,7 +120,41 @@ export async function getWritableConnectionForUser(
       eq(calendarConnections.userId, userId),
       eq(calendarConnections.provider, "google"),
     ));
-  return rows.find((r) => r.externalCalendarId === "primary") ?? rows[0] ?? null;
+  return rows.find((row) => row.isWriteDestination)
+    ?? rows.find((row) => row.externalCalendarId === "primary")
+    ?? rows[0]
+    ?? null;
+}
+
+export async function updateConnectionPreferences(
+  connectionId: string,
+  userId: string,
+  patch: { conflictEnabled?: boolean; isWriteDestination?: boolean },
+  executor: Db = getDb(),
+): Promise<ConnectionRow | null> {
+  return executor.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(calendarConnections)
+      .where(and(
+        eq(calendarConnections.id, connectionId),
+        eq(calendarConnections.userId, userId),
+      ))
+      .limit(1);
+    if (!existing) return null;
+    if (patch.isWriteDestination) {
+      await tx
+        .update(calendarConnections)
+        .set({ isWriteDestination: false })
+        .where(eq(calendarConnections.userId, userId));
+    }
+    const [row] = await tx
+      .update(calendarConnections)
+      .set(patch)
+      .where(eq(calendarConnections.id, connectionId))
+      .returning();
+    return row ?? null;
+  });
 }
 
 /** Seeds a new busy-source. The caller enqueues the initial sync; the watch

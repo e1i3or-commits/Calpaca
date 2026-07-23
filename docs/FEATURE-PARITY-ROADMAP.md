@@ -150,8 +150,8 @@ features matter.
 
 | Deliverable | Effort | Notes |
 | --- | ---: | --- |
-| Date overrides and OOO ranges | M | Explicit unavailable/alternate hours; optional teammate forwarding |
-| Multiple connected calendars | M | Per-calendar conflict checking and one write destination |
+| Date overrides and OOO ranges | Shipped | Unavailable/alternate hours, DST-safe ranges, and teammate forwarding |
+| Multiple connected calendars | Shipped | Per-calendar conflict checking, health, and one write destination |
 | Custom booking questions | M | Text, textarea, select, multiselect, phone, checkbox; required/hidden |
 | Locations | M | In-person, phone, custom URL, Google Meet; per-host override |
 | Multiple selectable durations | M | Preserve buffers, caps, holds, and scoring per selected duration |
@@ -162,6 +162,23 @@ features matter.
 P1 exit: a solo professional can reproduce the normal Calendly/Cal.com
 booking-link workflow, including exceptions and one-off scheduling, without
 editing their external calendar as a workaround.
+
+### Hosted platform foundation
+
+Goal: operate Calpaca as a paid multi-tenant service without weakening the
+self-hosted edition.
+
+| Deliverable | Effort | Notes |
+| --- | ---: | --- |
+| Workspace tenancy and strict data scoping | L | Every hosted row belongs to a workspace; migration preserves existing installs |
+| Hosted identity and domains | M | `calpaca.io` public site and booking namespace, `app.calpaca.io` organizer UI |
+| Custom domains | M | Verified domain mapping; `cal.tourscale.com` remains the TourScale workspace |
+| Plans and entitlements | L | Free/paid limits enforced as capabilities, not scattered UI checks |
+| Billing lifecycle | L | Checkout, subscription state, grace period, cancellation, and audit trail |
+| Self-hosted distribution | M | No billing dependency; installation, upgrades, backups, and environment reference |
+
+This foundation lands before invitee calendar OAuth so consent, credentials,
+retention, and billing all have an explicit workspace boundary.
 
 ### P2 — Communications and organizer operations
 
@@ -186,9 +203,10 @@ Goal: cover Doodle's core coordination jobs and Calendly meeting polls.
 
 | Deliverable | Effort | Notes |
 | --- | ---: | --- |
+| Optional invitee calendar overlay | M | Consent-based busy/free only; rank mutual times without hiding normal availability |
 | Meeting polls | L | Account-free voting; yes / if-needed / no; organizer finalization |
 | Poll privacy and controls | M | Hidden votes, deadline, reminders, response editing, participant limits |
-| Calendar-aware voting | M | Signed voter link; optional connected-user busy overlay, no invitee OAuth requirement |
+| Calendar-aware voting | M | Signed voter link; optional busy overlay, no invitee account requirement |
 | Capacity event types | L | One or more invitees per slot, seat counts, waitlist-ready model |
 | Sign-up sheets | L | Named sessions, capacity, custom questions, per-person registration cap |
 | Enrollment administration | M | Roster, removal, export, resend, privacy controls |

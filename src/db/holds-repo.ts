@@ -290,9 +290,18 @@ export async function confirmReschedule(
     const rescheduled = await appendEvent(bookingId, "rescheduled", { startsAt, endsAt }, tx);
     if (!rescheduled.ok) return rescheduled;
 
+    const nextHostUserIds = [...new Set(rows.map((row) => row.hostUserId))];
+    const hostsChanged =
+      nextHostUserIds.length !== rescheduled.value.hostUserIds.length ||
+      nextHostUserIds.some((id, index) => id !== rescheduled.value.hostUserIds[index]);
+    const finalState = hostsChanged
+      ? await appendEvent(bookingId, "reassigned", { hostUserIds: nextHostUserIds }, tx)
+      : rescheduled;
+    if (!finalState.ok) return finalState;
+
     await tx.update(holds).set({ status: "confirmed" }).where(inArray(holds.id, [...holdIds]));
 
-    return rescheduled;
+    return finalState;
   });
 }
 

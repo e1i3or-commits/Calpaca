@@ -8,6 +8,7 @@ availability, Google Calendar sync, and an MCP server for AI-assisted booking.
 [Architecture](docs/ARCHITECTURE.md) ·
 [MCP setup](docs/MCP.md) ·
 [API reference](docs/API.md) ·
+[Hosted service](docs/HOSTED.md) ·
 [Embeds](docs/EMBEDS.md) ·
 [Self-hosting](docs/SELF-HOSTING.md) ·
 [Roadmap](docs/FEATURE-PARITY-ROADMAP.md)
@@ -20,6 +21,8 @@ availability, Google Calendar sync, and an MCP server for AI-assisted booking.
   focus blocks, and ranked suggestions.
 - **Teams built in:** round-robin assignment, required and optional group
   attendees, and quorum fallback when no time works for everyone.
+- **Date-aware availability:** recurring hours, alternate-date hours, time-off
+  ranges, and teammate forwarding.
 - **Agent-ready:** a stdio MCP server exposes availability, holds, booking,
   rescheduling, and cancellation through the same public API as the web app.
 - **Reliable calendar sync:** Google Calendar busy-cache reads, watch-channel

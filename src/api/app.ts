@@ -6,11 +6,13 @@ import { availabilityRoutes } from "./routes/availability";
 import { bookingRoutes } from "./routes/bookings";
 import { meRoutes } from "./routes/me";
 import { openApiRoutes } from "./openapi";
+import { profileRoutes } from "./routes/profile";
 import { routingRoutes } from "./routes/routing";
 import { webhookAdminRoutes } from "./routes/webhook-admin";
 import { webhookRoutes } from "./routes/webhooks";
 import { suggestionRoutes } from "./routes/suggestions";
 import { userManagementRoutes } from "./routes/user-management";
+import { workspaceRoutes } from "./routes/workspace";
 
 export const app = new Hono();
 
@@ -26,6 +28,7 @@ app.route("/", availabilityRoutes);
 app.route("/", bookingRoutes);
 app.route("/", meRoutes);
 app.route("/", openApiRoutes);
+app.route("/", profileRoutes);
 app.route("/", adminRoutes);
 app.route("/", analyticsRoutes);
 app.route("/", routingRoutes);
@@ -33,3 +36,4 @@ app.route("/", webhookAdminRoutes);
 app.route("/", webhookRoutes);
 app.route("/", suggestionRoutes);
 app.route("/", userManagementRoutes);
+app.route("/", workspaceRoutes);

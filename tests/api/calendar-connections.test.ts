@@ -20,6 +20,8 @@ function connection(overrides: Partial<ConnectionRow> = {}): ConnectionRow {
     provider: "google",
     // the OAuth seed stores the alias, not the real primary id
     externalCalendarId: "primary",
+    conflictEnabled: true,
+    isWriteDestination: false,
     channelId: null,
     channelResourceId: null,
     channelToken: null,
@@ -40,11 +42,13 @@ function makeDeps(overrides: Partial<CalendarRouteDeps> = {}): CalendarRouteDeps
     },
     getAccessToken: async () => "token-1",
     listCalendars: async () => ok(googleCalendars),
-    listConnections: async () => [{ id: CONN_ID, externalCalendarId: "primary" }],
+    listConnections: async () => [connection()],
     createConnection: async (userId, externalCalendarId) =>
       connection({ id: OTHER_CONN_ID, userId, externalCalendarId }),
     getConnection: async (id) => (id === CONN_ID ? connection() : null),
     deleteConnection: async () => {},
+    updateConnectionPreferences: async (id, userId, patch) =>
+      id === CONN_ID && userId === HOST_ID ? connection(patch) : null,
     stopChannel: async () => ok(undefined),
     enqueueSync: async () => {},
     ...overrides,
@@ -79,6 +83,62 @@ describe("calendar connection routes", () => {
     const team = body.calendars.find((c) => c.id === "team@group.calendar.google.com")!;
     expect(team.connected).toBe(false);
     expect(team.connectionId).toBeNull();
+  });
+
+  test("PATCH changes conflict checking and the write destination", async () => {
+    const patches: object[] = [];
+    const router = createCalendarRoutes(makeDeps({
+      updateConnectionPreferences: async (_id, _userId, patch) => {
+        patches.push(patch);
+        return connection({ ...patch, isWriteDestination: true });
+      },
+    }));
+    const conflicts = await router.request(
+      `/api/me/calendars/connections/${CONN_ID}`,
+      { method: "PATCH", body: JSON.stringify({ conflictEnabled: false }) },
+    );
+    expect(conflicts.status).toBe(200);
+    const destination = await router.request(
+      `/api/me/calendars/connections/${CONN_ID}`,
+      { method: "PATCH", body: JSON.stringify({ isWriteDestination: true }) },
+    );
+    expect(destination.status).toBe(200);
+    expect(patches).toEqual([
+      { conflictEnabled: false },
+      { isWriteDestination: true },
+    ]);
+  });
+
+  test("PATCH rejects a read-only calendar as the write destination", async () => {
+    const router = createCalendarRoutes(makeDeps({
+      getConnection: async () => connection({
+        externalCalendarId: "team@group.calendar.google.com",
+      }),
+    }));
+    const response = await router.request(
+      `/api/me/calendars/connections/${CONN_ID}`,
+      { method: "PATCH", body: JSON.stringify({ isWriteDestination: true }) },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "calendar_not_writable" });
+  });
+
+  test("DELETE protects the active destination while another calendar exists", async () => {
+    const router = createCalendarRoutes(makeDeps({
+      listConnections: async () => [
+        connection({ isWriteDestination: true }),
+        connection({
+          id: OTHER_CONN_ID,
+          externalCalendarId: "team@group.calendar.google.com",
+        }),
+      ],
+    }));
+    const response = await router.request(
+      `/api/me/calendars/connections/${CONN_ID}`,
+      { method: "DELETE" },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "write_destination_required" });
   });
 
   test("GET maps missing Google link to 409 and Google failure to 502", async () => {

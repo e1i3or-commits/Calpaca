@@ -2,7 +2,12 @@ import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
 import * as schema from "./schema";
-import { sessions, userInvitations, users } from "./schema";
+import {
+  sessions,
+  userInvitations,
+  users,
+  workspaceMembers,
+} from "./schema";
 
 type Db = NodePgDatabase<typeof schema>;
 export type AppRole = "owner" | "admin" | "member";
@@ -36,7 +41,19 @@ export interface ManagementDirectory {
 async function actorRole(
   executor: Db,
   userId: string,
+  workspaceId?: string,
 ): Promise<AppRole | null> {
+  if (workspaceId) {
+    const [membership] = await executor
+      .select({ role: workspaceMembers.role, status: workspaceMembers.status })
+      .from(workspaceMembers)
+      .where(and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, userId),
+      ))
+      .limit(1);
+    return membership?.status === "active" ? membership.role : null;
+  }
   return executor.transaction(async (tx) => {
     const [actor] = await tx
       .select({ role: users.appRole, status: users.status })
@@ -67,10 +84,45 @@ async function actorRole(
 
 export async function getManagementDirectory(
   userId: string,
+  workspaceId?: string,
   executor: Db = getDb(),
 ): Promise<ManagementDirectory | null> {
-  const role = await actorRole(executor, userId);
+  const role = await actorRole(executor, userId, workspaceId);
   if (!role) return null;
+  if (workspaceId) {
+    const [directory, invitations] = await Promise.all([
+      executor
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          timezone: users.timezone,
+          role: workspaceMembers.role,
+          status: workspaceMembers.status,
+          createdAt: workspaceMembers.createdAt,
+        })
+        .from(workspaceMembers)
+        .innerJoin(users, eq(workspaceMembers.userId, users.id))
+        .where(eq(workspaceMembers.workspaceId, workspaceId))
+        .orderBy(asc(users.name), asc(users.email)),
+      executor
+        .select({
+          id: userInvitations.id,
+          email: userInvitations.email,
+          role: userInvitations.role,
+          status: userInvitations.status,
+          expiresAt: userInvitations.expiresAt,
+          createdAt: userInvitations.createdAt,
+        })
+        .from(userInvitations)
+        .where(and(
+          eq(userInvitations.workspaceId, workspaceId),
+          eq(userInvitations.status, "pending"),
+        ))
+        .orderBy(asc(userInvitations.createdAt)),
+    ]);
+    return { actor: { id: userId, role }, users: directory, invitations };
+  }
   const [directory, invitations] = await Promise.all([
     executor
       .select({
@@ -105,9 +157,10 @@ export async function createUserInvitation(
   email: string,
   role: AppRole,
   expiresAt: Date,
+  workspaceId?: string,
   executor: Db = getDb(),
 ): Promise<{ invitation: UserInvitation; token: string; existingUser: boolean } | "forbidden" | "already_pending"> {
-  const actor = await actorRole(executor, actorId);
+  const actor = await actorRole(executor, actorId, workspaceId);
   if (!actor || (role === "owner" && actor !== "owner")) return "forbidden";
   const normalizedEmail = email.trim().toLowerCase();
 
@@ -118,10 +171,22 @@ export async function createUserInvitation(
       .where(sql`lower(${users.email}) = ${normalizedEmail}`)
       .limit(1);
     if (existing) {
-      await tx
-        .update(users)
-        .set({ appRole: role, status: "active", updatedAt: new Date() })
-        .where(eq(users.id, existing.id));
+      if (workspaceId) {
+        await tx.insert(workspaceMembers).values({
+          workspaceId,
+          userId: existing.id,
+          role,
+          status: "active",
+        }).onConflictDoUpdate({
+          target: [workspaceMembers.workspaceId, workspaceMembers.userId],
+          set: { role, status: "active" },
+        });
+      } else {
+        await tx
+          .update(users)
+          .set({ appRole: role, status: "active", updatedAt: new Date() })
+          .where(eq(users.id, existing.id));
+      }
     }
 
     const [pending] = await tx
@@ -142,6 +207,7 @@ export async function createUserInvitation(
         role,
         token,
         invitedByUserId: actorId,
+        ...(workspaceId ? { workspaceId } : {}),
         expiresAt,
         ...(existing ? { status: "accepted" as const, acceptedAt: new Date() } : {}),
       })
@@ -161,10 +227,61 @@ export async function updateManagedUser(
   actorId: string,
   targetId: string,
   patch: { role?: AppRole; status?: UserStatus },
+  workspaceId?: string,
   executor: Db = getDb(),
 ): Promise<ManagedUser | "forbidden" | "not_found" | "self_deactivation" | "last_owner"> {
-  const actor = await actorRole(executor, actorId);
+  const actor = await actorRole(executor, actorId, workspaceId);
   if (!actor) return "forbidden";
+  if (workspaceId) {
+    return executor.transaction(async (tx) => {
+      const [target] = await tx
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          timezone: users.timezone,
+          createdAt: workspaceMembers.createdAt,
+          role: workspaceMembers.role,
+          status: workspaceMembers.status,
+        })
+        .from(workspaceMembers)
+        .innerJoin(users, eq(workspaceMembers.userId, users.id))
+        .where(and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          eq(workspaceMembers.userId, targetId),
+        ));
+      if (!target) return "not_found";
+      if (target.role === "owner" && actor !== "owner") return "forbidden";
+      if (patch.role === "owner" && actor !== "owner") return "forbidden";
+      if (targetId === actorId && patch.status === "inactive") return "self_deactivation";
+      const removesOwner = target.role === "owner"
+        && (patch.role && patch.role !== "owner" || patch.status === "inactive");
+      if (removesOwner) {
+        const [otherOwner] = await tx
+          .select({ id: workspaceMembers.userId })
+          .from(workspaceMembers)
+          .where(and(
+            eq(workspaceMembers.workspaceId, workspaceId),
+            eq(workspaceMembers.role, "owner"),
+            eq(workspaceMembers.status, "active"),
+            ne(workspaceMembers.userId, targetId),
+          ));
+        if (!otherOwner) return "last_owner";
+      }
+      const [membership] = await tx
+        .update(workspaceMembers)
+        .set(patch)
+        .where(and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          eq(workspaceMembers.userId, targetId),
+        ))
+        .returning({
+          role: workspaceMembers.role,
+          status: workspaceMembers.status,
+        });
+      return { ...target, ...membership! };
+    });
+  }
   return executor.transaction(async (tx) => {
     const [target] = await tx.select().from(users).where(eq(users.id, targetId)).limit(1);
     if (!target) return "not_found";
@@ -210,13 +327,18 @@ export async function updateManagedUser(
 export async function revokeUserInvitation(
   actorId: string,
   invitationId: string,
+  workspaceId?: string,
   executor: Db = getDb(),
 ): Promise<"revoked" | "forbidden" | "not_found"> {
-  if (!(await actorRole(executor, actorId))) return "forbidden";
+  if (!(await actorRole(executor, actorId, workspaceId))) return "forbidden";
   const rows = await executor
     .update(userInvitations)
     .set({ status: "revoked" })
-    .where(and(eq(userInvitations.id, invitationId), eq(userInvitations.status, "pending")))
+    .where(and(
+      eq(userInvitations.id, invitationId),
+      eq(userInvitations.status, "pending"),
+      ...(workspaceId ? [eq(userInvitations.workspaceId, workspaceId)] : []),
+    ))
     .returning({ id: userInvitations.id });
   return rows.length ? "revoked" : "not_found";
 }
@@ -229,7 +351,11 @@ export async function claimUserInvitation(
   const normalizedEmail = email.trim().toLowerCase();
   await executor.transaction(async (tx) => {
     const [invitation] = await tx
-      .select({ id: userInvitations.id, role: userInvitations.role })
+      .select({
+        id: userInvitations.id,
+        role: userInvitations.role,
+        workspaceId: userInvitations.workspaceId,
+      })
       .from(userInvitations)
       .where(and(
         sql`lower(${userInvitations.email}) = ${normalizedEmail}`,
@@ -238,6 +364,17 @@ export async function claimUserInvitation(
       ))
       .limit(1);
     if (!invitation) return;
+    if (invitation.workspaceId) {
+      await tx.insert(workspaceMembers).values({
+        workspaceId: invitation.workspaceId,
+        userId,
+        role: invitation.role,
+        status: "active",
+      }).onConflictDoUpdate({
+        target: [workspaceMembers.workspaceId, workspaceMembers.userId],
+        set: { role: invitation.role, status: "active" },
+      });
+    }
     await tx
       .update(users)
       .set({ appRole: invitation.role, status: "active", updatedAt: new Date() })

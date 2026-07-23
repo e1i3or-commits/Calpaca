@@ -6,7 +6,7 @@ type Operation = readonly [
   path: string,
   tag: string,
   summary: string,
-  auth?: "session" | "bearer",
+  auth?: "session" | "bearer" | "personal",
 ];
 
 export const openApiOperations: readonly Operation[] = [
@@ -23,6 +23,15 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/routing/{slug}", "Routing", "Get a public routing form"],
   ["post", "/routing/evaluate", "Routing", "Evaluate routing answers"],
   ["get", "/api/me/users", "Organizer", "List active users", "session"],
+  ["get", "/api/me/profile", "Profile", "Get the current user profile", "personal"],
+  ["patch", "/api/me/profile", "Profile", "Update the current user profile", "personal"],
+  ["get", "/api/me/api-tokens", "Profile", "List personal API tokens", "session"],
+  ["post", "/api/me/api-tokens", "Profile", "Create a personal API token", "session"],
+  ["delete", "/api/me/api-tokens/{id}", "Profile", "Revoke a personal API token", "session"],
+  ["get", "/api/me/workspace", "Workspace", "Get workspace plan, entitlements, and domains", "personal"],
+  ["patch", "/api/me/workspace", "Workspace", "Update workspace settings", "personal"],
+  ["post", "/api/me/workspace/domains", "Workspace", "Add a custom domain", "personal"],
+  ["delete", "/api/me/workspace/domains/{id}", "Workspace", "Remove a custom domain", "personal"],
   ["get", "/api/me/bookings", "Organizer", "List organizer bookings", "session"],
   ["get", "/api/me/bookings/{id}", "Organizer", "Get booking detail and timeline", "session"],
   ["get", "/api/me/bookings/{id}/assignment", "Organizer", "Explain round-robin assignment", "session"],
@@ -44,6 +53,7 @@ export const openApiOperations: readonly Operation[] = [
   ["delete", "/api/me/event-types/{id}", "Event types", "Delete an event type", "session"],
   ["get", "/api/me/calendars", "Calendars", "List Google calendars and connections", "session"],
   ["post", "/api/me/calendars/connections", "Calendars", "Connect a Google calendar", "session"],
+  ["patch", "/api/me/calendars/connections/{id}", "Calendars", "Change conflict or write-destination settings", "session"],
   ["delete", "/api/me/calendars/connections/{id}", "Calendars", "Disconnect a calendar", "session"],
   ["get", "/api/me/routing-forms", "Routing", "List routing forms", "session"],
   ["post", "/api/me/routing-forms", "Routing", "Create a routing form", "session"],
@@ -124,7 +134,13 @@ export function generateOpenApiDocument() {
       summary,
       parameters: [...parameters(path), ...queryParameters(path)],
       ...body,
-      ...(auth ? { security: [{ [auth]: [] }] } : {}),
+      ...(auth
+        ? {
+            security: auth === "personal"
+              ? [{ session: [] }, { personal: [] }]
+              : [{ [auth]: [] }],
+          }
+        : {}),
       responses: {
         "200": {
           description: "Successful response",
@@ -164,6 +180,11 @@ export function generateOpenApiDocument() {
           type: "http",
           scheme: "bearer",
           description: "Provider webhook secret configured by the operator.",
+        },
+        personal: {
+          type: "http",
+          scheme: "bearer",
+          description: "Personal Calpaca API token or organizer browser session.",
         },
       },
       schemas: {

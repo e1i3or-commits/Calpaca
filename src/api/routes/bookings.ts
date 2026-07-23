@@ -33,7 +33,10 @@ import {
   appendEvent,
   type BookingRow,
 } from "../../db/booking-repo";
-import { expandRules } from "../../core/availability/rules";
+import {
+  effectiveOpenIntervals,
+  forwardingIntervals,
+} from "../../core/availability/overrides";
 import { subtract, type Interval } from "../../core/availability/intervals";
 import type { AssignmentCandidate, BookingRecord } from "../../core/assignment/round-robin";
 import type { BookingState, BookingStateError } from "../../core/booking/state";
@@ -220,12 +223,76 @@ function isSlotFreeForHost(
   const paddedStart = slot.start.subtract({ minutes: bufferBeforeMin });
   const paddedEnd = slot.end.add({ minutes: bufferAfterMin });
   const window: Interval = { start: paddedStart, end: paddedEnd };
-  const open = expandRules(schedule.rules, schedule.timezone, window);
+  const open = effectiveOpenIntervals(
+    schedule.rules,
+    schedule.overrides ?? [],
+    schedule.timezone,
+    window,
+  );
   const free = subtract(open, busy);
 
   return free.some(
     (f) => Temporal.Instant.compare(f.start, paddedStart) <= 0 && Temporal.Instant.compare(paddedEnd, f.end) <= 0,
   );
+}
+
+function resolveFreeHost(
+  userId: string,
+  schedules: ReadonlyMap<string, HostSchedule>,
+  busy: ReadonlyMap<string, readonly Interval[]>,
+  slot: Interval,
+  bufferBeforeMin: number,
+  bufferAfterMin: number,
+  minimumNoticeMin: number,
+  now: Temporal.Instant,
+  visited = new Set<string>(),
+): string | null {
+  if (visited.has(userId)) return null;
+  const schedule = schedules.get(userId);
+  if (!schedule) return null;
+  if (isSlotFreeForHost(
+    schedule,
+    busy.get(userId) ?? [],
+    slot,
+    bufferBeforeMin,
+    bufferAfterMin,
+    minimumNoticeMin,
+    now,
+  )) {
+    return userId;
+  }
+
+  const padded = paddedWindow(slot, bufferBeforeMin, bufferAfterMin);
+  const nextVisited = new Set(visited).add(userId);
+  for (const targetUserId of new Set(
+    (schedule.overrides ?? []).flatMap((override) =>
+      override.forwardToUserId ? [override.forwardToUserId] : [],
+    ),
+  )) {
+    const forwarding = forwardingIntervals(
+      schedule.overrides ?? [],
+      schedule.timezone,
+      targetUserId,
+      padded,
+    );
+    if (!forwarding.some((interval) =>
+      Temporal.Instant.compare(interval.start, padded.start) <= 0 &&
+      Temporal.Instant.compare(padded.end, interval.end) <= 0
+    )) continue;
+    const resolved = resolveFreeHost(
+      targetUserId,
+      schedules,
+      busy,
+      slot,
+      bufferBeforeMin,
+      bufferAfterMin,
+      minimumNoticeMin,
+      now,
+      nextVisited,
+    );
+    if (resolved) return resolved;
+  }
+  return null;
 }
 
 /** Constant-time token comparison: reschedule/cancel are authenticated ONLY
@@ -345,26 +412,29 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (targetHostIds.length === 0) return c.json({ error: "event_type_not_found" }, 404);
 
     const window = paddedWindow(slot, eventType.bufferBeforeMin, eventType.bufferAfterMin);
-    const [scheduleRows, busyRows] = await Promise.all([
-      deps.getSchedulesForUsers(targetHostIds),
-      deps.getBusyForUsers(targetHostIds, window),
-    ]);
+    const scheduleRows = await deps.getSchedulesForUsers(targetHostIds);
+    const busyRows = await deps.getBusyForUsers(
+      scheduleRows.map((schedule) => schedule.userId),
+      window,
+    );
     const schedulesByUser = new Map(scheduleRows.map((s) => [s.userId, s]));
     const busyByUser = new Map(busyRows.map((b) => [b.userId, b.intervals]));
 
-    const freeHostIds = targetHostIds.filter((id) => {
-      const schedule = schedulesByUser.get(id);
-      if (!schedule) return false;
-      return isSlotFreeForHost(
-        schedule,
-        busyByUser.get(id) ?? [],
+    const resolvedHostIds = targetHostIds.map((id) =>
+      resolveFreeHost(
+        id,
+        schedulesByUser,
+        busyByUser,
         slot,
         eventType.bufferBeforeMin,
         eventType.bufferAfterMin,
         eventType.minimumNoticeMin,
         now,
-      );
-    });
+      ),
+    );
+    const freeHostIds = [...new Set(resolvedHostIds.filter(
+      (id): id is string => id !== null,
+    ))];
 
     const requiredTargetHostIds =
       eventType.mode === "group" && requestedOptionalHosts
@@ -372,9 +442,18 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
         : targetHostIds;
     const requiresEveryone = eventType.mode !== "round_robin";
     const requiredHostsFree = requiredTargetHostIds.every((id) =>
-      freeHostIds.includes(id),
+      resolvedHostIds[targetHostIds.indexOf(id)] !== null,
     );
+    const requiredResolvedIds = requiredTargetHostIds.flatMap((id) => {
+      const resolved = resolvedHostIds[targetHostIds.indexOf(id)];
+      return resolved ? [resolved] : [];
+    });
+    const distinctRequiredHosts =
+      new Set(requiredResolvedIds).size === requiredResolvedIds.length;
     if (requiresEveryone ? !requiredHostsFree : freeHostIds.length === 0) {
+      return c.json({ error: "slot_not_available" }, 409);
+    }
+    if (eventType.mode === "group" && !distinctRequiredHosts) {
       return c.json({ error: "slot_not_available" }, 409);
     }
 
@@ -382,7 +461,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       eventType.mode === "group" && requestedOptionalHosts
         ? freeHostIds
         : requiresEveryone
-          ? targetHostIds
+          ? resolvedHostIds.filter((id): id is string => id !== null)
           : freeHostIds;
     const ttlMinutes =
       agent && eventType.agentPolicy?.autoExpireHoldsMin !== undefined
@@ -424,9 +503,21 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     let assignment: RoundRobinAssignment | undefined;
     if (eventType.mode === "round_robin") {
       const hosts = await deps.getEventTypeHosts(eventType.id);
-      const candidates: AssignmentCandidate[] = hosts
-        .filter((h) => h.role !== "optional")
-        .map((h) => ({ userId: h.userId, weight: h.weight }));
+      const pool = hosts.filter((host) => host.role !== "optional");
+      const schedules = await deps.getSchedulesForUsers(pool.map((host) => host.userId));
+      const weightByUser = new Map<string, number>();
+      for (const host of pool) weightByUser.set(host.userId, host.weight);
+      for (const schedule of schedules) {
+        const sourceWeight = weightByUser.get(schedule.userId);
+        if (sourceWeight === undefined) continue;
+        for (const targetId of (schedule.overrides ?? []).flatMap((override) =>
+          override.forwardToUserId ? [override.forwardToUserId] : [],
+        )) {
+          if (!weightByUser.has(targetId)) weightByUser.set(targetId, sourceWeight);
+        }
+      }
+      const candidates: AssignmentCandidate[] = [...weightByUser]
+        .map(([userId, weight]) => ({ userId, weight }));
       const history = await deps.getBookingHistoryForHosts(candidates.map((cand) => cand.userId));
       assignment = { candidates, history };
     }
@@ -505,30 +596,40 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
 
     const now = deps.now();
     const window = paddedWindow(slot, eventType.bufferBeforeMin, eventType.bufferAfterMin);
-    const [scheduleRows, busyRows] = await Promise.all([
-      deps.getSchedulesForUsers(booking.hostUserIds),
-      deps.getBusyForUsers(booking.hostUserIds, window),
-    ]);
+    const scheduleRows = await deps.getSchedulesForUsers(booking.hostUserIds);
+    const busyRows = await deps.getBusyForUsers(
+      scheduleRows.map((schedule) => schedule.userId),
+      window,
+    );
     const schedulesByUser = new Map(scheduleRows.map((s) => [s.userId, s]));
     const busyByUser = new Map(busyRows.map((b) => [b.userId, b.intervals]));
 
-    const allFree = booking.hostUserIds.every((hostId) => {
-      const schedule = schedulesByUser.get(hostId);
-      if (!schedule) return false;
-      return isSlotFreeForHost(
-        schedule,
-        busyByUser.get(hostId) ?? [],
+    const resolvedHostIds = booking.hostUserIds.map((hostId) =>
+      resolveFreeHost(
+        hostId,
+        schedulesByUser,
+        busyByUser,
         slot,
         eventType.bufferBeforeMin,
         eventType.bufferAfterMin,
         eventType.minimumNoticeMin,
         now,
-      );
-    });
-    if (!allFree) return c.json({ error: "slot_not_available" }, 409);
+      ),
+    );
+    if (
+      resolvedHostIds.some((hostId) => hostId === null) ||
+      new Set(resolvedHostIds).size !== resolvedHostIds.length
+    ) {
+      return c.json({ error: "slot_not_available" }, 409);
+    }
 
     const ttl = Temporal.Duration.from({ minutes: HOLD_TTL_MINUTES });
-    const created = await deps.createHold(eventType.id, booking.hostUserIds, slot, ttl);
+    const created = await deps.createHold(
+      eventType.id,
+      resolvedHostIds as string[],
+      slot,
+      ttl,
+    );
     if (!created.ok) return c.json({ error: created.error.kind }, 409);
 
     const rescheduled = await deps.confirmReschedule(

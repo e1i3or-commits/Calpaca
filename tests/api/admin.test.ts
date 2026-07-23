@@ -136,6 +136,32 @@ describe("admin routes", () => {
       rules: [{ dow: 1, start: "17:00", end: "09:00" }],
     });
     expect(inverted.status).toBe(400);
+
+    const selfForward = await post(router, "/api/me/schedules", {
+      name: "OOO",
+      timezone: "UTC",
+      rules: [{ dow: 1, start: "09:00", end: "17:00" }],
+      overrides: [{
+        startDate: "2026-08-01",
+        endDate: "2026-08-02",
+        kind: "unavailable",
+        forwardToUserId: U1,
+      }],
+    });
+    expect(selfForward.status).toBe(409);
+    expect(await selfForward.json()).toEqual({ error: "cannot_forward_to_self" });
+
+    const alternateWithoutTimes = await post(router, "/api/me/schedules", {
+      name: "Overrides",
+      timezone: "UTC",
+      rules: [{ dow: 1, start: "09:00", end: "17:00" }],
+      overrides: [{
+        startDate: "2026-08-01",
+        endDate: "2026-08-01",
+        kind: "available",
+      }],
+    });
+    expect(alternateWithoutTimes.status).toBe(400);
   });
 
   test("schedule update 404s for unknown ids; delete maps in_use to 409", async () => {

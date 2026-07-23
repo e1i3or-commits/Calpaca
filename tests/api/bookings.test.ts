@@ -124,25 +124,41 @@ interface DepsOverrides {
   cancelBookingResult?: Result<BookingState, BookingStateError>;
   onConfirmHold?: (holdIds: readonly string[], invitee: Invitee, assignment?: RoundRobinAssignment) => void;
   bookingHistory?: readonly BookingRecord[];
+  schedules?: Record<string, HostSchedule>;
+  onCreateHold?: (hostUserIds: readonly string[]) => void;
 }
 
 function makeDeps(overrides: DepsOverrides = {}): BookingDeps {
   const busyByUserId = overrides.busyByUserId ?? {};
   const bookingsById = overrides.bookingsById ?? {};
+  const availableSchedules = overrides.schedules ?? schedulesByUserId;
 
   return {
     getEventTypeForBooking: async (slug) => eventTypesBySlug[slug] ?? null,
     getEventTypeForBookingById: async (id) => eventTypesById[id] ?? null,
     getEventTypeHosts: async (eventTypeId) => hostsByEventType[eventTypeId] ?? [],
-    getSchedulesForUsers: async (userIds) =>
-      userIds.flatMap((id) => {
-        const schedule = schedulesByUserId[id];
+    getSchedulesForUsers: async (userIds) => {
+      const wanted = new Set(userIds);
+      for (const id of wanted) {
+        const schedule = availableSchedules[id];
+        for (const target of (schedule?.overrides ?? []).flatMap((override) =>
+          override.forwardToUserId ? [override.forwardToUserId] : [],
+        )) wanted.add(target);
+      }
+      return [...wanted].flatMap((id) => {
+        const schedule = availableSchedules[id];
         return schedule ? [schedule] : [];
-      }),
+      });
+    },
     getBusyForUsers: async (userIds): Promise<HostBusy[]> =>
       userIds.map((id) => ({ userId: id, intervals: busyByUserId[id] ?? [] })),
-    createHold: async (_eventTypeId, hostUserIds) =>
-      ok(hostUserIds.map((hostUserId): HoldRecord => ({ id: `hold-${hostUserId}`, hostUserId }))),
+    createHold: async (_eventTypeId, hostUserIds) => {
+      overrides.onCreateHold?.(hostUserIds);
+      return ok(hostUserIds.map((hostUserId): HoldRecord => ({
+        id: `hold-${hostUserId}`,
+        hostUserId,
+      })));
+    },
     confirmHold: async (holdIds, invitee, assignment) => {
       overrides.onConfirmHold?.(holdIds, invitee, assignment);
       return overrides.confirmHoldResult ?? ok({ bookingId: "booking-1", hostUserIds: ["host-a"] });
@@ -289,6 +305,34 @@ describe("POST /holds", () => {
       end: "2027-01-04T09:30:00Z",
     });
     expect(res.status).toBe(409);
+  });
+
+  test("solo: OOO forwarding holds the available teammate, not the absent host", async () => {
+    let held: readonly string[] = [];
+    const router = createBookingRoutes(makeDeps({
+      schedules: {
+        ...schedulesByUserId,
+        "host-a": {
+          ...schedulesByUserId["host-a"]!,
+          overrides: [{
+            startDate: "2027-01-04",
+            endDate: "2027-01-04",
+            kind: "unavailable",
+            forwardToUserId: "host-d",
+          }],
+        },
+      },
+      onCreateHold: (hostIds) => {
+        held = hostIds;
+      },
+    }));
+    const response = await post(router, "/holds", {
+      eventTypeSlug: "solo-30",
+      start: "2027-01-04T09:00:00Z",
+      end: "2027-01-04T09:30:00Z",
+    });
+    expect(response.status).toBe(201);
+    expect(held).toEqual(["host-d"]);
   });
 });
 

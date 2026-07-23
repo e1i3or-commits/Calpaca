@@ -1,0 +1,1 @@
+ALTER TABLE "schedules" ADD COLUMN "overrides" jsonb DEFAULT '[]'::jsonb NOT NULL;

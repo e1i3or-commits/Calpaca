@@ -124,6 +124,30 @@ describe("GET /availability", () => {
     expect(body.all[2]?.start.utc).toBe("2027-01-04T09:15:00Z");
   });
 
+  test("solo: OOO forwarding offers the teammate's availability", async () => {
+    const deps = makeDeps();
+    const source: HostSchedule = {
+      ...schedulesByUserId["host-a"]!,
+      overrides: [{
+        startDate: "2027-01-04",
+        endDate: "2027-01-04",
+        kind: "unavailable",
+        forwardToUserId: "host-b",
+      }],
+    };
+    const router = createAvailabilityRoutes({
+      ...deps,
+      getSchedulesForUsers: async () => [source, schedulesByUserId["host-b"]!],
+    });
+    const response = await router.request(
+      `/availability?${baseParams("solo-30").toString()}`,
+    );
+    const body = await json(response);
+    expect(response.status).toBe(200);
+    expect(body.all[0]?.start.utc).toBe("2027-01-04T09:00:00Z");
+    expect(body.all.some((slot) => slot.start.utc === "2027-01-04T11:30:00Z")).toBe(true);
+  });
+
   test("timezone rendering: every slot carries both UTC and invitee-local renderings", async () => {
     const params = baseParams("solo-30");
     params.set("inviteeTimezone", "America/New_York");

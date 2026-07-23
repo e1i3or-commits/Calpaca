@@ -1,5 +1,9 @@
 # Self-hosting Calpaca
 
+Self-hosted mode is the default. It creates an installation workspace on the
+first authenticated request with the `self_hosted` plan, which enables all
+Calpaca capabilities without billing or a connection to calpaca.io.
+
 Calpaca runs as one Bun application and one PostgreSQL 16 database. Background
 jobs run inside the application process through pg-boss; Redis and a separate
 worker are not required.

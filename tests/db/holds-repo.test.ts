@@ -5,7 +5,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { eq, sql } from "drizzle-orm";
 import { Temporal } from "@js-temporal/polyfill";
 import * as schema from "../../src/db/schema";
-import { confirmHold, createHold } from "../../src/db/holds-repo";
+import { confirmHold, confirmReschedule, createHold } from "../../src/db/holds-repo";
 
 /**
  * Integration coverage for the transactional hold/confirm path against a
@@ -154,6 +154,50 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("holds-repo", () => {
 
       const host2Rows = await db.select().from(schema.holds).where(eq(schema.holds.hostUserId, host2.id));
       expect(host2Rows).toHaveLength(1);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  test("rescheduling onto an OOO forward target reassigns the booking", async () => {
+    const { pool, db, eventType, host1, host2 } = await setup();
+    try {
+      const original = await createHold(eventType.id, [host1.id], slot, ttl, db);
+      expect(original.ok).toBe(true);
+      if (!original.ok) return;
+      const confirmed = await confirmHold(
+        original.value.map((hold) => hold.id),
+        invitee,
+        db,
+      );
+      expect(confirmed.ok).toBe(true);
+      if (!confirmed.ok) return;
+
+      const movedSlot = {
+        start: slot.start.add({ hours: 24 }),
+        end: slot.end.add({ hours: 24 }),
+      };
+      const forwarded = await createHold(eventType.id, [host2.id], movedSlot, ttl, db);
+      expect(forwarded.ok).toBe(true);
+      if (!forwarded.ok) return;
+      const moved = await confirmReschedule(
+        confirmed.value.bookingId,
+        forwarded.value.map((hold) => hold.id),
+        db,
+      );
+      expect(moved.ok).toBe(true);
+      if (!moved.ok) return;
+      expect(moved.value.hostUserIds).toEqual([host2.id]);
+
+      const events = await db
+        .select({ kind: schema.bookingEvents.kind })
+        .from(schema.bookingEvents)
+        .where(eq(schema.bookingEvents.bookingId, confirmed.value.bookingId));
+      expect(events.map((event) => event.kind)).toEqual([
+        "created",
+        "rescheduled",
+        "reassigned",
+      ]);
     } finally {
       await pool.end();
     }

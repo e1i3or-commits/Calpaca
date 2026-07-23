@@ -13,8 +13,16 @@ import {
   type HostSchedule,
   type HostBusy,
 } from "../../db/availability-repo";
-import { expandRules } from "../../core/availability/rules";
-import { subtract, type Interval } from "../../core/availability/intervals";
+import {
+  effectiveOpenIntervals,
+  forwardingIntervals,
+} from "../../core/availability/overrides";
+import {
+  intersectMany,
+  normalize,
+  subtract,
+  type Interval,
+} from "../../core/availability/intervals";
 import { generateSlots, type SlotConfig } from "../../core/availability/slots";
 import { scoreSlots } from "../../core/availability/scoring";
 import { groupAvailability, type GroupHost } from "../../core/availability/group";
@@ -93,6 +101,43 @@ function slotKey(slot: Interval): string {
   return `${slot.start.toString()}|${slot.end.toString()}`;
 }
 
+function freeForHost(
+  userId: string,
+  schedules: ReadonlyMap<string, HostSchedule>,
+  busy: ReadonlyMap<string, readonly Interval[]>,
+  window: Interval,
+  visited = new Set<string>(),
+): Interval[] {
+  if (visited.has(userId)) return [];
+  const schedule = schedules.get(userId);
+  if (!schedule) return [];
+  const nextVisited = new Set(visited).add(userId);
+  const own = subtract(
+    effectiveOpenIntervals(
+      schedule.rules,
+      schedule.overrides ?? [],
+      schedule.timezone,
+      window,
+    ),
+    busy.get(userId) ?? [],
+  );
+  const forwarded = [...new Set(
+    (schedule.overrides ?? []).flatMap((override) =>
+      override.forwardToUserId ? [override.forwardToUserId] : [],
+    ),
+  )].flatMap((targetUserId) => {
+    const windows = forwardingIntervals(
+      schedule.overrides ?? [],
+      schedule.timezone,
+      targetUserId,
+      window,
+    );
+    const targetFree = freeForHost(targetUserId, schedules, busy, window, nextVisited);
+    return intersectMany([windows, targetFree]);
+  });
+  return normalize([...own, ...forwarded]);
+}
+
 /**
  * Availability with no hosts[] filter: union of every host configured on the
  * event type (mirrors src/core/assignment/round-robin.ts teamAvailability),
@@ -114,10 +159,9 @@ function soloAvailability(
     const schedule = schedulesByUser.get(host.userId);
     if (!schedule) continue;
 
-    const open = expandRules(schedule.rules, schedule.timezone, window);
+    const open = freeForHost(host.userId, schedulesByUser, busyByUser, window);
     const busy = busyByUser.get(host.userId) ?? [];
-    const free = subtract(open, busy);
-    const candidates = generateSlots(free, { ...config, timezone: schedule.timezone }, now);
+    const candidates = generateSlots(open, { ...config, timezone: schedule.timezone }, now);
     const scored = scoreSlots(candidates, { busy, open, prefs: {}, timezone: schedule.timezone });
 
     for (const { slot, score } of scored) {
@@ -252,10 +296,11 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       : allHosts;
 
     const userIds = selectedHosts.map((h) => h.userId);
-    const [scheduleRows, busyRows] = await Promise.all([
-      deps.getSchedulesForUsers(userIds),
-      deps.getBusyForUsers(userIds, window),
-    ]);
+    const scheduleRows = await deps.getSchedulesForUsers(userIds);
+    const busyRows = await deps.getBusyForUsers(
+      scheduleRows.map((schedule) => schedule.userId),
+      window,
+    );
     const schedulesByUser = new Map(scheduleRows.map((s) => [s.userId, s]));
     const busyByUser = new Map(busyRows.map((b) => [b.userId, b.intervals]));
 
@@ -284,8 +329,13 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
         return [
           {
             userId: host.userId,
-            open: expandRules(schedule.rules, schedule.timezone, window),
-            busy: busyByUser.get(host.userId) ?? [],
+            open: freeForHost(
+              host.userId,
+              schedulesByUser,
+              busyByUser,
+              window,
+            ),
+            busy: [],
             role: groupHostRole(host.role),
             prefs: {},
             timezone: schedule.timezone,

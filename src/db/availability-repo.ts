@@ -6,6 +6,7 @@ import * as schema from "./schema";
 import { bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, schedules, teams, users } from "./schema";
 import type { Interval } from "../core/availability/intervals";
 import type { WeeklyRule } from "../core/availability/rules";
+import type { ScheduleOverride } from "../core/availability/overrides";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -88,6 +89,7 @@ export interface HostSchedule {
   readonly userId: string;
   readonly timezone: string;
   readonly rules: readonly WeeklyRule[];
+  readonly overrides?: readonly ScheduleOverride[];
 }
 
 export interface HostBusy {
@@ -206,10 +208,43 @@ export async function getSchedulesForUsers(
 ): Promise<HostSchedule[]> {
   if (userIds.length === 0) return [];
 
-  return executor
-    .select({ userId: schedules.userId, timezone: schedules.timezone, rules: schedules.rules })
+  const found = await executor
+    .select({
+      userId: schedules.userId,
+      timezone: schedules.timezone,
+      rules: schedules.rules,
+      overrides: schedules.overrides,
+    })
     .from(schedules)
     .where(inArray(schedules.userId, [...userIds]));
+  const byUser = new Map(found.map((row) => [row.userId, row]));
+  let pending = [...new Set(found.flatMap((row) =>
+    row.overrides.flatMap((override) =>
+      override.forwardToUserId ? [override.forwardToUserId] : [],
+    ),
+  ))].filter((id) => !byUser.has(id));
+
+  // Resolve forwarding chains in bounded batches. The visited map makes
+  // cycles harmless; the depth cap protects against malformed legacy data.
+  for (let depth = 0; pending.length > 0 && depth < 20; depth += 1) {
+    const rows = await executor
+      .select({
+        userId: schedules.userId,
+        timezone: schedules.timezone,
+        rules: schedules.rules,
+        overrides: schedules.overrides,
+      })
+      .from(schedules)
+      .where(inArray(schedules.userId, pending));
+    for (const row of rows) byUser.set(row.userId, row);
+    pending = [...new Set(rows.flatMap((row) =>
+      row.overrides.flatMap((override) =>
+        override.forwardToUserId ? [override.forwardToUserId] : [],
+      ),
+    ))].filter((id) => !byUser.has(id));
+  }
+
+  return [...byUser.values()];
 }
 
 /**
@@ -240,6 +275,7 @@ export async function getBusyForUsers(
       .where(
         and(
           inArray(calendarConnections.userId, [...userIds]),
+          eq(calendarConnections.conflictEnabled, true),
           lt(calendarBusyCache.startsAt, toDate(window.end)),
           gte(calendarBusyCache.endsAt, toDate(window.start)),
         ),

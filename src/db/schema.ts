@@ -25,6 +25,12 @@ export const userStatus = pgEnum("user_status", ["active", "inactive"]);
 export const invitationStatus = pgEnum("invitation_status", [
   "pending", "accepted", "revoked",
 ]);
+export const workspacePlan = pgEnum("workspace_plan", [
+  "free", "pro", "business", "self_hosted",
+]);
+export const domainStatus = pgEnum("domain_status", [
+  "pending", "verified",
+]);
 
 // Doubles as BetterAuth's user model (drizzleAdapter usePlural maps user ->
 // users). BetterAuth requires emailVerified/image/updatedAt; timezone and
@@ -48,6 +54,39 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const workspaces = pgTable("workspaces", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  plan: workspacePlan("plan").notNull().default("free"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const workspaceMembers = pgTable("workspace_members", {
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  role: appRole("role").notNull().default("member"),
+  status: userStatus("status").notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.workspaceId, t.userId] }),
+  index("workspace_member_user_idx").on(t.userId),
+]);
+
+export const workspaceDomains = pgTable("workspace_domains", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  hostname: text("hostname").notNull().unique(),
+  status: domainStatus("status").notNull().default("pending"),
+  verificationToken: text("verification_token").notNull().unique(),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("workspace_domain_workspace_idx").on(t.workspaceId)]);
+
 export const userInvitations = pgTable("user_invitations", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull(),
@@ -55,6 +94,7 @@ export const userInvitations = pgTable("user_invitations", {
   status: invitationStatus("status").notNull().default("pending"),
   token: text("token").notNull().unique(),
   invitedByUserId: uuid("invited_by_user_id").notNull().references(() => users.id),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -75,6 +115,17 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("session_user_idx").on(t.userId)]);
+
+export const apiTokens = pgTable("api_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  prefix: text("prefix").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("api_token_user_idx").on(t.userId)]);
 
 // accounts is the OAuth token store: Google access/refresh tokens live here
 // and nowhere else. The sync worker reads them via auth.api.getAccessToken,
@@ -106,9 +157,10 @@ export const verifications = pgTable("verifications", {
 
 export const teams = pgTable("teams", {
   id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-});
+  slug: text("slug").notNull(),
+}, (t) => [uniqueIndex("team_workspace_slug_uq").on(t.workspaceId, t.slug)]);
 
 export const teamMembers = pgTable("team_members", {
   teamId: uuid("team_id").notNull().references(() => teams.id),
@@ -121,6 +173,8 @@ export const calendarConnections = pgTable("calendar_connections", {
   userId: uuid("user_id").notNull().references(() => users.id),
   provider: text("provider").notNull().default("google"),
   externalCalendarId: text("external_calendar_id").notNull(),
+  conflictEnabled: boolean("conflict_enabled").notNull().default(true),
+  isWriteDestination: boolean("is_write_destination").notNull().default(false),
   // watch channel lifecycle: channelToken authenticates inbound webhook
   // pushes (x-goog-channel-token), channelResourceId is required to stop
   // a channel. Both null until a watch is established.
@@ -135,7 +189,11 @@ export const calendarConnections = pgTable("calendar_connections", {
   // window, so the sweep re-baselines with a fresh full sync when this ages
   fullSyncedAt: timestamp("full_synced_at", { withTimezone: true }),
   syncHealthy: boolean("sync_healthy").notNull().default(true),
-}, (t) => [index("cal_conn_user_idx").on(t.userId)]);
+}, (t) => [
+  index("cal_conn_user_idx").on(t.userId),
+  uniqueIndex("calendar_write_destination_uq").on(t.userId)
+    .where(sql`is_write_destination = true`),
+]);
 
 export const calendarBusyCache = pgTable("calendar_busy_cache", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -160,6 +218,14 @@ export const schedules = pgTable("schedules", {
   // [{ dow: 1, start: "09:00", end: "17:00" }, ...]
   rules: jsonb("rules").$type<{ dow: number; start: string; end: string }[]>()
     .notNull(),
+  overrides: jsonb("overrides").$type<{
+    startDate: string;
+    endDate: string;
+    kind: "available" | "unavailable";
+    start?: string;
+    end?: string;
+    forwardToUserId?: string | null;
+  }[]>().notNull().default([]),
 });
 
 export const eventTypes = pgTable("event_types", {
