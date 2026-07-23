@@ -74,6 +74,36 @@ export type MeetingPoll = {
   }[];
 };
 
+export type SignupSheet = {
+  id: string;
+  publicId: string;
+  title: string;
+  description: string | null;
+  timezone: string;
+  status: string;
+  maxRegistrationsPerPerson: number;
+  questions: { id: string; label: string; required: boolean }[];
+  sessions: {
+    id: string;
+    title: string;
+    description: string | null;
+    start: string;
+    end: string;
+    capacity: number;
+    registrationCount: number;
+    seatsRemaining: number;
+    registrations?: {
+      id: string;
+      name: string;
+      email: string;
+      answers: Record<string, string>;
+      status: string;
+      confirmationSentAt: string | null;
+      confirmationError: string | null;
+    }[];
+  }[];
+};
+
 export type EventTypeProfile = {
   teamName: string | null;
   hosts: { name: string; title?: string | null; image: string | null }[];
@@ -305,6 +335,56 @@ export function resendPollInvitation(
   return request(`/api/me/polls/${pollId}/invites/${inviteId}/resend`, {
     method: "POST",
     body: JSON.stringify({}),
+  });
+}
+
+export function listSignupSheets(): Promise<{ sheets: SignupSheet[] }> {
+  return request("/api/me/signup-sheets");
+}
+
+export function createSignupSheet(input: {
+  title: string;
+  description?: string;
+  timezone: string;
+  maxRegistrationsPerPerson: number;
+  questions: { id: string; label: string; required: boolean }[];
+  sessions: {
+    title: string;
+    description?: string;
+    start: string;
+    end: string;
+    capacity: number;
+  }[];
+}): Promise<SignupSheet> {
+  return request("/api/me/signup-sheets", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getSignupSheet(publicId: string): Promise<SignupSheet> {
+  return request(`/signup-sheets/${encodeURIComponent(publicId)}`);
+}
+
+export function registerForSignupSheet(
+  publicId: string,
+  input: {
+    sessionIds: string[];
+    name: string;
+    email: string;
+    answers: Record<string, string>;
+  },
+): Promise<{ registrationIds: string[]; cancelToken: string }> {
+  return request(`/signup-sheets/${encodeURIComponent(publicId)}/registrations`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function cancelSignupRegistration(token: string): Promise<{ status: "cancelled" }> {
+  return request("/signup-registrations/cancel", {
+    method: "POST",
+    body: JSON.stringify({ token }),
   });
 }
 

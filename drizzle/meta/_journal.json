@@ -246,6 +246,13 @@
       "when": 1784835855844,
       "tag": "0034_whole_sinister_six",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784837505172,
+      "tag": "0035_bizarre_phalanx",
+      "breakpoints": true
     }
   ]
 }

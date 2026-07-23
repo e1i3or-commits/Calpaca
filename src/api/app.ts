@@ -16,6 +16,7 @@ import { workspaceRoutes } from "./routes/workspace";
 import { inviteeCalendarRoutes } from "./routes/invitee-calendar";
 import { requestHostname } from "./public-workspace";
 import { pollRoutes } from "./routes/polls";
+import { signupSheetRoutes } from "./routes/signup-sheets";
 import { CALPACA_VERSION } from "../version";
 
 export const app = new Hono();
@@ -59,3 +60,4 @@ app.route("/", userManagementRoutes);
 app.route("/", workspaceRoutes);
 app.route("/", inviteeCalendarRoutes);
 app.route("/", pollRoutes);
+app.route("/", signupSheetRoutes);

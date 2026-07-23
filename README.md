@@ -29,6 +29,8 @@ release notes live in [CHANGELOG.md](CHANGELOG.md), and releases are tagged
   attendees, and quorum fallback when no time works for everyone.
 - **Shared sessions:** capacity event types show remaining seats and enforce
   the final seat transactionally.
+- **Sign-up sheets:** publish fixed sessions with seat limits, registration
+  questions, and calendar confirmations.
 - **Date-aware availability:** recurring hours, alternate-date hours, time-off
   ranges, and teammate forwarding.
 - **Agent-ready:** a stdio MCP server exposes availability, holds, booking,

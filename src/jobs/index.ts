@@ -24,6 +24,7 @@ import {
 import { sendSuggestionEmail } from "./suggestion-email";
 import { sendPollFinalization } from "./poll-finalization-email";
 import { sendPollInviteOrReminder } from "./poll-reminder-email";
+import { sendSignupConfirmation } from "./signup-confirmation-email";
 import {
   getConnection,
   listConnectionsNeedingChannel,
@@ -62,6 +63,7 @@ const SUGGESTION_EMAIL_QUEUE = "suggestion-email";
 const POLL_FINALIZATION_EMAIL_QUEUE = "poll-finalization-email";
 const POLL_INVITE_EMAIL_QUEUE = "poll-invite-email";
 const POLL_REMINDER_SWEEP_QUEUE = "poll-reminder-sweep";
+const SIGNUP_CONFIRMATION_QUEUE = "signup-confirmation-email";
 const WEBHOOK_FANOUT_QUEUE = "webhook-fanout";
 const WEBHOOK_DELIVERY_QUEUE = "webhook-delivery";
 const REMINDER_SWEEP_QUEUE = "reminder-sweep";
@@ -187,6 +189,20 @@ export async function enqueuePollInvitations(pollId: string): Promise<void> {
   }
 }
 
+export async function enqueueSignupConfirmation(registrationIds: string[]): Promise<void> {
+  if (registrationIds.length === 0) return;
+  try {
+    await getBoss().send(SIGNUP_CONFIRMATION_QUEUE, { registrationIds }, {
+      retryLimit: 3,
+      retryDelay: 60,
+      retryBackoff: true,
+      singletonKey: `signup-confirmation:${registrationIds.join(":")}`,
+    });
+  } catch (error) {
+    console.error("[jobs] enqueue signup confirmation failed:", error);
+  }
+}
+
 async function runSync(connectionId: string, forceFull: boolean): Promise<void> {
   const conn = await getConnection(connectionId);
   if (!conn) return; // connection removed since enqueue
@@ -252,6 +268,7 @@ export async function startJobs(): Promise<void> {
   await b.createQueue(SUGGESTION_EMAIL_QUEUE);
   await b.createQueue(POLL_FINALIZATION_EMAIL_QUEUE);
   await b.createQueue(POLL_INVITE_EMAIL_QUEUE);
+  await b.createQueue(SIGNUP_CONFIRMATION_QUEUE);
 
   await b.work<{ connectionId: string; forceFull?: boolean }>(SYNC_QUEUE, async ([job]) => {
     if (job) await runSync(job.data.connectionId, job.data.forceFull ?? false);
@@ -277,6 +294,9 @@ export async function startJobs(): Promise<void> {
       if (job) await sendPollInviteOrReminder(job.data.inviteId, job.data.kind);
     },
   );
+  await b.work<{ registrationIds: string[] }>(SIGNUP_CONFIRMATION_QUEUE, async ([job]) => {
+    if (job) await sendSignupConfirmation(job.data.registrationIds);
+  });
 
   await b.createQueue(WEBHOOK_FANOUT_QUEUE);
   await b.createQueue(WEBHOOK_DELIVERY_QUEUE);

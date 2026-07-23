@@ -471,3 +471,55 @@ export const meetingPollInvites = pgTable("meeting_poll_invites", {
   uniqueIndex("meeting_poll_invite_email_uq").on(t.pollId, t.email),
   index("meeting_poll_invite_poll_idx").on(t.pollId),
 ]);
+
+export const signupSheets = pgTable("signup_sheets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: uuid("owner_user_id").notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  publicId: text("public_id").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description"),
+  timezone: text("timezone").notNull(),
+  status: text("status").notNull().default("open"),
+  maxRegistrationsPerPerson: integer("max_registrations_per_person").notNull().default(1),
+  questions: jsonb("questions").$type<{
+    id: string;
+    label: string;
+    required: boolean;
+  }[]>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("signup_sheet_workspace_idx").on(t.workspaceId, t.createdAt)]);
+
+export const signupSessions = pgTable("signup_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sheetId: uuid("sheet_id").notNull()
+    .references(() => signupSheets.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+  capacity: integer("capacity").notNull(),
+}, (t) => [index("signup_session_sheet_idx").on(t.sheetId, t.startsAt)]);
+
+export const signupRegistrations = pgTable("signup_registrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sheetId: uuid("sheet_id").notNull()
+    .references(() => signupSheets.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull()
+    .references(() => signupSessions.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  answers: jsonb("answers").$type<Record<string, string>>().notNull().default({}),
+  cancelToken: text("cancel_token").notNull(),
+  status: text("status").notNull().default("active"),
+  confirmationSentAt: timestamp("confirmation_sent_at", { withTimezone: true }),
+  confirmationError: text("confirmation_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("signup_registration_session_email_uq").on(t.sessionId, t.email)
+    .where(sql`status = 'active'`),
+  index("signup_registration_sheet_idx").on(t.sheetId, t.createdAt),
+  index("signup_registration_cancel_idx").on(t.cancelToken),
+]);

@@ -5,6 +5,14 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-23
+
+### Added
+
+- Sign-up sheets with fixed named sessions, per-session capacity, custom
+  questions, per-person registration limits, public enrollment and
+  cancellation, organizer rosters, and calendar-invitation confirmations.
+
 ## [0.8.0] - 2026-07-23
 
 ### Added

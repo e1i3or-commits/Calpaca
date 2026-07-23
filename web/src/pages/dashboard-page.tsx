@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   Calendar,
   CalendarDays,
+  CalendarCheck,
   CalendarRange,
   ChartNoAxesCombined,
   CheckCircle2,
@@ -34,6 +35,7 @@ import {
   createApiToken,
   createRoutingForm,
   createMeetingPoll,
+  createSignupSheet,
   createSchedule,
   createTeam,
   deleteEventType,
@@ -54,6 +56,7 @@ import {
   listPresentationOptions,
   listRoutingForms,
   listMeetingPolls,
+  listSignupSheets,
   listSchedules,
   listTeamMembers,
   listTeams,
@@ -105,6 +108,7 @@ import {
   type WorkspaceContext,
   type WorkspaceDomain,
   type MeetingPoll,
+  type SignupSheet,
 } from "@/lib/api";
 import { themeOptions } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
@@ -121,6 +125,7 @@ const TABS = [
   { key: "event-types", label: "Scheduling", icon: CalendarDays, group: "primary" },
   { key: "bookings", label: "Bookings", icon: CalendarRange, group: "primary" },
   { key: "polls", label: "Polls", icon: ListChecks, group: "primary" },
+  { key: "signup-sheets", label: "Sign-up sheets", icon: CalendarCheck, group: "primary" },
   { key: "analytics", label: "Analytics", icon: ChartNoAxesCombined, group: "primary" },
   { key: "profile", label: "Profile & API", icon: UserRound, group: "setup" },
   { key: "schedules", label: "Availability", icon: Clock3, group: "setup" },
@@ -222,6 +227,7 @@ export function DashboardPage() {
               {tab === "event-types" && <EventTypesTab users={users} />}
               {tab === "bookings" && <BookingsTab users={users} />}
               {tab === "polls" && <PollsTab />}
+              {tab === "signup-sheets" && <SignupSheetsTab />}
               {tab === "analytics" && <AnalyticsTab />}
               {tab === "profile" && <ProfileTab />}
               {tab === "schedules" && <SchedulesTab />}
@@ -233,26 +239,27 @@ export function DashboardPage() {
         </div>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border/70 bg-card/95 px-2 pb-[max(.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden" aria-label="Primary">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-border/70 bg-card/95 px-1 pb-[max(.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden" aria-label="Primary">
         {[
           TABS[0],
           TABS[1],
           TABS[2],
           TABS[3],
           TABS[4],
+          TABS[5],
         ].map((item) => {
           const active = item.key === tab;
           return (
             <button
               key={item.key}
               type="button"
-              className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-medium ${
+              className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-medium ${
                 active ? "text-primary" : "text-muted-foreground"
               }`}
               onClick={() => setTab(item.key)}
             >
               <item.icon className="h-5 w-5" />
-              {item.label}
+              {item.key === "signup-sheets" ? "Sign-ups" : item.label}
             </button>
           );
         })}
@@ -298,6 +305,7 @@ const PAGE_COPY: Record<TabKey, { title: string; description: string }> = {
   "event-types": { title: "Scheduling", description: "Booking links and the people behind them." },
   bookings: { title: "Bookings", description: "Upcoming conversations and recent history." },
   polls: { title: "Meeting polls", description: "Find the time that works best for a group." },
+  "signup-sheets": { title: "Sign-up sheets", description: "Let people enroll in fixed sessions." },
   analytics: { title: "Analytics", description: "A clear view of volume, outcomes, and team balance." },
   profile: { title: "Profile & API", description: "Your public identity and personal integration tokens." },
   schedules: { title: "Availability", description: "The recurring hours your booking links can offer." },
@@ -922,6 +930,140 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
       <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{title}</h3>
       {children}
     </section>
+  );
+}
+
+function SignupSheetsTab() {
+  const [sheets, setSheets] = useState<SignupSheet[] | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [maxPerPerson, setMaxPerPerson] = useState(1);
+  const [sessions, setSessions] = useState([
+    { title: "", description: "", start: "", end: "", capacity: 10 },
+  ]);
+  const [questions, setQuestions] = useState([{ label: "", required: false }]);
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(() => {
+    void listSignupSheets().then((result) => setSheets(result.sheets))
+      .catch((cause: unknown) => setError(errorText(cause)));
+  }, []);
+  useEffect(() => reload(), [reload]);
+
+  const create = async () => {
+    setError(null);
+    try {
+      await createSignupSheet({
+        title,
+        description: description.trim() || undefined,
+        timezone: viewerTimezone(),
+        maxRegistrationsPerPerson: maxPerPerson,
+        questions: questions.filter((question) => question.label.trim()).map((question, index) => ({
+          id: `question-${index + 1}`,
+          label: question.label.trim(),
+          required: question.required,
+        })),
+        sessions: sessions.map((session) => ({
+          title: session.title,
+          description: session.description.trim() || undefined,
+          start: new Date(session.start).toISOString(),
+          end: new Date(session.end).toISOString(),
+          capacity: session.capacity,
+        })),
+      });
+      setCreating(false);
+      setTitle("");
+      setDescription("");
+      setMaxPerPerson(1);
+      setSessions([{ title: "", description: "", start: "", end: "", capacity: 10 }]);
+      setQuestions([{ label: "", required: false }]);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex justify-end">
+        <Button onClick={() => setCreating((current) => !current)}>
+          <Plus className="h-4 w-4" /> New sign-up sheet
+        </Button>
+      </div>
+      {error && <p className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
+      {creating && (
+        <Card>
+          <CardHeader><CardTitle>Create a sign-up sheet</CardTitle><CardDescription>Add fixed sessions people can enroll in.</CardDescription></CardHeader>
+          <CardContent className="space-y-4">
+            <div><Label htmlFor="sheet-title">Title</Label><Input id="sheet-title" className="mt-1" value={title} onChange={(event) => setTitle(event.target.value)} /></div>
+            <div><Label htmlFor="sheet-description">Description</Label><Textarea id="sheet-description" className="mt-1" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
+            <div className="max-w-xs"><Label htmlFor="sheet-limit">Maximum sessions per person</Label><Input id="sheet-limit" className="mt-1" type="number" min={1} max={50} value={maxPerPerson} onChange={(event) => setMaxPerPerson(Number(event.target.value))} /></div>
+            <div className="space-y-3">
+              <Label>Sessions</Label>
+              {sessions.map((session, index) => (
+                <div key={index} className="grid gap-3 rounded-xl border border-border p-3 sm:grid-cols-2">
+                  <Input placeholder="Session name" value={session.title} onChange={(event) => setSessions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} />
+                  <Input type="number" min={1} max={500} aria-label="Capacity" value={session.capacity} onChange={(event) => setSessions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, capacity: Number(event.target.value) } : item))} />
+                  <Input className="sm:col-span-2" placeholder="Session description (optional)" value={session.description} onChange={(event) => setSessions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} />
+                  <Input type="datetime-local" step={900} aria-label="Starts" value={session.start} onChange={(event) => setSessions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, start: event.target.value } : item))} />
+                  <div className="flex gap-2">
+                    <Input type="datetime-local" step={900} aria-label="Ends" value={session.end} onChange={(event) => setSessions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, end: event.target.value } : item))} />
+                    <Button variant="ghost" disabled={sessions.length === 1} onClick={() => setSessions((current) => current.filter((_, itemIndex) => itemIndex !== index))}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              ))}
+              <Button variant="outline" onClick={() => setSessions((current) => [...current, { title: "", description: "", start: "", end: "", capacity: 10 }])}><Plus className="h-4 w-4" /> Add session</Button>
+            </div>
+            <div className="space-y-3">
+              <Label>Registration questions</Label>
+              {questions.map((question, index) => (
+                <div key={index} className="flex gap-2">
+                  <Input placeholder="Question (optional)" value={question.label} onChange={(event) => setQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} />
+                  <label className="flex items-center gap-2 whitespace-nowrap text-sm"><input type="checkbox" checked={question.required} onChange={(event) => setQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, required: event.target.checked } : item))} /> Required</label>
+                </div>
+              ))}
+              <Button variant="outline" onClick={() => setQuestions((current) => [...current, { label: "", required: false }])}><Plus className="h-4 w-4" /> Add question</Button>
+            </div>
+            <Button disabled={!title.trim() || sessions.some((session) => !session.title.trim() || !session.start || !session.end)} onClick={() => void create()}>Create sign-up sheet</Button>
+          </CardContent>
+        </Card>
+      )}
+      {sheets === null && <DashboardSkeleton />}
+      {sheets?.map((sheet) => (
+        <Card key={sheet.id}>
+          <CardHeader>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div><CardTitle>{sheet.title}</CardTitle><CardDescription>{sheet.sessions.length} session{sheet.sessions.length === 1 ? "" : "s"}</CardDescription></div>
+              <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/signup/${sheet.publicId}`)}><Copy className="h-4 w-4" /> Copy link</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {sheet.sessions.map((session) => (
+              <div key={session.id} className="rounded-xl border border-border p-3">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <div><p className="font-medium">{session.title}</p><p className="text-sm text-muted-foreground">{formatBookingDate(session.start)} · {formatBookingTime(session.start)}</p></div>
+                  <span className="text-sm">{session.registrationCount}/{session.capacity} registered</span>
+                </div>
+                {session.registrations && session.registrations.length > 0 && (
+                  <div className="mt-3 border-t border-border pt-2 text-sm">
+                    {session.registrations.map((registration) => (
+                      <div key={registration.id} className="py-1">
+                        <p>{registration.name} <span className="text-muted-foreground">{registration.email}</span></p>
+                        {Object.entries(registration.answers).map(([questionId, answer]) => (
+                          <p key={questionId} className="text-xs text-muted-foreground">
+                            {sheet.questions.find((question) => question.id === questionId)?.label ?? questionId}: {answer}
+                          </p>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }
 

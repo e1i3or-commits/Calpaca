@@ -15,6 +15,7 @@ import { ReschedulePage } from "@/pages/reschedule-page";
 import { RoutingFormPage } from "@/pages/routing-form-page";
 import { SignInPage } from "@/pages/sign-in-page";
 import { PollPage } from "@/pages/poll-page";
+import { SignupSheetPage } from "@/pages/signup-sheet-page";
 import type { RoutingAnswers } from "@/lib/api";
 import { BrandMark } from "@/components/brand-mark";
 import "./styles.css";
@@ -210,6 +211,22 @@ const pollRoute = createRoute({
   },
 });
 
+const signupSheetRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/signup/$publicId",
+  component: function SignupSheetRoute() {
+    return <SignupSheetPage publicId={signupSheetRoute.useParams().publicId} />;
+  },
+});
+
+const signupCancelRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/signup/cancel/$token",
+  component: function SignupCancelRoute() {
+    return <SignupSheetPage cancelToken={signupCancelRoute.useParams().token} />;
+  },
+});
+
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/dashboard",
@@ -227,6 +244,8 @@ const router = createRouter({
     cancelRoute,
     signInRoute,
     pollRoute,
+    signupSheetRoute,
+    signupCancelRoute,
     dashboardRoute,
   ]),
 });
