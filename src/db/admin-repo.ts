@@ -121,6 +121,18 @@ export async function isTeamMember(teamId: string, userId: string, executor: Db 
   return row !== undefined;
 }
 
+export async function isTeamAdmin(teamId: string, userId: string, executor: Db = getDb()): Promise<boolean> {
+  const [row] = await executor
+    .select({ userId: teamMembers.userId })
+    .from(teamMembers)
+    .where(and(
+      eq(teamMembers.teamId, teamId),
+      eq(teamMembers.userId, userId),
+      eq(teamMembers.isAdmin, true),
+    ));
+  return row !== undefined;
+}
+
 /** Creator becomes the first (admin) member. */
 export async function createTeam(
   input: { name: string; slug: string; creatorUserId: string },
@@ -155,12 +167,54 @@ export async function removeTeamMember(
   teamId: string,
   userId: string,
   executor: Db = getDb(),
-): Promise<boolean> {
-  const rows = await executor
-    .delete(teamMembers)
-    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
-    .returning({ userId: teamMembers.userId });
-  return rows.length > 0;
+): Promise<"removed" | "not_found" | "last_admin"> {
+  return executor.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ isAdmin: teamMembers.isAdmin })
+      .from(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
+      .limit(1);
+    if (!target) return "not_found";
+    if (target.isAdmin) {
+      const admins = await tx
+        .select({ userId: teamMembers.userId })
+        .from(teamMembers)
+        .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isAdmin, true)));
+      if (admins.length === 1) return "last_admin";
+    }
+    await tx
+      .delete(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+    return "removed";
+  });
+}
+
+export async function updateTeamMemberAdmin(
+  teamId: string,
+  userId: string,
+  isAdmin: boolean,
+  executor: Db = getDb(),
+): Promise<"updated" | "not_found" | "last_admin"> {
+  return executor.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ isAdmin: teamMembers.isAdmin })
+      .from(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
+      .limit(1);
+    if (!target) return "not_found";
+    if (target.isAdmin && !isAdmin) {
+      const admins = await tx
+        .select({ userId: teamMembers.userId })
+        .from(teamMembers)
+        .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isAdmin, true)));
+      if (admins.length === 1) return "last_admin";
+    }
+    await tx
+      .update(teamMembers)
+      .set({ isAdmin })
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+    return "updated";
+  });
 }
 
 // ---- event types ----

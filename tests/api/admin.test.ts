@@ -66,11 +66,13 @@ function makeDeps(overrides: Partial<AdminDeps> = {}): AdminDeps {
     listTeamsForUser: async () => [team],
     createTeam: async (input) => (input.slug === "sales" ? "slug_taken" : { ...team, ...input }),
     isTeamMember: async (teamId) => teamId === TEAM_ID,
+    isTeamAdmin: async (teamId) => teamId === TEAM_ID,
     listTeamMembers: async () => [
       { userId: U1, name: "Host", email: "host@example.test", isAdmin: true },
     ],
     addTeamMember: async () => undefined,
-    removeTeamMember: async (_teamId, userId) => userId === U1,
+    removeTeamMember: async (_teamId, userId) => userId === U1 ? "removed" : "not_found",
+    updateTeamMemberAdmin: async (_teamId, userId) => userId === U1 ? "updated" : "not_found",
     listEventTypesForUser: async () => [eventType],
     getEventTypeForAdmin: async (id) => (id === ET_ID ? eventType : null),
     createEventType: async (_owner, input) =>
@@ -182,6 +184,23 @@ describe("admin routes", () => {
       method: "DELETE",
     });
     expect(removed.status).toBe(200);
+  });
+
+  test("team admin can change roles; the final admin conflict is explicit", async () => {
+    const updated = await post(
+      createAdminRoutes(makeDeps()),
+      `/api/me/teams/${TEAM_ID}/members/${U1}`,
+      { isAdmin: false },
+      "PATCH",
+    );
+    expect(updated.status).toBe(200);
+
+    const guarded = await createAdminRoutes(makeDeps({
+      removeTeamMember: async () => "last_admin",
+      updateTeamMemberAdmin: async () => "last_admin",
+    })).request(`/api/me/teams/${TEAM_ID}/members/${U1}`, { method: "DELETE" });
+    expect(guarded.status).toBe(409);
+    expect(await guarded.json()).toEqual({ error: "last_team_admin" });
   });
 
   test("event type create enforces solo=1 host, slug shape, and team membership", async () => {

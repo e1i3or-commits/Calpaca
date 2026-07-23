@@ -13,7 +13,19 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
-  build: { outDir: "../dist/web", emptyOutDir: true },
+  build: {
+    outDir: "../dist/web",
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        app: fileURLToPath(new URL("./index.html", import.meta.url)),
+        embed: fileURLToPath(new URL("./src/embed.ts", import.meta.url)),
+      },
+      output: {
+        entryFileNames: (chunk) => chunk.name === "embed" ? "embed.js" : "assets/[name]-[hash].js",
+      },
+    },
+  },
   server: {
     // public endpoints are mounted at the API root, not /api
     proxy: Object.fromEntries(

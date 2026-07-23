@@ -7,6 +7,7 @@ availability, Google Calendar sync, and an MCP server for AI-assisted booking.
 [Live demo](https://cal.tourscale.com) ·
 [Architecture](docs/ARCHITECTURE.md) ·
 [MCP setup](docs/MCP.md) ·
+[Embeds](docs/EMBEDS.md) ·
 [Self-hosting](docs/SELF-HOSTING.md) ·
 [Roadmap](docs/FEATURE-PARITY-ROADMAP.md)
 
@@ -25,6 +26,16 @@ availability, Google Calendar sync, and an MCP server for AI-assisted booking.
   unavailable.
 - **Auditable bookings:** an append-only event log is the source of truth;
   the bookings table is a projection.
+
+## Screenshots
+
+![Calpaca landing page](docs/screenshots/landing.png)
+
+![TourScale-themed booking page](docs/screenshots/booking.png)
+
+![Organizer embed configuration](docs/screenshots/organizer-embed.png)
+
+<img src="docs/screenshots/booking-mobile.png" alt="Booking page on a mobile viewport" width="360">
 
 ## Stack
 

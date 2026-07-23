@@ -140,7 +140,7 @@ friction before adding new domains.
 | Invitee “Suggest a different time” form | Shipped | Visual and mobile review complete |
 | Analytics dashboard and CSV export over the four views | Shipped | Results match SQL views exactly |
 | Generic deployment example, vendored AGPL text, issue templates | Shipped | Portable Compose setup documented |
-| Embed v1: responsive iframe + small script launcher | M | CSP, resize, and mobile tests |
+| Embed v1: responsive iframe + small script launcher | Shipped | CSP, resize, and mobile checks complete |
 | OpenAPI document generated from the live contracts | M | Contract drift check in verification |
 
 ### P1 — Scheduling fundamentals parity

@@ -6,6 +6,7 @@ import {
   ChartNoAxesCombined,
   CheckCircle2,
   Clock3,
+  Code2,
   Copy,
   Download,
   Home,
@@ -54,6 +55,7 @@ import {
   updateManagedUser,
   updateRoutingForm,
   updateSchedule,
+  updateTeamMemberRole,
   type AdminEventType,
   type AdminBooking,
   type AdminBookingDetail,
@@ -104,6 +106,7 @@ const ERROR_TEXT: Record<string, string> = {
   event_type_in_use: "This event type has bookings; it can't be deleted.",
   invalid_body: "Some fields are invalid — check the form.",
   team_not_found: "Team not found.",
+  last_team_admin: "Promote another member before removing or demoting the final team admin.",
   form_not_found: "Routing form not found.",
 };
 
@@ -892,6 +895,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     { value: "compact", label: "Compact" },
   ]);
   const [editing, setEditing] = useState<{ id: string | null; form: EventTypeInput } | null>(null);
+  const [embed, setEmbed] = useState<{ slug: string; mode: "inline" | "popup" } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -938,6 +942,21 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     const url = `${window.location.origin}/book/${slug}`;
     void navigator.clipboard.writeText(url).then(() => {
       setCopied(slug);
+      setTimeout(() => setCopied(null), 1500);
+    });
+  };
+
+  const embedSnippet = (slug: string, mode: "inline" | "popup") => {
+    const bookingUrl = `${window.location.origin}/book/${slug}`;
+    const loader = `<script async src="${window.location.origin}/embed.js"></script>`;
+    return mode === "inline"
+      ? `<div data-calpaca-inline="${bookingUrl}"></div>\n${loader}`
+      : `<button type="button" data-calpaca-popup="${bookingUrl}">Book a meeting</button>\n${loader}`;
+  };
+
+  const copyEmbed = (slug: string, mode: "inline" | "popup") => {
+    void navigator.clipboard.writeText(embedSnippet(slug, mode)).then(() => {
+      setCopied(`embed-${slug}-${mode}`);
       setTimeout(() => setCopied(null), 1500);
     });
   };
@@ -994,6 +1013,14 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                   <Button
                     variant="ghost"
                     size="sm"
+                    onClick={() => setEmbed(embed?.slug === et.slug ? null : { slug: et.slug, mode: "inline" })}
+                  >
+                    <Code2 className="mr-1 h-3.5 w-3.5" />
+                    Embed
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     aria-label={`Edit ${et.title}`}
                     onClick={() =>
                       setEditing({
@@ -1034,6 +1061,41 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </span>
+                {embed?.slug === et.slug && (
+                  <div className="basis-full rounded-lg border border-border bg-muted/35 p-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium">Add to your website</p>
+                        <p className="text-xs text-muted-foreground">
+                          The booking frame resizes automatically.
+                        </p>
+                      </div>
+                      <div className="flex rounded-md border border-border bg-card p-0.5">
+                        {(["inline", "popup"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            className={`rounded px-2.5 py-1 text-xs font-medium capitalize ${
+                              embed.mode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                            }`}
+                            onClick={() => setEmbed({ slug: et.slug, mode })}
+                          >
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <pre className="overflow-x-auto rounded-md bg-foreground p-3 text-xs leading-5 text-background">
+                      <code>{embedSnippet(et.slug, embed.mode)}</code>
+                    </pre>
+                    <div className="mt-3 flex justify-end">
+                      <Button size="sm" variant="outline" onClick={() => copyEmbed(et.slug, embed.mode)}>
+                        <Copy className="mr-1.5 h-3.5 w-3.5" />
+                        {copied === `embed-${et.slug}-${embed.mode}` ? "Copied" : "Copy code"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -2413,7 +2475,9 @@ function TeamTab({ users }: { users: DirectoryUser[] }) {
         ) : teams.length === 0 ? (
           <p className="text-sm text-muted-foreground">No teams yet.</p>
         ) : (
-          teams.map((team) => <TeamMembers key={team.id} team={team} users={users} />)
+          teams.map((team) => (
+            <TeamMembers key={team.id} team={team} users={users} onMembershipChange={reload} />
+          ))
         )}
       </CardContent>
       </Card>
@@ -2421,7 +2485,15 @@ function TeamTab({ users }: { users: DirectoryUser[] }) {
   );
 }
 
-function TeamMembers({ team, users }: { team: Team; users: DirectoryUser[] }) {
+function TeamMembers({
+  team,
+  users,
+  onMembershipChange,
+}: {
+  team: Team;
+  users: DirectoryUser[];
+  onMembershipChange: () => void;
+}) {
   const [members, setMembers] = useState<TeamMember[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -2450,6 +2522,16 @@ function TeamMembers({ team, users }: { team: Team; users: DirectoryUser[] }) {
     setError(null);
     try {
       await removeTeamMember(team.id, userId);
+      onMembershipChange();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  };
+
+  const setAdmin = async (member: TeamMember, isAdmin: boolean) => {
+    setError(null);
+    try {
+      await updateTeamMemberRole(team.id, member.userId, isAdmin);
       reload();
     } catch (e) {
       setError(errorText(e));
@@ -2472,7 +2554,14 @@ function TeamMembers({ team, users }: { team: Team; users: DirectoryUser[] }) {
                 <span className="flex-1">
                   {m.name}
                   <span className="ml-2 text-xs text-muted-foreground">{m.email}</span>
-                  {m.isAdmin && <span className="ml-2 text-xs text-muted-foreground">admin</span>}
+                  <button
+                    type="button"
+                    className="ml-2 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                    onClick={() => void setAdmin(m, !m.isAdmin)}
+                    aria-label={`${m.isAdmin ? "Remove admin role from" : "Make admin"} ${m.name}`}
+                  >
+                    {m.isAdmin ? "Admin" : "Member"}
+                  </button>
                 </span>
                 <Button
                   variant="ghost"

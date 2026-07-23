@@ -67,6 +67,20 @@ export function BookingPage({
   const [meta, setMeta] = useState<EventTypeMeta | null>(null);
   const [hostRoles, setHostRoles] = useState<Record<string, "required" | "optional">>({});
 
+  useEffect(() => {
+    if (window.parent === window) return;
+    const sendHeight = () => {
+      window.parent.postMessage({
+        type: "calpaca:resize",
+        height: document.documentElement.scrollHeight,
+      }, "*");
+    };
+    const observer = new ResizeObserver(sendHeight);
+    observer.observe(document.documentElement);
+    sendHeight();
+    return () => observer.disconnect();
+  }, []);
+
   // real title + theme; a failure here is cosmetic (the slug stands in and
   // the availability load reports the 404), so it's deliberately swallowed
   useEffect(() => {

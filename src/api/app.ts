@@ -13,6 +13,11 @@ import { userManagementRoutes } from "./routes/user-management";
 
 export const app = new Hono();
 
+app.use("/book/*", async (c, next) => {
+  await next();
+  c.header("Content-Security-Policy", "frame-ancestors *");
+});
+
 app.get("/health", (c) => c.json({ ok: true }));
 
 app.on(["GET", "POST"], "/api/auth/*", (c) => getAuth().handler(c.req.raw));

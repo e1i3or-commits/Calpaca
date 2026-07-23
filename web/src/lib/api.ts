@@ -370,6 +370,17 @@ export function removeTeamMember(teamId: string, userId: string): Promise<{ ok: 
   return request(`/api/me/teams/${teamId}/members/${userId}`, { method: "DELETE" });
 }
 
+export function updateTeamMemberRole(
+  teamId: string,
+  userId: string,
+  isAdmin: boolean,
+): Promise<{ ok: true }> {
+  return request(`/api/me/teams/${teamId}/members/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ isAdmin }),
+  });
+}
+
 export function listEventTypes(): Promise<{ eventTypes: AdminEventType[] }> {
   return request("/api/me/event-types");
 }

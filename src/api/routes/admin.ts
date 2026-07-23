@@ -19,12 +19,14 @@ import {
   deleteSchedule,
   getEventTypeForAdmin,
   isTeamMember,
+  isTeamAdmin,
   listEventTypesForUser,
   listSchedulesForUser,
   listTeamMembers,
   listTeamsForUser,
   listUsers,
   removeTeamMember,
+  updateTeamMemberAdmin,
   updateEventType,
   updateSchedule,
   type AdminEventType,
@@ -74,9 +76,18 @@ export interface AdminDeps {
     creatorUserId: string;
   }) => Promise<TeamRecord | "slug_taken">;
   readonly isTeamMember: (teamId: string, userId: string) => Promise<boolean>;
+  readonly isTeamAdmin: (teamId: string, userId: string) => Promise<boolean>;
   readonly listTeamMembers: (teamId: string) => Promise<TeamMemberRecord[]>;
   readonly addTeamMember: (teamId: string, userId: string) => Promise<void>;
-  readonly removeTeamMember: (teamId: string, userId: string) => Promise<boolean>;
+  readonly removeTeamMember: (
+    teamId: string,
+    userId: string,
+  ) => Promise<"removed" | "not_found" | "last_admin">;
+  readonly updateTeamMemberAdmin: (
+    teamId: string,
+    userId: string,
+    isAdmin: boolean,
+  ) => Promise<"updated" | "not_found" | "last_admin">;
   readonly listEventTypesForUser: (userId: string) => Promise<AdminEventType[]>;
   readonly getEventTypeForAdmin: (id: string, userId: string) => Promise<AdminEventType | null>;
   readonly createEventType: (
@@ -123,9 +134,12 @@ const defaultDeps: AdminDeps = {
   listTeamsForUser: (userId) => listTeamsForUser(userId),
   createTeam: (input) => createTeam(input),
   isTeamMember: (teamId, userId) => isTeamMember(teamId, userId),
+  isTeamAdmin: (teamId, userId) => isTeamAdmin(teamId, userId),
   listTeamMembers: (teamId) => listTeamMembers(teamId),
   addTeamMember: (teamId, userId) => addTeamMember(teamId, userId),
   removeTeamMember: (teamId, userId) => removeTeamMember(teamId, userId),
+  updateTeamMemberAdmin: (teamId, userId, isAdmin) =>
+    updateTeamMemberAdmin(teamId, userId, isAdmin),
   listEventTypesForUser: (userId) => listEventTypesForUser(userId),
   getEventTypeForAdmin: (id, userId) => getEventTypeForAdmin(id, userId),
   createEventType: (ownerUserId, input) => createEventType(ownerUserId, input),
@@ -242,6 +256,7 @@ const teamBodySchema = z.object({
 });
 
 const memberBodySchema = z.object({ userId: z.string().uuid() });
+const memberRoleBodySchema = z.object({ isAdmin: z.boolean() });
 
 export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> {
   const router = new Hono<AuthEnv>();
@@ -383,7 +398,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   router.post("/api/me/teams/:id/members", async (c) => {
     const teamId = c.req.param("id");
-    if (!(await deps.isTeamMember(teamId, c.get("user").id))) {
+    if (!(await deps.isTeamAdmin(teamId, c.get("user").id))) {
       return c.json({ error: "team_not_found" }, 404);
     }
     const parsed = memberBodySchema.safeParse(await c.req.json().catch(() => null));
@@ -394,11 +409,29 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   router.delete("/api/me/teams/:id/members/:userId", async (c) => {
     const teamId = c.req.param("id");
-    if (!(await deps.isTeamMember(teamId, c.get("user").id))) {
+    if (!(await deps.isTeamAdmin(teamId, c.get("user").id))) {
       return c.json({ error: "team_not_found" }, 404);
     }
     const removed = await deps.removeTeamMember(teamId, c.req.param("userId"));
-    if (!removed) return c.json({ error: "member_not_found" }, 404);
+    if (removed === "not_found") return c.json({ error: "member_not_found" }, 404);
+    if (removed === "last_admin") return c.json({ error: "last_team_admin" }, 409);
+    return c.json({ ok: true });
+  });
+
+  router.patch("/api/me/teams/:id/members/:userId", async (c) => {
+    const teamId = c.req.param("id");
+    if (!(await deps.isTeamAdmin(teamId, c.get("user").id))) {
+      return c.json({ error: "team_not_found" }, 404);
+    }
+    const parsed = memberRoleBodySchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+    const result = await deps.updateTeamMemberAdmin(
+      teamId,
+      c.req.param("userId"),
+      parsed.data.isAdmin,
+    );
+    if (result === "not_found") return c.json({ error: "member_not_found" }, 404);
+    if (result === "last_admin") return c.json({ error: "last_team_admin" }, 409);
     return c.json({ ok: true });
   });
 
