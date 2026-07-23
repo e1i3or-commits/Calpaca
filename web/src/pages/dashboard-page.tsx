@@ -1,5 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
-import { Calendar, CheckCircle2, Copy, Pencil, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  Calendar,
+  CalendarDays,
+  CalendarRange,
+  CheckCircle2,
+  Clock3,
+  Copy,
+  Home,
+  LogOut,
+  Menu,
+  Pencil,
+  Plus,
+  Route,
+  Sparkles,
+  Trash2,
+  Users,
+} from "lucide-react";
 import {
   ApiError,
   addTeamMember,
@@ -13,6 +29,9 @@ import {
   deleteSchedule,
   disconnectCalendar,
   getMyCalendars,
+  getAdminBooking,
+  getBookingAssignment,
+  listAdminBookings,
   listEventTypes,
   listRoutingForms,
   listSchedules,
@@ -20,11 +39,15 @@ import {
   listTeams,
   listUsers,
   removeTeamMember,
+  markBookingNoShow,
   signOut,
   updateEventType,
   updateRoutingForm,
   updateSchedule,
   type AdminEventType,
+  type AdminBooking,
+  type AdminBookingDetail,
+  type AssignmentExplanation,
   type CalendarEntry,
   type DirectoryUser,
   type EventTypeInput,
@@ -47,11 +70,13 @@ import { PeoplePicker } from "@/components/people-picker";
 import { TimezoneSelect } from "@/pages/booking-page";
 
 const TABS = [
-  { key: "event-types", label: "Event types" },
-  { key: "schedules", label: "Schedules" },
-  { key: "routing", label: "Routing" },
-  { key: "team", label: "Team" },
-  { key: "calendars", label: "Calendars" },
+  { key: "home", label: "Home", icon: Home, group: "primary" },
+  { key: "event-types", label: "Scheduling", icon: CalendarDays, group: "primary" },
+  { key: "bookings", label: "Bookings", icon: CalendarRange, group: "primary" },
+  { key: "schedules", label: "Availability", icon: Clock3, group: "setup" },
+  { key: "routing", label: "Routing", icon: Route, group: "setup" },
+  { key: "team", label: "People & teams", icon: Users, group: "setup" },
+  { key: "calendars", label: "Calendars", icon: Calendar, group: "setup" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -71,7 +96,7 @@ function errorText(e: unknown): string {
 }
 
 export function DashboardPage() {
-  const [tab, setTab] = useState<TabKey>("event-types");
+  const [tab, setTab] = useState<TabKey>("home");
   const [users, setUsers] = useState<DirectoryUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,49 +113,557 @@ export function DashboardPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            void signOut().then(() => (window.location.href = "/sign-in"));
-          }}
+    <div data-organizer className="min-h-screen bg-background text-foreground">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border/70 bg-card/90 px-3 py-5 backdrop-blur md:flex">
+        <Brand />
+        <nav className="mt-8 flex flex-1 flex-col" aria-label="Organizer">
+          <div className="space-y-1">
+            {TABS.filter((item) => item.group === "primary").map((item) => (
+              <NavButton key={item.key} item={item} active={tab === item.key} onClick={() => setTab(item.key)} />
+            ))}
+          </div>
+          <p className="mb-2 mt-8 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Setup
+          </p>
+          <div className="space-y-1">
+            {TABS.filter((item) => item.group === "setup").map((item) => (
+              <NavButton key={item.key} item={item} active={tab === item.key} onClick={() => setTab(item.key)} />
+            ))}
+          </div>
+          <div className="mt-auto border-t border-border/70 pt-3">
+            <button
+              type="button"
+              className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              onClick={() => void signOut().then(() => (window.location.href = "/sign-in"))}
+            >
+              <LogOut className="h-4 w-4" /> Sign out
+            </button>
+          </div>
+        </nav>
+      </aside>
+
+      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border/70 bg-background/90 px-4 backdrop-blur md:hidden">
+        <Brand compact />
+        <button
+          type="button"
+          className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
+          aria-label="Open setup"
+          onClick={() => setTab("schedules")}
         >
-          Sign out
-        </Button>
+          <Menu className="h-5 w-5" />
+        </button>
+      </header>
+
+      <main className="px-4 pb-24 pt-7 md:ml-60 md:px-8 md:pb-10 md:pt-10">
+        <div className="mx-auto max-w-5xl">
+          <PageHeading tab={tab} onNavigate={setTab} />
+          {error && <p className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
+          {!error && !users && <DashboardSkeleton />}
+          {users && (
+            <>
+              {tab === "home" && <HomeTab onNavigate={setTab} />}
+              {tab === "event-types" && <EventTypesTab users={users} />}
+              {tab === "bookings" && <BookingsTab users={users} />}
+              {tab === "schedules" && <SchedulesTab />}
+              {tab === "routing" && <RoutingTab users={users} />}
+              {tab === "team" && <TeamTab users={users} />}
+              {tab === "calendars" && <CalendarsTab />}
+            </>
+          )}
+        </div>
+      </main>
+
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border/70 bg-card/95 px-2 pb-[max(.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden" aria-label="Primary">
+        {[
+          TABS[0],
+          TABS[1],
+          TABS[2],
+          { ...TABS[3], label: "More" },
+        ].map((item) => {
+          const active = item.key === "schedules"
+            ? TABS.some((candidate) => candidate.group === "setup" && candidate.key === tab)
+            : item.key === tab;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-medium ${
+                active ? "text-primary" : "text-muted-foreground"
+              }`}
+              onClick={() => setTab(item.key)}
+            >
+              <item.icon className="h-5 w-5" />
+              {item.label}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+function Brand({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`flex items-center gap-2.5 ${compact ? "" : "px-2"}`}>
+      <span className="relative grid h-8 w-8 place-items-center rounded-[11px] bg-primary text-primary-foreground">
+        <span className="absolute -top-1 left-1.5 h-2.5 w-1.5 rotate-[-18deg] rounded-full bg-primary" />
+        <span className="absolute -top-1 right-1.5 h-2.5 w-1.5 rotate-[18deg] rounded-full bg-primary" />
+        <Sparkles className="h-4 w-4" />
+      </span>
+      <span className="text-[17px] font-semibold tracking-[-0.02em]">Calpaca</span>
+    </div>
+  );
+}
+
+function NavButton({
+  item,
+  active,
+  onClick,
+}: {
+  item: (typeof TABS)[number];
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm transition ${
+        active ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      }`}
+      onClick={onClick}
+    >
+      <item.icon className="h-[17px] w-[17px]" />
+      {item.label}
+    </button>
+  );
+}
+
+const PAGE_COPY: Record<TabKey, { title: string; description: string }> = {
+  home: { title: "Good day", description: "A quiet view of what needs your attention." },
+  "event-types": { title: "Scheduling", description: "Booking links and the people behind them." },
+  bookings: { title: "Bookings", description: "Upcoming conversations and recent history." },
+  schedules: { title: "Availability", description: "The recurring hours your booking links can offer." },
+  routing: { title: "Routing", description: "Send each invitee to the right conversation." },
+  team: { title: "People & teams", description: "Hosts, membership, and shared scheduling." },
+  calendars: { title: "Calendars", description: "Where Calpaca checks conflicts and writes events." },
+};
+
+function PageHeading({ tab, onNavigate }: { tab: TabKey; onNavigate: (tab: TabKey) => void }) {
+  const copy = PAGE_COPY[tab];
+  return (
+    <header className="mb-7">
+      <h1 className="text-[28px] font-semibold tracking-[-0.035em] sm:text-[32px]">{copy.title}</h1>
+      <p className="mt-1 text-sm text-muted-foreground">{copy.description}</p>
+      {TABS.find((item) => item.key === tab)?.group === "setup" && (
+        <div className="mt-5 flex gap-1 overflow-x-auto pb-1 md:hidden">
+          {TABS.filter((item) => item.group === "setup").map((item) => (
+            <button
+              type="button"
+              key={item.key}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs ${item.key === tab ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
+              onClick={() => onNavigate(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </header>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      {[0, 1, 2, 3].map((item) => <div key={item} className="h-32 animate-pulse rounded-xl bg-muted" />)}
+    </div>
+  );
+}
+
+function viewerTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+function formatBookingDate(utc: string, options?: Intl.DateTimeFormatOptions): string {
+  return new Intl.DateTimeFormat(undefined, options ?? {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(utc));
+}
+
+function formatBookingTime(utc: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(utc));
+}
+
+function HomeTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
+  const [next, setNext] = useState<AdminBooking | null | undefined>(undefined);
+  const [past, setPast] = useState<AdminBooking[]>([]);
+  const timezone = viewerTimezone();
+
+  useEffect(() => {
+    void Promise.all([
+      listAdminBookings({ filter: "upcoming", pageSize: 1, timezone }),
+      listAdminBookings({ filter: "past", pageSize: 50, timezone }),
+    ]).then(([upcoming, history]) => {
+      setNext(upcoming.bookings[0] ?? null);
+      setPast(history.bookings);
+    }).catch(() => {
+      setNext(null);
+    });
+  }, [timezone]);
+
+  const completed = past.filter((booking) => booking.status !== "cancelled");
+  const noShows = past.filter((booking) => booking.status === "no_show").length;
+  const failed = past.filter((booking) => booking.inviteStatus === "failed").length;
+
+  return (
+    <div className="space-y-5">
+      <section className="grid gap-4 lg:grid-cols-[1.45fr_.75fr]">
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+          <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Up next</p>
+              <p className="mt-1 text-sm text-muted-foreground">Your nearest confirmed booking</p>
+            </div>
+            <CalendarDays className="h-5 w-5 text-primary" />
+          </div>
+          <div className="p-5">
+            {next === undefined ? (
+              <div className="h-20 animate-pulse rounded-lg bg-muted" />
+            ) : next ? (
+              <button type="button" className="w-full text-left" onClick={() => onNavigate("bookings")}>
+                <p className="text-2xl font-semibold tracking-[-0.03em]">
+                  {formatBookingTime(next.start.utc)}
+                </p>
+                <p className="mt-1 font-medium">{next.inviteeName}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatBookingDate(next.start.utc)} · {next.eventType.title}
+                </p>
+              </button>
+            ) : (
+              <div className="py-3">
+                <p className="font-medium">Wide open.</p>
+                <p className="mt-1 text-sm text-muted-foreground">Your future self says thanks.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="group rounded-xl border border-border/70 bg-primary p-5 text-left text-primary-foreground transition hover:opacity-95"
+          onClick={() => onNavigate("event-types")}
+        >
+          <Plus className="h-5 w-5" />
+          <p className="mt-8 text-lg font-semibold">Create a booking link</p>
+          <p className="mt-1 text-sm opacity-75">A fresh way for people to find you.</p>
+        </button>
+      </section>
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Metric label="Recent meetings" value={completed.length} />
+        <Metric label="No-show rate" value={completed.length ? `${Math.round((noShows / completed.length) * 100)}%` : "—"} />
+        <Metric className="col-span-2 sm:col-span-1" label="Delivery issues" value={failed} tone={failed ? "danger" : "normal"} />
+      </section>
+
+      <section className="rounded-xl border border-border/70 bg-card px-5 py-4">
+        <div className="flex items-center gap-3">
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-primary/10 text-primary">
+            <CheckCircle2 className="h-4 w-4" />
+          </span>
+          <div>
+            <p className="text-sm font-medium">{failed ? `${failed} delivery issue${failed === 1 ? "" : "s"} need attention` : "Everything is in step."}</p>
+            <p className="text-xs text-muted-foreground">
+              {failed ? "Open Bookings to review failed invitations." : "Calendars and recent invitation delivery look healthy."}
+            </p>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  tone = "normal",
+  className = "",
+}: {
+  label: string;
+  value: string | number;
+  tone?: "normal" | "danger";
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-xl border border-border/70 bg-card p-4 ${className}`}>
+      <p className={`text-2xl font-semibold tabular-nums ${tone === "danger" ? "text-destructive" : ""}`}>{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function BookingsTab({ users }: { users: DirectoryUser[] }) {
+  const [filter, setFilter] = useState<"upcoming" | "past">("upcoming");
+  const [bookings, setBookings] = useState<AdminBooking[] | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const timezone = viewerTimezone();
+
+  const reload = useCallback(() => {
+    setBookings(null);
+    setError(null);
+    listAdminBookings({ filter, pageSize: 100, timezone })
+      .then((response) => setBookings(response.bookings))
+      .catch((cause: unknown) => setError(errorText(cause)));
+  }, [filter, timezone]);
+
+  useEffect(() => reload(), [reload]);
+
+  return (
+    <>
+      <div className="mb-5 flex items-center justify-between">
+        <div className="inline-flex rounded-lg bg-muted p-1">
+          {(["upcoming", "past"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={`rounded-md px-4 py-2 text-sm capitalize transition ${
+                filter === value ? "bg-card font-medium shadow-sm" : "text-muted-foreground"
+              }`}
+              onClick={() => setFilter(value)}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+        <p className="hidden text-xs text-muted-foreground sm:block">{timezone}</p>
       </div>
 
-      <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-border" aria-label="Dashboard sections">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${
-              tab === t.key
-                ? "border-primary font-medium text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {!error && !users && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {users && (
-        <>
-          {tab === "event-types" && <EventTypesTab users={users} />}
-          {tab === "schedules" && <SchedulesTab />}
-          {tab === "routing" && <RoutingTab users={users} />}
-          {tab === "team" && <TeamTab users={users} />}
-          {tab === "calendars" && <CalendarsTab />}
-        </>
+      {error && <p className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
+      {!error && bookings === null && <DashboardSkeleton />}
+      {bookings?.length === 0 && (
+        <div className="rounded-xl border border-dashed border-border p-10 text-center">
+          <CalendarRange className="mx-auto h-6 w-6 text-muted-foreground" />
+          <p className="mt-3 font-medium">No {filter} bookings</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {filter === "upcoming" ? "A little room to breathe." : "Your meeting history will collect here."}
+          </p>
+        </div>
       )}
+      {bookings && bookings.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+          {bookings.map((booking, index) => {
+            const previous = bookings[index - 1];
+            const day = formatBookingDate(booking.start.utc, {
+              weekday: "long",
+              month: "long",
+              day: "numeric",
+            });
+            const previousDay = previous
+              ? formatBookingDate(previous.start.utc, { weekday: "long", month: "long", day: "numeric" })
+              : null;
+            return (
+              <div key={booking.id}>
+                {day !== previousDay && (
+                  <p className="border-b border-border/60 bg-muted/40 px-4 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground sm:px-5">
+                    {day}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="grid w-full grid-cols-[4.5rem_1fr_auto] items-center gap-3 border-b border-border/60 px-4 py-4 text-left last:border-0 transition hover:bg-muted/40 sm:grid-cols-[6rem_1fr_auto] sm:px-5"
+                  onClick={() => setSelected(booking.id)}
+                >
+                  <span className="text-sm font-semibold tabular-nums">{formatBookingTime(booking.start.utc)}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{booking.inviteeName}</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">{booking.eventType.title}</span>
+                  </span>
+                  <BookingStatus booking={booking} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {selected && (
+        <BookingDetailPanel
+          bookingId={selected}
+          timezone={timezone}
+          users={users}
+          onClose={() => setSelected(null)}
+          onChanged={reload}
+        />
+      )}
+    </>
+  );
+}
+
+function BookingStatus({ booking }: { booking: AdminBooking }) {
+  if (booking.inviteStatus === "failed") {
+    return <span className="rounded-full bg-destructive/10 px-2.5 py-1 text-[11px] font-medium text-destructive">Invite failed</span>;
+  }
+  const styles = booking.status === "confirmed"
+    ? "bg-primary/10 text-primary"
+    : booking.status === "no_show"
+      ? "bg-warning/20 text-warning-foreground"
+      : "bg-muted text-muted-foreground";
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium capitalize ${styles}`}>
+      {booking.status.replace("_", " ")}
+    </span>
+  );
+}
+
+function BookingDetailPanel({
+  bookingId,
+  timezone,
+  users,
+  onClose,
+  onChanged,
+}: {
+  bookingId: string;
+  timezone: string;
+  users: DirectoryUser[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [booking, setBooking] = useState<AdminBookingDetail | null>(null);
+  const [assignment, setAssignment] = useState<AssignmentExplanation | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void getAdminBooking(bookingId, timezone)
+      .then(setBooking)
+      .catch((cause: unknown) => setError(errorText(cause)));
+    void getBookingAssignment(bookingId)
+      .then((response) => setAssignment(response.assignment))
+      .catch((cause: unknown) => {
+        if (!(cause instanceof ApiError && cause.status === 404)) setError(errorText(cause));
+      });
+  }, [bookingId, timezone]);
+
+  const names = new Map(users.map((user) => [user.id, user.name]));
+  const markNoShow = async () => {
+    if (!window.confirm("Mark this booking as a no-show? This will notify subscribed webhooks.")) return;
+    try {
+      await markBookingNoShow(bookingId);
+      onChanged();
+      onClose();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-foreground/20 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Booking details">
+      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close booking details" onClick={onClose} />
+      <section className="relative z-10 h-full w-full overflow-y-auto bg-background p-5 shadow-2xl sm:max-w-xl sm:border-l sm:border-border sm:p-7">
+        <div className="mb-6 flex items-center justify-between">
+          <button type="button" className="text-sm font-medium text-muted-foreground hover:text-foreground" onClick={onClose}>← Back</button>
+          {booking && <BookingStatus booking={booking} />}
+        </div>
+        {error && <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+        {!booking && !error && <DashboardSkeleton />}
+        {booking && (
+          <div className="space-y-7">
+            <header>
+              <p className="text-sm text-muted-foreground">{booking.eventType.title}</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-[-0.03em]">{booking.inviteeName}</h2>
+              <p className="mt-2 text-sm">
+                {formatBookingDate(booking.start.utc, { weekday: "long", month: "long", day: "numeric" })}
+                {" · "}{formatBookingTime(booking.start.utc)}–{formatBookingTime(booking.end.utc)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">{timezone}</p>
+            </header>
+
+            <DetailSection title="Invitee">
+              <p className="text-sm">{booking.inviteeEmail}</p>
+              {booking.inviteeNotes && <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm">{booking.inviteeNotes}</p>}
+            </DetailSection>
+
+            <DetailSection title="Delivery">
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full bg-muted px-2.5 py-1 capitalize">Invite {booking.inviteStatus}</span>
+                <span className="rounded-full bg-muted px-2.5 py-1">
+                  {booking.hasGoogleEvent ? "Google event created" : "Calendar email fallback"}
+                </span>
+              </div>
+            </DetailSection>
+
+            <DetailSection title="Hosts">
+              <p className="text-sm">{booking.hostUserIds.map((id) => names.get(id) ?? id).join(", ")}</p>
+            </DetailSection>
+
+            {assignment && (
+              <DetailSection title="Round-robin assignment">
+                <p className="text-sm">
+                  <strong>{names.get(assignment.winnerUserId) ?? assignment.winnerUserId}</strong>
+                  {" "}was selected: {assignment.reason.replaceAll("_", " ")}.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {assignment.candidates.map((candidate, index) => (
+                    <div key={candidate.userId} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-xs">
+                      <span>{index + 1}. {names.get(candidate.userId) ?? candidate.userId}</span>
+                      <span className="tabular-nums text-muted-foreground">{candidate.bookingCount} bookings · {candidate.effectiveLoad.toFixed(2)} load</span>
+                    </div>
+                  ))}
+                </div>
+              </DetailSection>
+            )}
+
+            {booking.routingAnswers && (
+              <DetailSection title="Routing answers">
+                <dl className="space-y-2">
+                  {Object.entries(booking.routingAnswers).map(([key, value]) => (
+                    <div key={key} className="grid grid-cols-[8rem_1fr] gap-3 text-sm">
+                      <dt className="text-muted-foreground">{key}</dt>
+                      <dd>{Array.isArray(value) ? value.join(", ") : value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </DetailSection>
+            )}
+
+            <DetailSection title="Timeline">
+              <ol className="relative ml-1 border-l border-border pl-5">
+                {booking.events.map((event, index) => (
+                  <li key={`${event.kind}-${event.createdAt}-${index}`} className="relative pb-5 last:pb-0">
+                    <span className="absolute -left-[1.42rem] top-1 h-2 w-2 rounded-full bg-primary ring-4 ring-background" />
+                    <p className="text-sm font-medium capitalize">{event.kind.replaceAll("_", " ")}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {formatBookingDate(event.createdAt, { month: "short", day: "numeric", year: "numeric" })} · {formatBookingTime(event.createdAt)}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            </DetailSection>
+
+            {booking.status === "confirmed" && new Date(booking.end.utc).getTime() < Date.now() && (
+              <div className="border-t border-border pt-6">
+                <Button variant="outline" className="text-destructive" onClick={() => void markNoShow()}>
+                  Mark no-show
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
     </div>
+  );
+}
+
+function DetailSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{title}</h3>
+      {children}
+    </section>
   );
 }
 
@@ -349,7 +882,7 @@ function EventTypeForm({
         onSave();
       }}
     >
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-title">Title</Label>
           <Input
@@ -974,7 +1507,7 @@ function RoutingFormEditor({
         onSave();
       }}
     >
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="rf-slug">Slug</Label>
           <Input
@@ -1006,7 +1539,7 @@ function RoutingFormEditor({
         <Label>Questions</Label>
         {form.fields.map((field, i) => (
           <div key={i} className="flex flex-col gap-2 rounded-md border border-border p-3">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Input
                 aria-label={`Field ${i + 1} label`}
                 placeholder="Label (shown to invitees)"
@@ -1281,7 +1814,7 @@ function RoutingRuleEditor({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`rule-${index}-target`} className="text-xs text-muted-foreground">
             Send to event type

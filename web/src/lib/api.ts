@@ -304,6 +304,79 @@ export function deleteEventType(id: string): Promise<{ ok: true }> {
   return request(`/api/me/event-types/${id}`, { method: "DELETE" });
 }
 
+// ---- organizer bookings ----
+
+export type AdminBooking = {
+  id: string;
+  eventType: { slug: string; title: string };
+  start: RenderedInstant;
+  end: RenderedInstant;
+  inviteeName: string;
+  inviteeEmail: string;
+  hostUserIds: string[];
+  status: "confirmed" | "cancelled" | "no_show";
+  inviteStatus: "none" | "sent" | "delivered" | "failed";
+};
+
+export type AdminBookingDetail = AdminBooking & {
+  inviteeTimezone: string;
+  inviteeNotes: string | null;
+  routingAnswers: RoutingAnswers | null;
+  hasGoogleEvent: boolean;
+  events: {
+    kind: string;
+    payload: unknown;
+    createdAt: string;
+  }[];
+};
+
+export type AssignmentExplanation = {
+  winnerUserId: string;
+  reason:
+    | "only_available_candidate"
+    | "lowest_effective_load"
+    | "least_recently_booked"
+    | "stable_user_id_tiebreak";
+  candidates: {
+    userId: string;
+    bookingCount: number;
+    effectiveLoad: number;
+    lastBookedAt: string | null;
+  }[];
+};
+
+export function listAdminBookings(args: {
+  filter: "upcoming" | "past";
+  status?: AdminBooking["status"];
+  page?: number;
+  pageSize?: number;
+  timezone: string;
+}): Promise<{ bookings: AdminBooking[]; page: number; pageSize: number; total: number }> {
+  const params = new URLSearchParams({
+    filter: args.filter,
+    page: String(args.page ?? 1),
+    pageSize: String(args.pageSize ?? 50),
+    timezone: args.timezone,
+  });
+  if (args.status) params.set("status", args.status);
+  return request(`/api/me/bookings?${params}`);
+}
+
+export function getAdminBooking(id: string, timezone: string): Promise<AdminBookingDetail> {
+  return request(`/api/me/bookings/${encodeURIComponent(id)}?timezone=${encodeURIComponent(timezone)}`);
+}
+
+export function getBookingAssignment(id: string): Promise<{ assignment: AssignmentExplanation }> {
+  return request(`/api/me/bookings/${encodeURIComponent(id)}/assignment`);
+}
+
+export function markBookingNoShow(id: string): Promise<{ bookingId: string; status: string }> {
+  return request(`/api/me/bookings/${encodeURIComponent(id)}/no-show`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 // ---- routing forms ----
 
 export type RoutingAnswers = Record<string, string | string[]>;
