@@ -232,6 +232,13 @@
       "when": 1784833715614,
       "tag": "0032_gifted_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784834525076,
+      "tag": "0033_greedy_raider",
+      "breakpoints": true
     }
   ]
 }

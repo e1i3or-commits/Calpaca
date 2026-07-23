@@ -15,5 +15,8 @@ Polls are workspace-scoped and governed by the `meetingPolls` plan
 entitlement. Public IDs are random and participant edit tokens are never
 returned in organizer results.
 
-Privacy controls, deadlines/reminders, calendar-aware voting, and
-multi-recipient finalization notifications are subsequent roadmap items.
+Organizers can set privacy controls, a voting deadline, participant limits,
+and an optional invite list. Invited people receive the poll link, and
+unanswered invitees can receive deduplicated reminders 24 hours and one hour
+before the deadline. Calendar-aware voting and multi-recipient finalization
+notifications are also supported.

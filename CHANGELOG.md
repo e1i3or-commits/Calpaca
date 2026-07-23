@@ -5,6 +5,17 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-23
+
+### Added
+
+- Optional poll invite lists with initial invitation delivery and deduplicated
+  reminders for unanswered invitees 24 hours and one hour before the deadline.
+
+### Changed
+
+- Poll response selections use softer green, amber, and red treatments.
+
 ## [0.5.0] - 2026-07-23
 
 ### Added
@@ -69,3 +80,4 @@ First tracked public release.
 [0.3.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.3.0
 [0.4.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.4.0
 [0.5.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.5.0
+[0.6.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.6.0

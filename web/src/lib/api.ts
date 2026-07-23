@@ -40,6 +40,8 @@ export type MeetingPoll = {
   allowResponseEditing: boolean;
   participantLimit: number | null;
   participantLimitReached: boolean;
+  reminder24Hours: boolean;
+  reminder1Hour: boolean;
   finalizedOptionId: string | null;
   participantCount: number;
   options: {
@@ -59,6 +61,15 @@ export type MeetingPoll = {
     finalizationSentAt?: string | null;
     finalizationError?: string | null;
     votes: { optionId: string; choice: PollChoice }[];
+  }[];
+  invites?: {
+    id: string;
+    email: string;
+    invitationSentAt: string | null;
+    reminder24SentAt: string | null;
+    reminder1SentAt: string | null;
+    lastError: string | null;
+    responded: boolean;
   }[];
 };
 
@@ -222,6 +233,9 @@ export function createMeetingPoll(input: {
   deadline?: string;
   allowResponseEditing: boolean;
   participantLimit?: number;
+  reminder24Hours: boolean;
+  reminder1Hour: boolean;
+  inviteeEmails: string[];
   options: { start: string; end: string }[];
 }): Promise<MeetingPoll> {
   return request("/api/me/polls", { method: "POST", body: JSON.stringify(input) });

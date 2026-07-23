@@ -64,9 +64,9 @@ function choiceMark(choice: PollChoice | undefined) {
 }
 
 function selectedChoiceClass(choice: PollChoice) {
-  if (choice === "yes") return "border-emerald-600 bg-emerald-600 text-white";
-  if (choice === "if_needed") return "border-amber-500 bg-amber-400 text-amber-950";
-  return "border-red-600 bg-red-600 text-white";
+  if (choice === "yes") return "border-emerald-300 bg-emerald-100 text-emerald-900";
+  if (choice === "if_needed") return "border-amber-300 bg-amber-100 text-amber-900";
+  return "border-red-300 bg-red-100 text-red-900";
 }
 
 function resultChoiceClass(choice: PollChoice | undefined) {

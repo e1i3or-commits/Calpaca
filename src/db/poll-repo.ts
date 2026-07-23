@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
 import * as schema from "./schema";
 import {
   meetingPollOptions,
+  meetingPollInvites,
   meetingPollParticipants,
   meetingPollVotes,
   meetingPolls,
@@ -28,6 +29,8 @@ export type PollRecord = {
   deadline: Date | null;
   allowResponseEditing: boolean;
   participantLimit: number | null;
+  reminder24Hours: boolean;
+  reminder1Hour: boolean;
   finalizedOptionId: string | null;
   participantCount: number;
   options: {
@@ -46,6 +49,15 @@ export type PollRecord = {
     finalizationSentAt: Date | null;
     finalizationError: string | null;
     votes: { optionId: string; choice: PollChoice }[];
+  }[];
+  invites?: {
+    id: string;
+    email: string;
+    invitationSentAt: Date | null;
+    reminder24SentAt: Date | null;
+    reminder1SentAt: Date | null;
+    lastError: string | null;
+    responded: boolean;
   }[];
 };
 
@@ -71,6 +83,12 @@ async function hydratePoll(
     ? await executor.select().from(meetingPollVotes)
         .where(inArray(meetingPollVotes.participantId, participants.map((row) => row.id)))
     : [];
+  const invites = includeParticipants
+    ? await executor.select().from(meetingPollInvites)
+        .where(eq(meetingPollInvites.pollId, poll.id))
+        .orderBy(asc(meetingPollInvites.email))
+    : [];
+  const participantEmails = new Set(participants.map((participant) => participant.email));
   const ranked = rankPollOptions(options.map((option) => {
     const optionVotes = votes.filter((vote) => vote.optionId === option.id);
     return {
@@ -92,6 +110,8 @@ async function hydratePoll(
     deadline: poll.deadline,
     allowResponseEditing: poll.allowResponseEditing,
     participantLimit: poll.participantLimit,
+    reminder24Hours: poll.reminder24Hours,
+    reminder1Hour: poll.reminder1Hour,
     finalizedOptionId: poll.finalizedOptionId,
     participantCount: participants.length,
     options: ranked.map((item) => {
@@ -114,6 +134,15 @@ async function hydratePoll(
                 choice: vote.choice as PollChoice,
               })),
           })),
+          invites: invites.map((invite) => ({
+            id: invite.id,
+            email: invite.email,
+            invitationSentAt: invite.invitationSentAt,
+            reminder24SentAt: invite.reminder24SentAt,
+            reminder1SentAt: invite.reminder1SentAt,
+            lastError: invite.lastError,
+            responded: participantEmails.has(invite.email),
+          })),
         }
       : {}),
   };
@@ -129,6 +158,9 @@ export async function createMeetingPoll(input: {
   deadline?: Date;
   allowResponseEditing?: boolean;
   participantLimit?: number;
+  reminder24Hours?: boolean;
+  reminder1Hour?: boolean;
+  inviteeEmails?: string[];
   options: PollOptionInput[];
 }, executor: Db = getDb()): Promise<PollRecord> {
   return executor.transaction(async (tx) => {
@@ -143,14 +175,150 @@ export async function createMeetingPoll(input: {
       deadline: input.deadline,
       allowResponseEditing: input.allowResponseEditing ?? true,
       participantLimit: input.participantLimit,
+      reminder24Hours: input.reminder24Hours ?? false,
+      reminder1Hour: input.reminder1Hour ?? false,
     }).returning();
     if (!poll) throw new Error("poll insert returned no row");
     await tx.insert(meetingPollOptions).values(input.options.map((option) => ({
       pollId: poll.id,
       ...option,
     })));
+    const inviteeEmails = [...new Set((input.inviteeEmails ?? []).map((email) => email.toLowerCase()))];
+    if (inviteeEmails.length > 0) {
+      await tx.insert(meetingPollInvites).values(inviteeEmails.map((email) => ({
+        pollId: poll.id,
+        email,
+      })));
+    }
     return hydratePoll(poll, tx);
   });
+}
+
+export type PollInviteKind = "invitation" | "reminder_24h" | "reminder_1h";
+
+export async function listUnsentPollInviteIds(
+  pollId: string,
+  executor: Db = getDb(),
+): Promise<string[]> {
+  const rows = await executor.select({ id: meetingPollInvites.id })
+    .from(meetingPollInvites)
+    .where(and(
+      eq(meetingPollInvites.pollId, pollId),
+      isNull(meetingPollInvites.invitationSentAt),
+    ));
+  return rows.map((row) => row.id);
+}
+
+export async function listDuePollReminderJobs(
+  now: Date,
+  executor: Db = getDb(),
+): Promise<{ inviteId: string; kind: "reminder_24h" | "reminder_1h" }[]> {
+  const polls = await executor.select({
+    id: meetingPolls.id,
+    deadline: meetingPolls.deadline,
+    reminder24Hours: meetingPolls.reminder24Hours,
+    reminder1Hour: meetingPolls.reminder1Hour,
+  }).from(meetingPolls).where(and(
+    eq(meetingPolls.status, "open"),
+    isNotNull(meetingPolls.deadline),
+  ));
+  const jobs: { inviteId: string; kind: "reminder_24h" | "reminder_1h" }[] = [];
+  for (const poll of polls) {
+    if (!poll.deadline) continue;
+    const remainingMs = poll.deadline.getTime() - now.getTime();
+    if (remainingMs <= 0 || remainingMs > 24 * 60 * 60_000) continue;
+    const invites = await executor.select().from(meetingPollInvites)
+      .where(eq(meetingPollInvites.pollId, poll.id));
+    const participants = await executor.select({ email: meetingPollParticipants.email })
+      .from(meetingPollParticipants)
+      .where(eq(meetingPollParticipants.pollId, poll.id));
+    const responded = new Set(participants.map((participant) => participant.email));
+    for (const invite of invites) {
+      if (responded.has(invite.email)) continue;
+      if (remainingMs <= 60 * 60_000) {
+        if (poll.reminder1Hour && invite.reminder1SentAt === null) {
+          jobs.push({ inviteId: invite.id, kind: "reminder_1h" });
+        }
+      } else if (poll.reminder24Hours && invite.reminder24SentAt === null) {
+        jobs.push({ inviteId: invite.id, kind: "reminder_24h" });
+      }
+    }
+  }
+  return jobs;
+}
+
+export async function getPollInviteContext(
+  inviteId: string,
+  kind: PollInviteKind,
+  executor: Db = getDb(),
+): Promise<{
+  inviteId: string;
+  email: string;
+  title: string;
+  publicId: string;
+  deadline: Date | null;
+  timezone: string;
+} | null> {
+  const [row] = await executor.select({
+    inviteId: meetingPollInvites.id,
+    email: meetingPollInvites.email,
+    invitationSentAt: meetingPollInvites.invitationSentAt,
+    reminder24SentAt: meetingPollInvites.reminder24SentAt,
+    reminder1SentAt: meetingPollInvites.reminder1SentAt,
+    pollId: meetingPolls.id,
+    title: meetingPolls.title,
+    publicId: meetingPolls.publicId,
+    deadline: meetingPolls.deadline,
+    timezone: meetingPolls.timezone,
+    status: meetingPolls.status,
+  }).from(meetingPollInvites)
+    .innerJoin(meetingPolls, eq(meetingPollInvites.pollId, meetingPolls.id))
+    .where(eq(meetingPollInvites.id, inviteId));
+  if (
+    !row
+    || row.status !== "open"
+    || (row.deadline && row.deadline.getTime() <= Date.now())
+  ) return null;
+  const alreadySent = kind === "invitation"
+    ? row.invitationSentAt
+    : kind === "reminder_24h"
+      ? row.reminder24SentAt
+      : row.reminder1SentAt;
+  if (alreadySent) return null;
+  if (kind !== "invitation") {
+    const [response] = await executor.select({ id: meetingPollParticipants.id })
+      .from(meetingPollParticipants)
+      .where(and(
+        eq(meetingPollParticipants.pollId, row.pollId),
+        eq(meetingPollParticipants.email, row.email),
+      ));
+    if (response || !row.deadline) return null;
+  }
+  return {
+    inviteId: row.inviteId,
+    email: row.email,
+    title: row.title,
+    publicId: row.publicId,
+    deadline: row.deadline,
+    timezone: row.timezone,
+  };
+}
+
+export async function recordPollInviteDelivery(
+  inviteId: string,
+  kind: PollInviteKind,
+  outcome: { sent: true } | { sent: false; error: string },
+  executor: Db = getDb(),
+): Promise<void> {
+  const sentField = kind === "invitation"
+    ? { invitationSentAt: new Date() }
+    : kind === "reminder_24h"
+      ? { reminder24SentAt: new Date() }
+      : { reminder1SentAt: new Date() };
+  await executor.update(meetingPollInvites).set(outcome.sent
+    ? { ...sentField, lastError: null }
+    : { lastError: outcome.error.slice(0, 1000) })
+    .where(eq(meetingPollInvites.id, inviteId));
 }
 
 export async function listMeetingPolls(

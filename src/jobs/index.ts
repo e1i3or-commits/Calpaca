@@ -6,6 +6,11 @@ import { listEvents, watchEvents } from "../sync/google";
 import { REMINDER_LEAD, sendInvite, sendReminder } from "./invite-email";
 import type { InviteKind } from "../core/invite/email";
 import { listBookingsNeedingReminder } from "../db/booking-repo";
+import {
+  listDuePollReminderJobs,
+  listUnsentPollInviteIds,
+  type PollInviteKind,
+} from "../db/poll-repo";
 import { expireHolds } from "../db/holds-repo";
 import { reapRateLimits } from "../db/rate-limit-repo";
 import {
@@ -18,6 +23,7 @@ import {
 } from "./webhook-delivery";
 import { sendSuggestionEmail } from "./suggestion-email";
 import { sendPollFinalization } from "./poll-finalization-email";
+import { sendPollInviteOrReminder } from "./poll-reminder-email";
 import {
   getConnection,
   listConnectionsNeedingChannel,
@@ -54,6 +60,8 @@ const RENEWAL_QUEUE = "channel-renewal";
 const INVITE_QUEUE = "invite-email";
 const SUGGESTION_EMAIL_QUEUE = "suggestion-email";
 const POLL_FINALIZATION_EMAIL_QUEUE = "poll-finalization-email";
+const POLL_INVITE_EMAIL_QUEUE = "poll-invite-email";
+const POLL_REMINDER_SWEEP_QUEUE = "poll-reminder-sweep";
 const WEBHOOK_FANOUT_QUEUE = "webhook-fanout";
 const WEBHOOK_DELIVERY_QUEUE = "webhook-delivery";
 const REMINDER_SWEEP_QUEUE = "reminder-sweep";
@@ -161,6 +169,24 @@ export async function emitPollFinalizedWebhook(pollId: string): Promise<void> {
   }
 }
 
+export async function enqueuePollInvitations(pollId: string): Promise<void> {
+  try {
+    for (const inviteId of await listUnsentPollInviteIds(pollId)) {
+      await getBoss().send(POLL_INVITE_EMAIL_QUEUE, {
+        inviteId,
+        kind: "invitation" satisfies PollInviteKind,
+      }, {
+        retryLimit: 3,
+        retryDelay: 60,
+        retryBackoff: true,
+        singletonKey: `poll-invitation:${inviteId}`,
+      });
+    }
+  } catch (e) {
+    console.error(`[jobs] enqueue poll invitations for ${pollId} failed:`, e);
+  }
+}
+
 async function runSync(connectionId: string, forceFull: boolean): Promise<void> {
   const conn = await getConnection(connectionId);
   if (!conn) return; // connection removed since enqueue
@@ -225,6 +251,7 @@ export async function startJobs(): Promise<void> {
   await b.createQueue(INVITE_QUEUE);
   await b.createQueue(SUGGESTION_EMAIL_QUEUE);
   await b.createQueue(POLL_FINALIZATION_EMAIL_QUEUE);
+  await b.createQueue(POLL_INVITE_EMAIL_QUEUE);
 
   await b.work<{ connectionId: string; forceFull?: boolean }>(SYNC_QUEUE, async ([job]) => {
     if (job) await runSync(job.data.connectionId, job.data.forceFull ?? false);
@@ -242,6 +269,12 @@ export async function startJobs(): Promise<void> {
     POLL_FINALIZATION_EMAIL_QUEUE,
     async ([job]) => {
       if (job) await sendPollFinalization(job.data.pollId, job.data.participantId);
+    },
+  );
+  await b.work<{ inviteId: string; kind: PollInviteKind }>(
+    POLL_INVITE_EMAIL_QUEUE,
+    async ([job]) => {
+      if (job) await sendPollInviteOrReminder(job.data.inviteId, job.data.kind);
     },
   );
 
@@ -305,6 +338,19 @@ export async function startJobs(): Promise<void> {
   });
   await b.schedule(REMINDER_SWEEP_QUEUE, "*/5 * * * *");
 
+  await b.createQueue(POLL_REMINDER_SWEEP_QUEUE);
+  await b.work(POLL_REMINDER_SWEEP_QUEUE, async () => {
+    for (const reminder of await listDuePollReminderJobs(new Date())) {
+      await b.send(POLL_INVITE_EMAIL_QUEUE, reminder, {
+        retryLimit: 3,
+        retryDelay: 60,
+        retryBackoff: true,
+        singletonKey: `poll-${reminder.kind}:${reminder.inviteId}`,
+      });
+    }
+  });
+  await b.schedule(POLL_REMINDER_SWEEP_QUEUE, "*/5 * * * *");
+
   await b.createQueue(HOLD_EXPIRY_QUEUE);
   await b.work(HOLD_EXPIRY_QUEUE, async () => {
     const now = Temporal.Now.instant();
@@ -343,6 +389,7 @@ export async function startJobs(): Promise<void> {
   // initial sweeps so a fresh boot syncs, reminds, and expires immediately
   await b.send(SWEEP_QUEUE, {});
   await b.send(REMINDER_SWEEP_QUEUE, {});
+  await b.send(POLL_REMINDER_SWEEP_QUEUE, {});
   await b.send(HOLD_EXPIRY_QUEUE, {});
   console.log("[jobs] pg-boss started");
 }

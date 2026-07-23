@@ -414,6 +414,8 @@ export const meetingPolls = pgTable("meeting_polls", {
   deadline: timestamp("deadline", { withTimezone: true }),
   allowResponseEditing: boolean("allow_response_editing").notNull().default(true),
   participantLimit: integer("participant_limit"),
+  reminder24Hours: boolean("reminder_24_hours").notNull().default(false),
+  reminder1Hour: boolean("reminder_1_hour").notNull().default(false),
   finalizedOptionId: uuid("finalized_option_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -454,4 +456,18 @@ export const meetingPollVotes = pgTable("meeting_poll_votes", {
 }, (t) => [
   primaryKey({ columns: [t.participantId, t.optionId] }),
   index("meeting_poll_vote_option_idx").on(t.optionId),
+]);
+
+export const meetingPollInvites = pgTable("meeting_poll_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  pollId: uuid("poll_id").notNull()
+    .references(() => meetingPolls.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  invitationSentAt: timestamp("invitation_sent_at", { withTimezone: true }),
+  reminder24SentAt: timestamp("reminder_24_sent_at", { withTimezone: true }),
+  reminder1SentAt: timestamp("reminder_1_sent_at", { withTimezone: true }),
+  lastError: text("last_error"),
+}, (t) => [
+  uniqueIndex("meeting_poll_invite_email_uq").on(t.pollId, t.email),
+  index("meeting_poll_invite_poll_idx").on(t.pollId),
 ]);

@@ -9,6 +9,8 @@ import {
   finalizeMeetingPoll,
   getMeetingPollResponse,
   getPublicMeetingPoll,
+  listDuePollReminderJobs,
+  listMeetingPolls,
   saveMeetingPollVotes,
 } from "../../src/db/poll-repo";
 
@@ -38,6 +40,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("meeting poll repository", () =>
         ownerUserId: owner!.id,
         title: "Planning",
         timezone: "UTC",
+        deadline: new Date(Date.now() + 23 * 60 * 60_000),
+        reminder24Hours: true,
+        inviteeEmails: ["person@example.test", "waiting@example.test"],
         options: [
           { startsAt: new Date("2027-01-10T10:00:00Z"), endsAt: new Date("2027-01-10T11:00:00Z") },
           { startsAt: new Date("2027-01-11T10:00:00Z"), endsAt: new Date("2027-01-11T11:00:00Z") },
@@ -55,6 +60,23 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("meeting poll repository", () =>
       }, db);
       expect(typeof first === "object").toBe(true);
       if (typeof first !== "object") throw new Error("vote failed");
+      const ownerPoll = (await listMeetingPolls(workspace!.id, db))
+        .find((item) => item.id === poll.id);
+      expect(ownerPoll?.invites?.map((invite) => invite.email)).toEqual([
+        "person@example.test",
+        "waiting@example.test",
+      ]);
+      const waitingInvite = ownerPoll?.invites?.find(
+        (invite) => invite.email === "waiting@example.test",
+      );
+      if (!waitingInvite) throw new Error("waiting invite missing");
+      const dueReminders = await listDuePollReminderJobs(new Date(), db);
+      expect(dueReminders).toEqual([
+        {
+          inviteId: waitingInvite.id,
+          kind: "reminder_24h",
+        },
+      ]);
       expect(await getMeetingPollResponse(poll.publicId, first.editToken, db))
         .toMatchObject({ name: "Participant", email: "person@example.test" });
 

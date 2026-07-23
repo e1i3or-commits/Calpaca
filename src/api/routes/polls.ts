@@ -33,6 +33,7 @@ import { generateSlots } from "../../core/availability/slots";
 import { scoreSlots } from "../../core/availability/scoring";
 import {
   emitPollFinalizedWebhook,
+  enqueuePollInvitations,
   enqueuePollFinalizationEmail,
 } from "../../jobs/index";
 
@@ -48,6 +49,9 @@ const createSchema = z.object({
   deadline: z.string().datetime().optional(),
   allowResponseEditing: z.boolean().default(true),
   participantLimit: z.number().int().min(1).max(500).optional(),
+  reminder24Hours: z.boolean().default(false),
+  reminder1Hour: z.boolean().default(false),
+  inviteeEmails: z.array(z.string().email()).max(100).default([]),
   options: z.array(optionSchema).min(2).max(20),
 });
 const voteSchema = z.object({
@@ -76,6 +80,7 @@ export interface PollSuggestionDeps {
   readonly now: () => Temporal.Instant;
   readonly enqueueFinalizationEmail?: (pollId: string, participantId?: string) => Promise<void>;
   readonly emitFinalizedWebhook?: (pollId: string) => Promise<void>;
+  readonly enqueueInvitations?: (pollId: string) => Promise<void>;
 }
 
 const defaultSuggestionDeps: PollSuggestionDeps = {
@@ -84,6 +89,7 @@ const defaultSuggestionDeps: PollSuggestionDeps = {
   now: () => Temporal.Now.instant(),
   enqueueFinalizationEmail: enqueuePollFinalizationEmail,
   emitFinalizedWebhook: emitPollFinalizedWebhook,
+  enqueueInvitations: enqueuePollInvitations,
 };
 
 function renderPoll(
@@ -122,6 +128,8 @@ function renderPoll(
     deadline: poll.deadline?.toISOString() ?? null,
     allowResponseEditing: poll.allowResponseEditing,
     participantLimit: poll.participantLimit,
+    reminder24Hours: poll.reminder24Hours,
+    reminder1Hour: poll.reminder1Hour,
     participantLimitReached,
     finalizedOptionId: poll.finalizedOptionId,
     participantCount: poll.participantCount,
@@ -151,6 +159,14 @@ function renderPoll(
           })),
         }
       : {}),
+    ...(!publicView && poll.invites ? {
+      invites: poll.invites.map((invite) => ({
+        ...invite,
+        invitationSentAt: invite.invitationSentAt?.toISOString() ?? null,
+        reminder24SentAt: invite.reminder24SentAt?.toISOString() ?? null,
+        reminder1SentAt: invite.reminder1SentAt?.toISOString() ?? null,
+      })),
+    } : {}),
   };
 }
 
@@ -298,6 +314,9 @@ export function createPollRoutes(
     if (parsed.data.deadline && new Date(parsed.data.deadline).getTime() <= Date.now()) {
       return c.json({ error: "deadline_must_be_future" }, 400);
     }
+    if ((parsed.data.reminder24Hours || parsed.data.reminder1Hour) && !parsed.data.deadline) {
+      return c.json({ error: "reminders_require_deadline" }, 400);
+    }
     const poll = await createMeetingPoll({
       workspaceId: user.workspaceId,
       ownerUserId: user.id,
@@ -308,8 +327,12 @@ export function createPollRoutes(
       deadline: parsed.data.deadline ? new Date(parsed.data.deadline) : undefined,
       allowResponseEditing: parsed.data.allowResponseEditing,
       participantLimit: parsed.data.participantLimit,
+      reminder24Hours: parsed.data.reminder24Hours,
+      reminder1Hour: parsed.data.reminder1Hour,
+      inviteeEmails: parsed.data.inviteeEmails,
       options,
     });
+    await suggestionDeps.enqueueInvitations?.(poll.id);
     return c.json(renderPoll(poll), 201);
   });
 

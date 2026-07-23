@@ -942,6 +942,9 @@ function PollsTab() {
   const [deadline, setDeadline] = useState("");
   const [allowResponseEditing, setAllowResponseEditing] = useState(true);
   const [participantLimit, setParticipantLimit] = useState("");
+  const [inviteeEmails, setInviteeEmails] = useState("");
+  const [reminder24Hours, setReminder24Hours] = useState(false);
+  const [reminder1Hour, setReminder1Hour] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
@@ -968,6 +971,12 @@ function PollsTab() {
         deadline: deadline ? new Date(deadline).toISOString() : undefined,
         allowResponseEditing,
         participantLimit: participantLimit ? Number(participantLimit) : undefined,
+        reminder24Hours,
+        reminder1Hour,
+        inviteeEmails: [...new Set(inviteeEmails
+          .split(/[\s,;]+/)
+          .map((email) => email.trim().toLowerCase())
+          .filter(Boolean))],
         options: options.map((option) => ({
           start: new Date(option.start).toISOString(),
           end: new Date(new Date(option.start).getTime() + durationMinutes * 60_000).toISOString(),
@@ -982,6 +991,9 @@ function PollsTab() {
       setDeadline("");
       setAllowResponseEditing(true);
       setParticipantLimit("");
+      setInviteeEmails("");
+      setReminder24Hours(false);
+      setReminder1Hour(false);
       reload();
     } catch (cause) {
       setError(errorText(cause));
@@ -1088,7 +1100,20 @@ function PollsTab() {
               </div>
               <div>
                 <Label htmlFor="poll-deadline">Voting deadline (optional)</Label>
-                <Input id="poll-deadline" type="datetime-local" step={900} className="mt-1" value={deadline} onChange={(event) => setDeadline(event.target.value)} />
+                <Input
+                  id="poll-deadline"
+                  type="datetime-local"
+                  step={900}
+                  className="mt-1"
+                  value={deadline}
+                  onChange={(event) => {
+                    setDeadline(event.target.value);
+                    if (!event.target.value) {
+                      setReminder24Hours(false);
+                      setReminder1Hour(false);
+                    }
+                  }}
+                />
               </div>
               <div>
                 <Label htmlFor="poll-participant-limit">Participant limit (optional)</Label>
@@ -1098,6 +1123,21 @@ function PollsTab() {
                 <input type="checkbox" checked={allowResponseEditing} onChange={(event) => setAllowResponseEditing(event.target.checked)} />
                 Allow people to edit responses
               </label>
+              <div className="sm:col-span-2">
+                <Label htmlFor="poll-invitees">Invite people (optional)</Label>
+                <Textarea id="poll-invitees" className="mt-1" placeholder="alex@example.com, sam@example.com" value={inviteeEmails} onChange={(event) => setInviteeEmails(event.target.value)} />
+                <p className="mt-1 text-xs text-muted-foreground">Separate addresses with commas, spaces, or new lines.</p>
+              </div>
+              <div className="flex flex-wrap gap-3 sm:col-span-2">
+                <label className={`flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm ${!deadline ? "opacity-50" : ""}`}>
+                  <input type="checkbox" disabled={!deadline} checked={reminder24Hours} onChange={(event) => setReminder24Hours(event.target.checked)} />
+                  Remind unanswered invitees 24 hours before
+                </label>
+                <label className={`flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm ${!deadline ? "opacity-50" : ""}`}>
+                  <input type="checkbox" disabled={!deadline} checked={reminder1Hour} onChange={(event) => setReminder1Hour(event.target.checked)} />
+                  Remind unanswered invitees 1 hour before
+                </label>
+              </div>
             </div>
             <div className="rounded-xl border border-border bg-muted/30 p-4">
               <div>
@@ -1218,6 +1258,24 @@ function PollsTab() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {poll.invites && poll.invites.length > 0 && (
+              <div className="mt-4 border-t border-border pt-4">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Invitations</p>
+                <div className="flex flex-wrap gap-2">
+                  {poll.invites.map((invite) => (
+                    <span key={invite.id} className={`rounded-full px-2.5 py-1 text-xs ${
+                      invite.responded
+                        ? "bg-emerald-500/15 text-emerald-700"
+                        : invite.lastError
+                          ? "bg-red-500/15 text-red-700"
+                          : "bg-muted text-muted-foreground"
+                    }`}>
+                      {invite.email} · {invite.responded ? "responded" : invite.invitationSentAt ? "invited" : "pending"}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
