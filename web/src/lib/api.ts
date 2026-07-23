@@ -33,6 +33,7 @@ export type EventTypeMeta = {
   title: string;
   durationMinutes: number;
   theme: string;
+  layout?: "focus" | "split" | "compact";
   /** absent only from pre-profile servers */
   profile?: EventTypeProfile;
   selectableHosts?: {
@@ -147,6 +148,7 @@ export type RescheduleContext = {
   end: RenderedInstant;
   inviteeTimezone: string;
   theme: string;
+  layout?: "focus" | "split" | "compact";
 };
 
 export function getRescheduleContext(bookingId: string, token: string): Promise<RescheduleContext> {
@@ -238,12 +240,23 @@ export type AdminEventType = {
   mode: "solo" | "round_robin" | "group";
   scheduleId: string | null;
   theme: string;
+  layout?: "focus" | "split" | "compact";
   hosts: (EventTypeHost & { name: string; email: string })[];
 };
 
 export type EventTypeInput = Omit<AdminEventType, "id" | "ownerUserId" | "hosts"> & {
   hosts: EventTypeHost[];
 };
+
+export type PresentationOption = { value: string; label: string };
+
+export function listPresentationOptions(): Promise<{
+  themes: PresentationOption[];
+  publicThemes: string[];
+  layouts: PresentationOption[];
+}> {
+  return request("/api/me/theme-options");
+}
 
 export function listUsers(): Promise<{ users: DirectoryUser[] }> {
   return request("/api/me/users");

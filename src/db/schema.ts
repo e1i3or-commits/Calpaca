@@ -157,6 +157,7 @@ export const eventTypes = pgTable("event_types", {
   curatedSlotCount: integer("curated_slot_count").notNull().default(3),
   // bundled theme name (src/core/theming/themes.ts); public pages render with it
   theme: text("theme").notNull().default("default"),
+  layout: text("layout").notNull().default("focus"),
   // group booking on public links: explicit allowlist, empty = auth-only
   publicSelectableHostIds: jsonb("public_selectable_host_ids")
     .$type<string[]>().notNull().default([]),

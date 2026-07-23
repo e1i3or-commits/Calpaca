@@ -1,0 +1,1 @@
+ALTER TABLE "event_types" ADD COLUMN "layout" text DEFAULT 'focus' NOT NULL;

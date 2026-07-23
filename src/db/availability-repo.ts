@@ -16,6 +16,7 @@ export interface EventTypeConfig {
   // the repo always populates both
   readonly title?: string;
   readonly theme?: string;
+  readonly layout?: string;
   readonly mode?: AssignmentMode;
   readonly durationMinutes: number;
   readonly bufferBeforeMin: number;
@@ -40,6 +41,7 @@ export interface BookingEventTypeConfig {
   readonly slug: string;
   /** optional for the same fixture-compatibility reason as EventTypeConfig */
   readonly theme?: string;
+  readonly layout?: string;
   readonly durationMinutes: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -57,6 +59,7 @@ function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingE
     id: row.id,
     slug: row.slug,
     theme: row.theme,
+    layout: row.layout,
     durationMinutes: row.durationMinutes,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
@@ -108,6 +111,7 @@ export async function getEventTypeBySlug(
     slug: row.slug,
     title: row.title,
     theme: row.theme,
+    layout: row.layout,
     mode: row.mode,
     durationMinutes: row.durationMinutes,
     bufferBeforeMin: row.bufferBeforeMin,

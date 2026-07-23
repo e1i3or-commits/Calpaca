@@ -33,6 +33,7 @@ import {
   getBookingAssignment,
   listAdminBookings,
   listEventTypes,
+  listPresentationOptions,
   listRoutingForms,
   listSchedules,
   listTeamMembers,
@@ -51,6 +52,7 @@ import {
   type CalendarEntry,
   type DirectoryUser,
   type EventTypeInput,
+  type PresentationOption,
   type RoutingCondition,
   type RoutingField,
   type RoutingForm,
@@ -681,6 +683,7 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   scheduleId: null,
   teamId: null,
   theme: "default",
+  layout: "focus",
   hosts: [],
 };
 
@@ -695,6 +698,12 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
   const [eventTypes, setEventTypes] = useState<AdminEventType[] | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [availableThemes, setAvailableThemes] = useState<PresentationOption[]>([...themeOptions]);
+  const [availableLayouts, setAvailableLayouts] = useState<PresentationOption[]>([
+    { value: "focus", label: "Focus" },
+    { value: "split", label: "Split" },
+    { value: "compact", label: "Compact" },
+  ]);
   const [editing, setEditing] = useState<{ id: string | null; form: EventTypeInput } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -709,6 +718,10 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     reload();
     listSchedules().then((r) => setSchedules(r.schedules)).catch(() => undefined);
     listTeams().then((r) => setTeams(r.teams)).catch(() => undefined);
+    listPresentationOptions().then((options) => {
+      setAvailableThemes(options.themes);
+      setAvailableLayouts(options.layouts);
+    }).catch(() => undefined);
   }, [reload]);
 
   const save = async () => {
@@ -763,6 +776,8 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
             users={users}
             schedules={schedules}
             teams={teams}
+            themes={availableThemes}
+            layouts={availableLayouts}
             onChange={(form) => setEditing({ ...editing, form })}
             onCancel={() => setEditing(null)}
             onSave={() => void save()}
@@ -808,6 +823,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                           scheduleId: et.scheduleId,
                           teamId: et.teamId,
                           theme: et.theme,
+                          layout: et.layout ?? "focus",
                           hosts: et.hosts.map(({ userId, role, weight }) => ({
                             userId,
                             role,
@@ -842,6 +858,8 @@ function EventTypeForm({
   users,
   schedules,
   teams,
+  themes,
+  layouts,
   onChange,
   onCancel,
   onSave,
@@ -850,6 +868,8 @@ function EventTypeForm({
   users: DirectoryUser[];
   schedules: Schedule[];
   teams: Team[];
+  themes: PresentationOption[];
+  layouts: PresentationOption[];
   onChange: (form: EventTypeInput) => void;
   onCancel: () => void;
   onSave: () => void;
@@ -996,12 +1016,33 @@ function EventTypeForm({
             value={form.theme}
             onChange={(e) => set("theme", e.target.value)}
           >
-            {themeOptions.map((t) => (
+            {themes.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
               </option>
             ))}
           </select>
+        </div>
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <Label>Booking layout</Label>
+          <div className="grid grid-cols-3 gap-2">
+            {layouts.map((layout) => {
+              const active = (form.layout ?? "focus") === layout.value;
+              return (
+                <button
+                  key={layout.value}
+                  type="button"
+                  className={`rounded-lg border p-3 text-left transition ${
+                    active ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border hover:bg-muted"
+                  }`}
+                  onClick={() => set("layout", layout.value as EventTypeInput["layout"])}
+                >
+                  <span className={`mb-2 block h-8 rounded border ${layout.value === "split" ? "bg-[linear-gradient(90deg,var(--muted)_38%,var(--card)_38%)]" : layout.value === "compact" ? "mx-auto w-2/3 bg-muted" : "bg-card"}`} />
+                  <span className="block text-xs font-medium">{layout.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-team">Team</Label>

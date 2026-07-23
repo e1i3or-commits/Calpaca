@@ -18,7 +18,7 @@ import { subtract, type Interval } from "../../core/availability/intervals";
 import { generateSlots, type SlotConfig } from "../../core/availability/slots";
 import { scoreSlots } from "../../core/availability/scoring";
 import { groupAvailability, type GroupHost } from "../../core/availability/group";
-import { resolveTheme } from "../../core/theming/themes";
+import { resolveBookingLayout, resolveTheme } from "../../core/theming/themes";
 
 /**
  * Repo access the route needs, as plain functions rather than imported
@@ -177,6 +177,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       title: eventType.title ?? eventType.slug,
       durationMinutes: eventType.durationMinutes,
       theme: resolveTheme(eventType.theme),
+      ...(eventType.layout ? { layout: resolveBookingLayout(eventType.layout) } : {}),
       ...(profile ? { profile } : {}),
       ...(eventType.agentPolicy
         ? { agentPolicy: { enabled: eventType.agentPolicy.enabled } }

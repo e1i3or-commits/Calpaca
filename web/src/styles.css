@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Francois+One&family=Montserrat:ital,wght@0,800;0,900;1,800;1,900&family=Roboto:wght@400;500;700&display=swap");
 @import "tailwindcss";
 @import "./themes.css";
 
@@ -30,9 +31,91 @@ body {
   margin: 0;
   min-width: 320px;
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    var(--theme-font-body, Inter), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
   text-rendering: optimizeLegibility;
+}
+
+.booking-shell {
+  max-width: 42rem;
+}
+
+.booking-card {
+  overflow: hidden;
+}
+
+[data-booking-layout="compact"].booking-shell {
+  max-width: 32rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+
+[data-booking-layout="compact"] .booking-header {
+  padding: 1.25rem 1.25rem 1rem;
+}
+
+[data-booking-layout="compact"] .booking-content {
+  padding: 0 1.25rem 1.25rem;
+}
+
+@media (min-width: 900px) {
+  [data-booking-layout="split"].booking-shell {
+    max-width: 68rem;
+    padding-top: 4rem;
+  }
+
+  [data-booking-layout="split"] .booking-card {
+    display: grid;
+    grid-template-columns: minmax(17rem, 0.72fr) minmax(0, 1.28fr);
+    min-height: 38rem;
+  }
+
+  [data-booking-layout="split"] .booking-header {
+    justify-content: flex-start;
+    border-right: 1px solid var(--border);
+    background: var(--muted);
+    padding: 2.5rem;
+  }
+
+  [data-booking-layout="split"] .booking-content {
+    padding: 2.5rem;
+  }
+}
+
+[data-theme="paper"] .booking-card {
+  border-width: 1px;
+  box-shadow: 8px 8px 0 color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+
+[data-theme="tourscale"] .booking-card {
+  border: 2.5px solid #1a1a2e;
+  border-radius: 1.25rem;
+  box-shadow: 5px 5px 0 0 #1a1a2e;
+}
+
+[data-theme="tourscale"] .booking-header {
+  position: relative;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+[data-theme="tourscale"] .booking-header::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 0.35rem;
+  content: "";
+  background: linear-gradient(90deg, #f86e4f, #1edee4 50%, #35acef);
+}
+
+[data-theme="tourscale"] .booking-header [class*="text-xl"] {
+  font-family: var(--theme-font-heading);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+[data-theme="tourscale"] .booking-content button[class*="bg-primary"] {
+  border: 2.5px solid #1a1a2e;
+  border-radius: 9999px;
+  box-shadow: 3px 3px 0 0 #1a1a2e;
 }
 
 [data-organizer] {

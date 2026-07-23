@@ -3,7 +3,13 @@ import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { Temporal } from "@js-temporal/polyfill";
 import { requireSession, type AuthEnv } from "../../auth/session";
-import { themeNames } from "../../core/theming/themes";
+import {
+  bookingLayoutNames,
+  canUseTheme,
+  publicThemeNames,
+  themeLabels,
+  themeNames,
+} from "../../core/theming/themes";
 import {
   addTeamMember,
   createEventType,
@@ -204,6 +210,7 @@ const eventTypeBodySchema = z
     scheduleId: z.string().uuid().nullable(),
     teamId: z.string().uuid().nullable(),
     theme: z.enum(themeNames).default("default"),
+    layout: z.enum(bookingLayoutNames).default("focus"),
     agentPolicy: z
       .object({
         enabled: z.boolean(),
@@ -240,6 +247,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     "/api/me/schedules",
     "/api/me/teams",
     "/api/me/event-types",
+    "/api/me/theme-options",
     "/api/me/bookings",
   ]) {
     router.use(path, deps.requireAuth);
@@ -390,6 +398,20 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   // ---- event types ----
 
+  router.get("/api/me/theme-options", (c) => {
+    const user = c.get("user");
+    const names = themeNames.filter((theme) => canUseTheme(theme, user.email));
+    return c.json({
+      themes: names.map((value) => ({ value, label: themeLabels[value] })),
+      publicThemes: [...publicThemeNames],
+      layouts: [
+        { value: "focus", label: "Focus" },
+        { value: "split", label: "Split" },
+        { value: "compact", label: "Compact" },
+      ],
+    });
+  });
+
   router.get("/api/me/event-types", async (c) => {
     return c.json({ eventTypes: await deps.listEventTypesForUser(c.get("user").id) });
   });
@@ -398,6 +420,9 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     const parsed = eventTypeBodySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
     const user = c.get("user");
+    if (!canUseTheme(parsed.data.theme, user.email)) {
+      return c.json({ error: "theme_not_available" }, 403);
+    }
     if (parsed.data.teamId && !(await deps.isTeamMember(parsed.data.teamId, user.id))) {
       return c.json({ error: "team_not_found" }, 404);
     }
@@ -410,6 +435,9 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     const parsed = eventTypeBodySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
     const user = c.get("user");
+    if (!canUseTheme(parsed.data.theme, user.email)) {
+      return c.json({ error: "theme_not_available" }, 403);
+    }
     if (parsed.data.teamId && !(await deps.isTeamMember(parsed.data.teamId, user.id))) {
       return c.json({ error: "team_not_found" }, 404);
     }

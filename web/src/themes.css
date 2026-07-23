@@ -60,3 +60,102 @@
   --destructive-foreground: oklch(0.99 0 0);
   --radius: 0.75rem;
 }
+
+/* juniper: botanical, grounded */
+[data-theme="juniper"] {
+  --background: oklch(0.965 0.018 135);
+  --foreground: oklch(0.235 0.035 155);
+  --card: oklch(0.99 0.008 125);
+  --card-foreground: oklch(0.235 0.035 155);
+  --primary: oklch(0.42 0.105 155);
+  --primary-foreground: oklch(0.985 0.012 120);
+  --muted: oklch(0.92 0.026 135);
+  --muted-foreground: oklch(0.48 0.04 150);
+  --border: oklch(0.84 0.038 140);
+  --ring: oklch(0.52 0.12 155);
+  --warning: oklch(0.78 0.13 80);
+  --warning-foreground: oklch(0.35 0.08 70);
+  --destructive: oklch(0.52 0.17 28);
+  --destructive-foreground: oklch(0.99 0 0);
+  --radius: 0.875rem;
+}
+
+/* solstice: warm coral with plum ink */
+[data-theme="solstice"] {
+  --background: oklch(0.975 0.022 55);
+  --foreground: oklch(0.27 0.055 330);
+  --card: oklch(0.995 0.008 55);
+  --card-foreground: oklch(0.27 0.055 330);
+  --primary: oklch(0.64 0.18 35);
+  --primary-foreground: oklch(0.99 0.008 55);
+  --muted: oklch(0.93 0.035 45);
+  --muted-foreground: oklch(0.49 0.055 330);
+  --border: oklch(0.86 0.04 40);
+  --ring: oklch(0.64 0.18 35);
+  --warning: oklch(0.8 0.14 80);
+  --warning-foreground: oklch(0.36 0.08 70);
+  --destructive: oklch(0.5 0.19 20);
+  --destructive-foreground: oklch(0.99 0 0);
+  --radius: 1rem;
+}
+
+/* cobalt: crisp and technical */
+[data-theme="cobalt"] {
+  --background: oklch(0.97 0.015 255);
+  --foreground: oklch(0.22 0.055 265);
+  --card: oklch(0.995 0.006 255);
+  --card-foreground: oklch(0.22 0.055 265);
+  --primary: oklch(0.52 0.205 260);
+  --primary-foreground: oklch(0.99 0.005 255);
+  --muted: oklch(0.925 0.03 255);
+  --muted-foreground: oklch(0.48 0.065 260);
+  --border: oklch(0.84 0.045 255);
+  --ring: oklch(0.58 0.2 255);
+  --warning: oklch(0.78 0.14 78);
+  --warning-foreground: oklch(0.34 0.08 70);
+  --destructive: oklch(0.55 0.19 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --radius: 0.5rem;
+}
+
+/* paper: editorial monochrome with red pencil accents */
+[data-theme="paper"] {
+  --background: oklch(0.965 0.012 90);
+  --foreground: oklch(0.2 0.012 70);
+  --card: oklch(0.99 0.008 90);
+  --card-foreground: oklch(0.2 0.012 70);
+  --primary: oklch(0.48 0.17 28);
+  --primary-foreground: oklch(0.99 0.008 90);
+  --muted: oklch(0.92 0.014 88);
+  --muted-foreground: oklch(0.45 0.018 70);
+  --border: oklch(0.76 0.018 78);
+  --ring: oklch(0.48 0.17 28);
+  --warning: oklch(0.77 0.13 80);
+  --warning-foreground: oklch(0.32 0.07 65);
+  --destructive: oklch(0.46 0.18 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --radius: 0.25rem;
+  --theme-font-body: Georgia, "Times New Roman", serif;
+}
+
+/* TourScale: private account theme, sourced from /design. */
+[data-theme="tourscale"] {
+  --background: #f1f5f9;
+  --foreground: #1a1a2e;
+  --card: #ffffff;
+  --card-foreground: #1a1a2e;
+  --primary: #f86e4f;
+  --primary-foreground: #ffffff;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --border: #e2e8f0;
+  --ring: #398ffc;
+  --warning: #eab048;
+  --warning-foreground: #1a1a2e;
+  --destructive: #e05a3c;
+  --destructive-foreground: #ffffff;
+  --radius: 0.625rem;
+  --theme-font-body: "Roboto", system-ui, sans-serif;
+  --theme-font-heading: "Francois One", system-ui, sans-serif;
+  --theme-font-display: "Montserrat", system-ui, sans-serif;
+}

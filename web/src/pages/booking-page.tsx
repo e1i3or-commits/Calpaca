@@ -11,7 +11,7 @@ import {
   type RoutingAnswers,
   type SlotDto,
 } from "@/lib/api";
-import { useTheme } from "@/lib/theme";
+import { useBookingLayout, useTheme } from "@/lib/theme";
 import { allTimezones, browserTimezone, formatDayTime, formatTime } from "@/lib/time";
 import { SlotPicker } from "@/components/slot-picker";
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,7 @@ export function BookingPage({
     );
   }, [meta?.selectableHosts]);
   useTheme(meta?.theme);
+  const layout = useBookingLayout(meta?.layout);
 
   const selectedHostIds = useMemo(
     () =>
@@ -86,13 +87,13 @@ export function BookingPage({
   }
 
   if (step.name === "confirmed") {
-    return <Confirmation slot={step.slot} confirmation={step.confirmation} timezone={timezone} />;
+    return <Confirmation slot={step.slot} confirmation={step.confirmation} timezone={timezone} layout={layout} />;
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10">
-      <Card>
-        <CardHeader>
+    <div className="booking-shell mx-auto px-4 py-10" data-booking-layout={layout}>
+      <Card className="booking-card">
+        <CardHeader className="booking-header">
           {meta?.profile && <ProfileHeader profile={meta.profile} />}
           <CardTitle className="text-xl">{meta?.title ?? slug.replace(/-/g, " ")}</CardTitle>
           <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -108,7 +109,7 @@ export function BookingPage({
             </span>
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="booking-content">
           {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
           {step.name === "pick" && (
@@ -484,14 +485,16 @@ function Confirmation({
   slot,
   confirmation,
   timezone,
+  layout,
 }: {
   slot: SlotDto;
   confirmation: BookingConfirmation;
   timezone: string;
+  layout: "focus" | "split" | "compact";
 }) {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10">
-      <Card>
+    <div className="booking-shell mx-auto px-4 py-10" data-booking-layout={layout}>
+      <Card className="booking-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
             <Check className="h-5 w-5 text-primary" /> Booked
