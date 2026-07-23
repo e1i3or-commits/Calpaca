@@ -24,6 +24,7 @@ export interface InviteEmailInput {
   readonly icsAttached?: boolean;
   /** invitee's booking-form notes; rendered so the cc'd hosts see them */
   readonly notes?: string | null;
+  readonly location?: string | null;
   readonly theme?: string;
   readonly brandLogoUrl?: string | null;
 }
@@ -116,6 +117,9 @@ function composeHtml(
           <div style="margin:0;white-space:pre-wrap;color:${palette.text}">${escapeHtml(input.notes)}</div>
         </div>`
       : "";
+  const location = input.kind !== "cancelled" && input.location
+    ? `<div style="margin:16px 0 0;padding:14px 16px;background:${palette.panel};border-radius:8px"><div style="margin:0 0 5px;font-size:12px;font-weight:700;text-transform:uppercase;color:${palette.muted}">Location</div><div style="white-space:pre-wrap">${escapeHtml(input.location)}</div></div>`
+    : "";
   const actions =
     input.kind !== "cancelled" && input.links
       ? `
@@ -148,7 +152,7 @@ function composeHtml(
                 <div style="padding:16px;border-left:4px solid ${palette.primary};background:${palette.panel}">
                   <div style="margin:0 0 5px;font-size:12px;font-weight:700;text-transform:uppercase;color:${palette.muted}">${timeLabel}</div>
                   <div style="font-size:16px;line-height:1.5">${escapeHtml(when)}</div>
-                </div>${notes}${calendar}${actions}
+                </div>${location}${notes}${calendar}${actions}
               </td>
             </tr>
           </table>
@@ -182,6 +186,9 @@ export function composeInviteEmail(input: InviteEmailInput): InviteEmail {
 
   if (input.kind !== "cancelled" && input.notes) {
     lines.push("", `Notes from ${input.inviteeName}:`, input.notes);
+  }
+  if (input.kind !== "cancelled" && input.location) {
+    lines.push("", "Location:", input.location);
   }
 
   if (input.kind !== "cancelled") {

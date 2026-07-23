@@ -36,6 +36,18 @@ export type BookingQuestion = {
   options?: string[];
 };
 export type BookingAnswers = Record<string, string | string[] | boolean>;
+export type EventLocation = {
+  id: string;
+  type: "google_meet" | "phone" | "in_person" | "custom_url";
+  label: string;
+  address?: string;
+  instructions?: string;
+  url?: string;
+  phoneNumber?: string;
+  phoneDirection?: "organizer_calls_invitee" | "invitee_calls_organizer";
+  hostOverrides?: Record<string, Partial<Omit<EventLocation, "id" | "type" | "hostOverrides">>>;
+};
+export type BookingLocation = Omit<EventLocation, "hostOverrides">;
 export type MeetingPoll = {
   id: string;
   publicId: string;
@@ -132,6 +144,7 @@ export type EventTypeMeta = {
   logoUrl?: string;
   meetingFormats?: ("phone" | "google_meet")[];
   bookingQuestions?: BookingQuestion[];
+  locations?: EventLocation[];
   /** absent only from pre-profile servers */
   profile?: EventTypeProfile;
   selectableHosts?: {
@@ -497,6 +510,7 @@ export function confirmBooking(args: {
   hosts?: string[];
   meetingFormat: "phone" | "google_meet";
   inviteePhone?: string;
+  locationId?: string;
   bookingAnswers?: BookingAnswers;
 }): Promise<BookingConfirmation> {
   return request("/bookings", { method: "POST", body: JSON.stringify(args) });
@@ -780,6 +794,7 @@ export type AdminEventType = {
   logoUrl?: string | null;
   meetingFormats?: ("phone" | "google_meet")[];
   bookingQuestions?: BookingQuestion[];
+  locations?: EventLocation[];
   hosts: (EventTypeHost & { name: string; email: string })[];
 };
 
@@ -917,6 +932,7 @@ export type AdminBookingDetail = AdminBooking & {
   routingAnswers: RoutingAnswers | null;
   bookingAnswers?: BookingAnswers;
   bookingQuestions?: BookingQuestion[];
+  bookingLocation?: BookingLocation;
   hasGoogleEvent: boolean;
   events: {
     kind: string;

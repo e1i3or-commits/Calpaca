@@ -16,6 +16,11 @@ import {
 import type { BookingState, BookingStateError } from "../core/booking/state";
 import type { RoutingAnswers } from "../core/routing/condition";
 import type { BookingAnswers } from "../core/booking/questions";
+import {
+  resolveBookingLocation,
+  type EventLocation,
+  type LocationType,
+} from "../core/booking/locations";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -40,8 +45,9 @@ export interface Invitee {
 }
 
 export interface MeetingDetails {
-  readonly format: "phone" | "google_meet";
+  readonly format: LocationType;
   readonly phone?: string;
+  readonly location?: EventLocation;
 }
 
 export type ConfirmHoldError =
@@ -225,6 +231,9 @@ export async function confirmHold(
       hostUserIds = [winningRow.hostUserId];
       holdIdsToConfirm = [winningRow.id];
     }
+    const bookingLocation = meeting?.location
+      ? resolveBookingLocation(meeting.location, hostUserIds[0])
+      : null;
 
     const [booking] = await tx
       .insert(bookings)
@@ -239,6 +248,7 @@ export async function confirmHold(
         inviteeNotes: invitee.notes ?? null,
         meetingFormat: meeting?.format ?? null,
         inviteePhone: meeting?.phone ?? null,
+        bookingLocation,
         hostUserIds,
         rescheduleToken: generateToken(),
         cancelToken: generateToken(),
@@ -257,6 +267,7 @@ export async function confirmHold(
         hostUserIds,
         ...(routingAnswers ? { routingAnswers } : {}),
         ...(bookingAnswers ? { bookingAnswers } : {}),
+        ...(bookingLocation ? { bookingLocation } : {}),
         ...(meeting ? { meeting } : {}),
         ...(assignmentExplanation ? { assignment: assignmentExplanation } : {}),
       },

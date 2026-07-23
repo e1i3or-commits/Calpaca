@@ -5,6 +5,7 @@ import * as schema from "./schema";
 import { eventTypeHosts, eventTypes, schedules, teamMembers, teams, users } from "./schema";
 import type { ScheduleOverride } from "../core/availability/overrides";
 import type { BookingQuestion } from "../core/booking/questions";
+import type { EventLocation } from "../core/booking/locations";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -346,6 +347,7 @@ export interface AdminEventType {
   readonly logoUrl?: string | null;
   readonly meetingFormats?: ("phone" | "google_meet")[];
   readonly bookingQuestions?: BookingQuestion[];
+  readonly locations?: EventLocation[];
   readonly agentPolicy?: {
     readonly enabled: boolean;
     readonly autoExpireHoldsMin?: number;
@@ -401,6 +403,7 @@ function toAdminEventType(
     logoUrl: row.logoUrl,
     meetingFormats: row.meetingFormats,
     bookingQuestions: row.bookingQuestions,
+    locations: row.locations,
     agentPolicy: row.agentPolicy,
     hosts,
   };
@@ -462,6 +465,7 @@ export interface EventTypeInput {
   readonly logoUrl?: string | null;
   readonly meetingFormats?: ("phone" | "google_meet")[];
   readonly bookingQuestions?: BookingQuestion[];
+  readonly locations?: EventLocation[];
   /** Same compatibility behavior as theme for dashboard clients predating agent policy. */
   readonly agentPolicy?: {
     readonly enabled: boolean;
@@ -541,6 +545,7 @@ export async function updateEventType(
         logoUrl: input.logoUrl,
         meetingFormats: input.meetingFormats,
         bookingQuestions: input.bookingQuestions,
+        locations: input.locations,
         agentPolicy: input.agentPolicy,
       })
       .where(eq(eventTypes.id, id))

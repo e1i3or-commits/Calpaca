@@ -22,6 +22,7 @@ export interface IcsInput {
   readonly end: Temporal.Instant;
   readonly summary: string;
   readonly description?: string;
+  readonly location?: string;
   readonly organizer: IcsPerson;
   readonly attendees: readonly IcsPerson[];
 }
@@ -92,6 +93,7 @@ export function buildIcs(input: IcsInput): string {
     `DTEND:${formatUtc(input.end)}`,
     `SUMMARY:${escapeText(input.summary)}`,
     ...(input.description ? [`DESCRIPTION:${escapeText(input.description)}`] : []),
+    ...(input.location ? [`LOCATION:${escapeText(input.location)}`] : []),
     `STATUS:${input.method === "CANCEL" ? "CANCELLED" : "CONFIRMED"}`,
     personLine("ORGANIZER", input.organizer),
     ...input.attendees.map((a) => personLine("ATTENDEE", a)),

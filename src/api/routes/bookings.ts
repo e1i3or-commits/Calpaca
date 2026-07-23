@@ -45,6 +45,7 @@ import {
   validateBookingAnswers,
   type BookingAnswers,
 } from "../../core/booking/questions";
+import { legacyLocations } from "../../core/booking/locations";
 import type { RoutingAnswers } from "../../core/routing/condition";
 import { ok, type Result } from "../../lib/result";
 import { suggestEmailDomain } from "../../lib/email-typo";
@@ -189,6 +190,7 @@ const bookingBodySchema = z.object({
       .transform((s) => (s?.trim() ? s.trim() : undefined)),
   }),
   meetingFormat: z.enum(["phone", "google_meet"]).optional(),
+  locationId: z.string().min(1).max(80).optional(),
   inviteePhone: z.string().trim().min(7).max(40).optional(),
   // present when the booking came through a routing form (/routing/evaluate)
   routingAnswers: z
@@ -551,12 +553,26 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (agent && !eventType.agentPolicy?.enabled) {
       return c.json({ error: "agent_not_allowed" }, 403);
     }
-    const allowedFormats = eventType.meetingFormats ?? ["google_meet"];
-    const meetingFormat = parsed.data.meetingFormat ?? allowedFormats[0];
-    if (!meetingFormat || !allowedFormats.includes(meetingFormat)) {
-      return c.json({ error: "meeting_format_not_allowed" }, 400);
+    const locations = eventType.locations?.length
+      ? eventType.locations
+      : legacyLocations(eventType.meetingFormats ?? ["google_meet"]);
+    const selectedLocation = parsed.data.locationId
+      ? locations.find((location) => location.id === parsed.data.locationId)
+      : parsed.data.meetingFormat
+        ? locations.find((location) => location.type === parsed.data.meetingFormat)
+        : locations[0];
+    if (!selectedLocation) {
+      return c.json({
+        error: parsed.data.locationId
+          ? "location_not_allowed"
+          : "meeting_format_not_allowed",
+      }, 400);
     }
-    if (meetingFormat === "phone" && !inviteePhone) {
+    if (
+      selectedLocation.type === "phone"
+      && (selectedLocation.phoneDirection ?? "organizer_calls_invitee") === "organizer_calls_invitee"
+      && !inviteePhone
+    ) {
       return c.json({ error: "phone_required" }, 400);
     }
     const validatedAnswers = validateBookingAnswers(
@@ -594,7 +610,11 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       invitee,
       assignment,
       routingAnswers,
-      { format: meetingFormat, ...(inviteePhone ? { phone: inviteePhone } : {}) },
+      {
+        format: selectedLocation.type,
+        location: selectedLocation,
+        ...(inviteePhone ? { phone: inviteePhone } : {}),
+      },
       validatedAnswers.answers,
     );
     if (!confirmed.ok) {

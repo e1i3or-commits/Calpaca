@@ -855,9 +855,16 @@ function BookingDetailPanel({
             <DetailSection title="Invitee">
               <p className="text-sm">{booking.inviteeEmail}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {booking.meetingFormat === "phone" ? "Phone call" : "Google Meet"}
+                {booking.bookingLocation?.label
+                  ?? (booking.meetingFormat === "phone" ? "Phone call" : "Google Meet")}
                 {booking.inviteePhone ? ` · ${booking.inviteePhone}` : ""}
               </p>
+              {booking.bookingLocation && (
+                <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                  {[booking.bookingLocation.address, booking.bookingLocation.url, booking.bookingLocation.phoneNumber, booking.bookingLocation.instructions]
+                    .filter(Boolean).join("\n")}
+                </p>
+              )}
               {booking.inviteeNotes && <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm">{booking.inviteeNotes}</p>}
             </DetailSection>
 
@@ -1688,6 +1695,7 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   layout: "focus",
   logoUrl: null,
   meetingFormats: ["google_meet"],
+  locations: [{ id: "google-meet", type: "google_meet", label: "Google Meet" }],
   bookingQuestions: [],
   hosts: [],
 };
@@ -1873,6 +1881,11 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                           layout: et.layout ?? "focus",
                           logoUrl: et.logoUrl ?? null,
                           meetingFormats: et.meetingFormats ?? ["google_meet"],
+                          locations: et.locations?.length
+                            ? et.locations
+                            : (et.meetingFormats ?? ["google_meet"]).map((format) => format === "phone"
+                              ? { id: "phone", type: "phone" as const, label: "Phone call", phoneDirection: "organizer_calls_invitee" as const }
+                              : { id: "google-meet", type: "google_meet" as const, label: "Google Meet" }),
                           bookingQuestions: et.bookingQuestions ?? [],
                           hosts: et.hosts.map(({ userId, role, weight }) => ({
                             userId,
@@ -2167,34 +2180,92 @@ function EventTypeForm({
             })}
           </div>
         </div>
-        <div className="flex flex-col gap-1.5 sm:col-span-2">
-          <Label>Booker can choose</Label>
-          <div className="flex flex-wrap gap-2">
-            {([
-              ["google_meet", "Google Meet"],
-              ["phone", "Phone call"],
-            ] as const).map(([value, label]) => {
-              const selected = (form.meetingFormats ?? ["google_meet"]).includes(value);
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={selected}
-                  className={`rounded-lg border px-3 py-2 text-sm ${
-                    selected ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground"
-                  }`}
-                  onClick={() => {
-                    const current = form.meetingFormats ?? ["google_meet"];
-                    const next = selected ? current.filter((item) => item !== value) : [...current, value];
-                    if (next.length > 0) set("meetingFormats", next);
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
+        <div className="flex flex-col gap-3 sm:col-span-2">
+          <div>
+            <Label>Locations</Label>
+            <p className="text-xs text-muted-foreground">Invitees choose one. Team hosts may override the details.</p>
           </div>
-          <p className="text-xs text-muted-foreground">Invitees choose one of the enabled formats when they book.</p>
+          {(form.locations ?? []).map((location, index) => {
+            const setLocation = (patch: Partial<typeof location>) => set(
+              "locations",
+              (form.locations ?? []).map((item, itemIndex) =>
+                itemIndex === index ? { ...item, ...patch } : item),
+            );
+            const detailKey = location.type === "in_person"
+              ? "address"
+              : location.type === "custom_url" ? "url" : location.type === "phone" ? "phoneNumber" : null;
+            return (
+              <div key={location.id} className="space-y-3 rounded-xl border border-border p-3">
+                <div className="grid gap-2 sm:grid-cols-[1fr_180px_auto]">
+                  <Input value={location.label} placeholder="Location label" onChange={(event) => setLocation({ label: event.target.value })} />
+                  <select className="h-9 rounded-md border border-border bg-card px-3 text-sm" value={location.type} onChange={(event) => {
+                    const type = event.target.value as typeof location.type;
+                    setLocation({
+                      type,
+                      ...(type === "phone" ? { phoneDirection: "organizer_calls_invitee" } : {}),
+                    });
+                  }}>
+                    <option value="google_meet">Google Meet</option>
+                    <option value="phone">Phone</option>
+                    <option value="in_person">In person</option>
+                    <option value="custom_url">Custom URL</option>
+                  </select>
+                  <Button type="button" variant="ghost" size="sm" disabled={(form.locations?.length ?? 0) === 1} onClick={() => set(
+                    "locations",
+                    (form.locations ?? []).filter((_, itemIndex) => itemIndex !== index),
+                  )}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+                {detailKey && (
+                  <Input
+                    type={detailKey === "url" ? "url" : "text"}
+                    placeholder={detailKey === "address" ? "Address" : detailKey === "url" ? "https://…" : "Organizer phone number (if invitee calls)"}
+                    value={location[detailKey] ?? ""}
+                    onChange={(event) => setLocation({ [detailKey]: event.target.value || undefined })}
+                  />
+                )}
+                {location.type === "phone" && (
+                  <select className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm" value={location.phoneDirection ?? "organizer_calls_invitee"} onChange={(event) => setLocation({
+                    phoneDirection: event.target.value as NonNullable<typeof location.phoneDirection>,
+                  })}>
+                    <option value="organizer_calls_invitee">Organizer calls invitee</option>
+                    <option value="invitee_calls_organizer">Invitee calls organizer</option>
+                  </select>
+                )}
+                <Textarea value={location.instructions ?? ""} placeholder="Instructions (optional)" onChange={(event) => setLocation({ instructions: event.target.value || undefined })} />
+                {form.hosts.length > 1 && detailKey && (
+                  <div className="space-y-2 border-t border-border pt-3">
+                    <p className="text-xs font-medium text-muted-foreground">Per-host override</p>
+                    {form.hosts.map((host) => {
+                      const person = users.find((user) => user.id === host.userId);
+                      const override = location.hostOverrides?.[host.userId] ?? {};
+                      return (
+                        <div key={host.userId} className="grid gap-2 sm:grid-cols-[140px_1fr] sm:items-center">
+                          <span className="truncate text-xs">{person?.name ?? host.userId}</span>
+                          <Input
+                            placeholder={`Use default ${detailKey.replace(/([A-Z])/g, " $1").toLowerCase()}`}
+                            value={override[detailKey] ?? ""}
+                            onChange={(event) => setLocation({
+                              hostOverrides: {
+                                ...(location.hostOverrides ?? {}),
+                                [host.userId]: { ...override, [detailKey]: event.target.value || undefined },
+                              },
+                            })}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <Button type="button" variant="outline" className="self-start" onClick={() => {
+            const next = (form.locations?.length ?? 0) + 1;
+            set("locations", [
+              ...(form.locations ?? []),
+              { id: `location-${next}`, type: "in_person", label: "In person", address: "" },
+            ]);
+          }}><Plus className="h-4 w-4" /> Add location</Button>
         </div>
         <div className="flex flex-col gap-3 sm:col-span-2">
           <div>

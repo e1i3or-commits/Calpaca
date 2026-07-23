@@ -192,6 +192,7 @@ export async function fanOutBookingWebhooks(
           ...(Object.keys(ctx.booking.bookingAnswers ?? {}).length
             ? { answers: ctx.booking.bookingAnswers }
             : {}),
+          ...(ctx.booking.bookingLocation ? { location: ctx.booking.bookingLocation } : {}),
           ...(opts?.reason !== undefined && { reason: opts.reason }),
         },
       }),

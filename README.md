@@ -33,6 +33,8 @@ release notes live in [CHANGELOG.md](CHANGELOG.md), and releases are tagged
   questions, and calendar confirmations.
 - **Booking questions:** collect validated text, choice, phone, consent, and
   hidden prefill data on each event type.
+- **Flexible locations:** offer Google Meet, phone, in-person, or custom-link
+  choices with team-host overrides.
 - **Date-aware availability:** recurring hours, alternate-date hours, time-off
   ranges, and teammate forwarding.
 - **Agent-ready:** a stdio MCP server exposes availability, holds, booking,

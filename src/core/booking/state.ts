@@ -3,6 +3,7 @@ import { ok, err, type Result } from "../../lib/result";
 import type { RoutingAnswers } from "../routing/condition";
 import type { AssignmentExplanation } from "../assignment/round-robin";
 import type { BookingAnswers } from "./questions";
+import type { BookingLocation } from "./locations";
 
 /** Mirrors docs/SCHEMA.md `booking_event_kind`. Duplicated, not imported from
  * src/db/schema: core must not depend on the database layer. */
@@ -24,6 +25,7 @@ export interface CreatedPayload {
   /** present when the invitee arrived via a routing form */
   readonly routingAnswers?: RoutingAnswers;
   readonly bookingAnswers?: BookingAnswers;
+  readonly bookingLocation?: BookingLocation;
   /** round-robin decision captured at booking time; absent for solo/group */
   readonly assignment?: AssignmentExplanation;
 }

@@ -5,6 +5,14 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-23
+
+### Added
+
+- Labeled Google Meet, phone, in-person, and custom-link locations with
+  per-host overrides and booking-time snapshots across notifications,
+  calendars, webhooks, details, and exports.
+
 ## [0.11.0] - 2026-07-23
 
 ### Added

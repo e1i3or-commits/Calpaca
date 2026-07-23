@@ -30,6 +30,7 @@ import { scoreSlots } from "../../core/availability/scoring";
 import { groupAvailability, type GroupHost } from "../../core/availability/group";
 import { resolveBookingLayout, resolveTheme } from "../../core/theming/themes";
 import { publicWorkspaceId } from "../public-workspace";
+import { legacyLocations } from "../../core/booking/locations";
 import { getInviteeCalendarSession as dbGetInviteeCalendarSession } from "../../db/invitee-calendar-repo";
 import { rankByMutualAvailability } from "../../core/availability/mutual";
 import { getPublicWorkspaceEntitlements } from "../../db/workspace-repo";
@@ -282,6 +283,17 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
         : {}),
       ...(eventType.meetingFormats ? { meetingFormats: eventType.meetingFormats } : {}),
       ...(eventType.bookingQuestions ? { bookingQuestions: eventType.bookingQuestions } : {}),
+      ...(eventType.locations
+        ? {
+            locations: eventType.locations.length
+              ? eventType.locations.map((configuredLocation) => {
+                  const { hostOverrides, ...location } = configuredLocation;
+                  void hostOverrides;
+                  return location;
+                })
+              : legacyLocations(eventType.meetingFormats ?? ["google_meet"]),
+          }
+        : {}),
       ...((eventType.capacity ?? 1) > 1 ? { capacity: eventType.capacity } : {}),
       ...(eventType.layout ? { layout: resolveBookingLayout(eventType.layout) } : {}),
       ...(profile ? { profile } : {}),

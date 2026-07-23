@@ -72,6 +72,23 @@ function preparationText(ctx: InviteContext): string {
   ].join("\n\n");
 }
 
+function locationText(ctx: InviteContext): string {
+  const location = ctx.booking.bookingLocation;
+  if (!location) return "";
+  if (location.type === "google_meet") return location.label;
+  if (location.type === "phone") {
+    return location.phoneDirection === "invitee_calls_organizer"
+      ? `${location.label}: ${location.phoneNumber ?? ""}`.trim()
+      : `${location.label}: organizer calls ${ctx.booking.inviteePhone ?? "invitee"}`;
+  }
+  return [
+    location.label,
+    location.address,
+    location.url,
+    location.instructions,
+  ].filter(Boolean).join("\n");
+}
+
 export async function sendInvite(bookingId: string, kind: InviteKind): Promise<void> {
   if (!isMailerConfigured()) {
     console.log(`[jobs] invite ${kind} for ${bookingId} skipped: SMTP not configured`);
@@ -151,6 +168,7 @@ async function syncGoogleEvent(ctx: InviteContext, kind: InviteKind): Promise<bo
 
     const links = buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken);
     const preparation = preparationText(ctx);
+    const renderedLocation = locationText(ctx);
     const descriptionParts = [
       ...(preparation ? [`Details from ${booking.inviteeName}:\n${preparation}`] : []),
       ...(links ? [`Reschedule: ${links.reschedule}\nCancel: ${links.cancel}`] : []),
@@ -161,10 +179,9 @@ async function syncGoogleEvent(ctx: InviteContext, kind: InviteKind): Promise<bo
       event: {
         summary: `${ctx.eventTypeTitle}: ${organizer.name} and ${booking.inviteeName}`,
         description: descriptionParts.length ? descriptionParts.join("\n\n") : undefined,
-        ...(booking.meetingFormat === "phone" && booking.inviteePhone
-          ? { location: `Phone: ${booking.inviteePhone}` }
-          : {}),
-        createGoogleMeet: booking.meetingFormat === "google_meet",
+        ...(renderedLocation ? { location: renderedLocation } : {}),
+        createGoogleMeet: booking.bookingLocation?.type === "google_meet"
+          || (!booking.bookingLocation && booking.meetingFormat === "google_meet"),
         startIso,
         endIso,
         attendees: [
@@ -275,6 +292,7 @@ export function buildMail(
   const [organizer] = hosts;
   if (!organizer) throw new Error(`booking ${booking.id} has no hosts`);
   const preparation = preparationText(ctx);
+  const renderedLocation = locationText(ctx);
 
   const email = composeInviteEmail({
     kind,
@@ -287,6 +305,7 @@ export function buildMail(
     links: kind === "cancelled" ? null : buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken),
     icsAttached: includeIcs,
     notes: preparation || null,
+    location: renderedLocation || null,
     theme: ctx.eventTypeTheme,
     brandLogoUrl: emailLogoUrl(ctx),
   });
@@ -303,6 +322,7 @@ export function buildMail(
         ...(preparation
           ? { description: `Details from ${booking.inviteeName}:\n${preparation}` }
           : {}),
+        ...(renderedLocation ? { location: renderedLocation } : {}),
         organizer: { name: organizer.name, email: organizer.email },
         attendees: [
           { name: booking.inviteeName, email: booking.inviteeEmail },

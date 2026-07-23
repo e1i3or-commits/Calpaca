@@ -153,7 +153,7 @@ features matter.
 | Date overrides and OOO ranges | Shipped | Unavailable/alternate hours, DST-safe ranges, and teammate forwarding |
 | Multiple connected calendars | Shipped | Per-calendar conflict checking, health, and one write destination |
 | Custom booking questions | Shipped | Text, textarea, select, multiselect, phone, checkbox; required/hidden |
-| Locations | M | In-person, phone, custom URL, Google Meet; per-host override |
+| Locations | Shipped | In-person, phone, custom URL, Google Meet; per-host override |
 | Multiple selectable durations | M | Preserve buffers, caps, holds, and scoring per selected duration |
 | One-off offers and single-use links | M | Curated slots, optional reservation holds, viewed/booked/expired state |
 | Availability troubleshooter | M | Explain why a time is unavailable without exposing private events |

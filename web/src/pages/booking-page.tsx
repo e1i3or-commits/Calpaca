@@ -14,6 +14,7 @@ import {
   type BookingQuestion,
   type EventTypeMeta,
   type EventTypeProfile,
+  type EventLocation,
   type RoutingAnswers,
   type SlotDto,
 } from "@/lib/api";
@@ -326,6 +327,10 @@ export function BookingPage({
               optionalHosts={step.optionalHosts}
               routingAnswers={routingAnswers}
               meetingFormats={meta?.meetingFormats ?? ["google_meet"]}
+              locations={meta?.locations ?? (meta?.meetingFormats ?? ["google_meet"]).map((format) =>
+                format === "phone"
+                  ? { id: "phone", type: "phone" as const, label: "Phone call", phoneDirection: "organizer_calls_invitee" as const }
+                  : { id: "google-meet", type: "google_meet" as const, label: "Google Meet" })}
               bookingQuestions={meta?.bookingQuestions ?? []}
               onBack={() => setStep({ name: "pick" })}
               onError={(e) => {
@@ -626,6 +631,7 @@ function DetailsStep({
   optionalHosts,
   routingAnswers,
   meetingFormats,
+  locations,
   bookingQuestions,
   onBack,
   onError,
@@ -639,6 +645,7 @@ function DetailsStep({
   optionalHosts?: string[];
   routingAnswers?: RoutingAnswers;
   meetingFormats: ("phone" | "google_meet")[];
+  locations: EventLocation[];
   bookingQuestions: BookingQuestion[];
   onBack: () => void;
   onError: (e: unknown) => void;
@@ -650,6 +657,8 @@ function DetailsStep({
   const [meetingFormat, setMeetingFormat] = useState<"phone" | "google_meet">(
     meetingFormats[0] ?? "google_meet",
   );
+  const [locationId, setLocationId] = useState(locations[0]?.id ?? "");
+  const selectedLocation = locations.find((location) => location.id === locationId) ?? locations[0];
   const [phone, setPhone] = useState("");
   const [bookingAnswers, setBookingAnswers] = useState<BookingAnswers>(() => {
     const params = new URLSearchParams(window.location.search);
@@ -681,7 +690,8 @@ function DetailsStep({
         routingAnswers,
         hosts,
         meetingFormat,
-        ...(meetingFormat === "phone" ? { inviteePhone: phone.trim() } : {}),
+        locationId: selectedLocation?.id,
+        ...(selectedLocation?.type === "phone" && phone.trim() ? { inviteePhone: phone.trim() } : {}),
         bookingAnswers,
       });
       onConfirmed(confirmation);
@@ -729,29 +739,38 @@ function DetailsStep({
           <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>Meeting format</Label>
-          <div className="grid grid-cols-2 gap-2">
-            {meetingFormats.map((format) => {
-              const active = meetingFormat === format;
-              const Icon = format === "phone" ? Phone : Video;
+          <Label>Location</Label>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {locations.map((location) => {
+              const active = selectedLocation?.id === location.id;
+              const Icon = location.type === "phone" ? Phone : location.type === "google_meet" ? Video : Globe;
               return (
                 <button
-                  key={format}
+                  key={location.id}
                   type="button"
                   aria-pressed={active}
                   className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm ${
                     active ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border"
                   }`}
-                  onClick={() => setMeetingFormat(format)}
+                  onClick={() => {
+                    setLocationId(location.id);
+                    if (location.type === "phone" || location.type === "google_meet") {
+                      setMeetingFormat(location.type);
+                    }
+                  }}
                 >
                   <Icon className="h-4 w-4" />
-                  {format === "phone" ? "Phone call" : "Google Meet"}
+                  <span>
+                    <span className="block">{location.label}</span>
+                    {location.address && <span className="block text-xs text-muted-foreground">{location.address}</span>}
+                  </span>
                 </button>
               );
             })}
           </div>
+          {selectedLocation?.instructions && <p className="text-xs text-muted-foreground">{selectedLocation.instructions}</p>}
         </div>
-        {meetingFormat === "phone" && (
+        {selectedLocation?.type === "phone" && (selectedLocation.phoneDirection ?? "organizer_calls_invitee") === "organizer_calls_invitee" && (
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="phone">Phone number</Label>
             <Input
@@ -784,7 +803,11 @@ function DetailsStep({
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
-        <Button type="submit" disabled={submitting || !name || !email || (meetingFormat === "phone" && !phone.trim())}>
+        <Button type="submit" disabled={submitting || !name || !email || !selectedLocation || (
+          selectedLocation.type === "phone"
+          && (selectedLocation.phoneDirection ?? "organizer_calls_invitee") === "organizer_calls_invitee"
+          && !phone.trim()
+        )}>
           {submitting ? "Booking…" : "Confirm booking"}
         </Button>
       </form>

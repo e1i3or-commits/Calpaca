@@ -282,6 +282,38 @@ const eventTypeBodySchema = z
         context.addIssue({ code: "custom", message: "select questions require options" });
       }
     })).max(20).default([]),
+    locations: z.array(z.object({
+      id: z.string().min(1).max(80).regex(/^[a-z0-9][a-z0-9_-]*$/),
+      type: z.enum(["google_meet", "phone", "in_person", "custom_url"]),
+      label: z.string().trim().min(1).max(200),
+      address: z.string().trim().max(500).optional(),
+      instructions: z.string().trim().max(2000).optional(),
+      url: z.string().url().max(2048).optional(),
+      phoneNumber: z.string().trim().max(80).optional(),
+      phoneDirection: z.enum(["organizer_calls_invitee", "invitee_calls_organizer"]).optional(),
+      hostOverrides: z.record(z.string().uuid(), z.object({
+        label: z.string().trim().min(1).max(200).optional(),
+        address: z.string().trim().max(500).optional(),
+        instructions: z.string().trim().max(2000).optional(),
+        url: z.string().url().max(2048).optional(),
+        phoneNumber: z.string().trim().max(80).optional(),
+        phoneDirection: z.enum(["organizer_calls_invitee", "invitee_calls_organizer"]).optional(),
+      })).optional(),
+    }).superRefine((location, context) => {
+      if (location.type === "in_person" && !location.address) {
+        context.addIssue({ code: "custom", message: "in-person locations require an address" });
+      }
+      if (location.type === "custom_url" && !location.url) {
+        context.addIssue({ code: "custom", message: "custom URL locations require a URL" });
+      }
+      if (
+        location.type === "phone"
+        && location.phoneDirection === "invitee_calls_organizer"
+        && !location.phoneNumber
+      ) {
+        context.addIssue({ code: "custom", message: "invitee-calls-organizer requires a phone number" });
+      }
+    })).min(1).max(20).optional(),
     agentPolicy: z
       .object({
         enabled: z.boolean(),
@@ -307,6 +339,9 @@ const eventTypeBodySchema = z
   })
   .refine((et) => new Set(et.bookingQuestions.map((question) => question.id)).size === et.bookingQuestions.length, {
     message: "booking question ids must be unique",
+  })
+  .refine((et) => !et.locations || new Set(et.locations.map((location) => location.id)).size === et.locations.length, {
+    message: "location ids must be unique",
   });
 
 const teamBodySchema = z.object({
@@ -410,10 +445,11 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
         booking.status,
         booking.inviteStatus,
         detail?.bookingAnswers ? JSON.stringify(detail.bookingAnswers) : "",
+        detail?.bookingLocation ? JSON.stringify(detail.bookingLocation) : "",
       ];
     });
     const csv = [
-      ["booking_id", "event_type", "start", "end", "invitee_name", "invitee_email", "status", "invite_status", "booking_answers"],
+      ["booking_id", "event_type", "start", "end", "invitee_name", "invitee_email", "status", "invite_status", "booking_answers", "location"],
       ...rows,
     ].map((row) => row.map(escapeCsv).join(",")).join("\r\n");
     c.header("Content-Type", "text/csv; charset=utf-8");
@@ -441,6 +477,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
       ...(detail.bookingAnswers
         ? { bookingAnswers: detail.bookingAnswers, bookingQuestions: detail.bookingQuestions ?? [] }
         : {}),
+      ...(detail.bookingLocation ? { bookingLocation: detail.bookingLocation } : {}),
       hasGoogleEvent: detail.hasGoogleEvent,
       events: detail.events.map((event) => ({
         kind: event.kind,
