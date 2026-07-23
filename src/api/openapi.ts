@@ -15,6 +15,7 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/version", "System", "Get the running Calpaca version"],
   ["get", "/openapi.json", "System", "Download the OpenAPI document"],
   ["get", "/event-types/{slug}", "Booking", "Get public event type metadata"],
+  ["get", "/booking-page", "Booking", "Get a public workspace booking page"],
   ["get", "/availability", "Booking", "List available and recommended slots"],
   ["post", "/holds", "Booking", "Temporarily hold one or more host slots"],
   ["post", "/bookings", "Booking", "Confirm a held booking"],

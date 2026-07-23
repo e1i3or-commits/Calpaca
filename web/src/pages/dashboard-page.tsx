@@ -1683,6 +1683,7 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   title: "",
   description: null,
   durationMinutes: 30,
+  selectableDurations: [30],
   capacity: 1,
   bufferBeforeMin: 0,
   bufferAfterMin: 0,
@@ -1783,6 +1784,16 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     });
   };
 
+  const copyBookingPage = () => {
+    const url = bookingBase.includes("/book/")
+      ? bookingBase.replace("/book/", "/booking/")
+      : `${bookingBase}/booking`;
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopied("booking-page");
+      setTimeout(() => setCopied(null), 1500);
+    });
+  };
+
   const embedSnippet = (slug: string, mode: "inline" | "popup") => {
     const bookingUrl = bookingBase.includes("/book/")
       ? `${bookingBase}/${slug}`
@@ -1808,9 +1819,15 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
           <CardDescription>What invitees can book, and with whom.</CardDescription>
         </div>
         {!editing && (
-          <Button size="sm" onClick={() => setEditing({ id: null, form: DEFAULT_EVENT_TYPE })}>
-            <Plus className="mr-1 h-4 w-4" /> New
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={copyBookingPage}>
+              <Copy className="mr-1 h-4 w-4" />
+              {copied === "booking-page" ? "Copied" : "Booking page"}
+            </Button>
+            <Button size="sm" onClick={() => setEditing({ id: null, form: DEFAULT_EVENT_TYPE })}>
+              <Plus className="mr-1 h-4 w-4" /> New
+            </Button>
+          </div>
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -1841,7 +1858,9 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                 <span className="min-w-0 grow basis-full sm:basis-0">
                   <span className="font-medium">{et.title}</span>
                   <span className="ml-2 text-xs text-muted-foreground">
-                    /{et.slug} · {et.durationMinutes} min · {et.mode.replace("_", " ")}
+                    /{et.slug} · {(et.selectableDurations?.length ?? 0) > 1
+                      ? `${et.selectableDurations!.join("/")} min`
+                      : `${et.durationMinutes} min`} · {et.mode.replace("_", " ")}
                   </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1">
@@ -1869,6 +1888,9 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                           title: et.title,
                           description: et.description ?? null,
                           durationMinutes: et.durationMinutes,
+                          selectableDurations: et.selectableDurations?.length
+                            ? et.selectableDurations
+                            : [et.durationMinutes],
                           capacity: et.capacity,
                           bufferBeforeMin: et.bufferBeforeMin,
                           bufferAfterMin: et.bufferAfterMin,
@@ -2040,8 +2062,47 @@ function EventTypeForm({
             min={5}
             max={480}
             value={form.durationMinutes}
-            onChange={(e) => set("durationMinutes", Number(e.target.value))}
+            onChange={(e) => {
+              const durationMinutes = Number(e.target.value);
+              onChange({
+                ...form,
+                durationMinutes,
+                selectableDurations: [
+                  ...new Set([...(form.selectableDurations ?? []), durationMinutes]),
+                ].sort((a, b) => a - b),
+              });
+            }}
           />
+        </div>
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <Label>Invitee duration choices</Label>
+          <div className="flex flex-wrap gap-2">
+            {[15, 30, 45, 60, 90, 120].map((minutes) => {
+              const selected = (form.selectableDurations ?? [form.durationMinutes]).includes(minutes);
+              const isDefault = minutes === form.durationMinutes;
+              return (
+                <Button
+                  key={minutes}
+                  type="button"
+                  size="sm"
+                  variant={selected ? "default" : "outline"}
+                  disabled={isDefault}
+                  onClick={() => {
+                    const current = form.selectableDurations ?? [form.durationMinutes];
+                    set("selectableDurations", selected
+                      ? current.filter((duration) => duration !== minutes)
+                      : [...current, minutes].sort((a, b) => a - b));
+                  }}
+                >
+                  {minutes < 60 ? `${minutes} min` : `${minutes / 60} hr`}
+                  {isDefault ? " · default" : ""}
+                </Button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The default duration is always available. Add choices invitees can select before viewing times.
+          </p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-capacity">Seats per time</Label>

@@ -5,6 +5,7 @@ import {
   getEventTypeBySlug as dbGetEventTypeBySlug,
   getEventTypeHosts as dbGetEventTypeHosts,
   getEventTypeProfile as dbGetEventTypeProfile,
+  getPublicBookingPage as dbGetPublicBookingPage,
   getSchedulesForUsers as dbGetSchedulesForUsers,
   getBusyForUsers as dbGetBusyForUsers,
   getCapacityAwareBusyForUsers as dbGetCapacityAwareBusyForUsers,
@@ -14,6 +15,7 @@ import {
   type EventTypeProfile,
   type HostSchedule,
   type HostBusy,
+  type PublicBookingPage,
 } from "../../db/availability-repo";
 import {
   effectiveOpenIntervals,
@@ -31,6 +33,7 @@ import { groupAvailability, type GroupHost } from "../../core/availability/group
 import { resolveBookingLayout, resolveTheme } from "../../core/theming/themes";
 import { publicWorkspaceId } from "../public-workspace";
 import { legacyLocations } from "../../core/booking/locations";
+import { allowedDurations } from "../../core/booking/durations";
 import { getInviteeCalendarSession as dbGetInviteeCalendarSession } from "../../db/invitee-calendar-repo";
 import { rankByMutualAvailability } from "../../core/availability/mutual";
 import { getPublicWorkspaceEntitlements } from "../../db/workspace-repo";
@@ -69,6 +72,7 @@ export interface AvailabilityDeps {
     capability: string,
   ) => Promise<{ busy: { start: string; end: string }[]; expiresAt: Date } | null>;
   readonly inviteeCalendarEnabled?: (workspaceId: string) => Promise<boolean>;
+  readonly getPublicBookingPage?: (workspaceId: string) => Promise<PublicBookingPage | null>;
 }
 
 const defaultDeps: AvailabilityDeps = {
@@ -87,6 +91,7 @@ const defaultDeps: AvailabilityDeps = {
   getInviteeCalendarSession: (capability) => dbGetInviteeCalendarSession(capability),
   inviteeCalendarEnabled: async (workspaceId) =>
     (await getPublicWorkspaceEntitlements(workspaceId))?.inviteeCalendarOverlay ?? false,
+  getPublicBookingPage: (workspaceId) => dbGetPublicBookingPage(workspaceId),
 };
 
 const querySchema = z.object({
@@ -95,6 +100,7 @@ const querySchema = z.object({
   end: z.string().min(1),
   inviteeTimezone: z.string().min(1),
   workspaceSlug: z.string().min(1).optional(),
+  durationMinutes: z.coerce.number().int().min(5).max(480).optional(),
 });
 
 interface RenderedInstant {
@@ -234,6 +240,19 @@ function groupHostRole(role: EventTypeHostRecord["role"]): "required" | "optiona
 export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): Hono {
   const router = new Hono();
 
+  router.get("/booking-page", async (c) => {
+    const workspaceId = deps.resolveWorkspaceId
+      ? await deps.resolveWorkspaceId(c, c.req.query("workspaceSlug"))
+      : undefined;
+    if (!workspaceId || !deps.getPublicBookingPage) {
+      return c.json({ error: "booking_page_not_found" }, 404);
+    }
+    const page = await deps.getPublicBookingPage(workspaceId);
+    return page
+      ? c.json(page)
+      : c.json({ error: "booking_page_not_found" }, 404);
+  });
+
   // Public identity of a booking link: what the booking page needs before it
   // has any slots — the real title, the theme to render with, and who the
   // invitee is meeting (host/team display names + avatars; emails stay out).
@@ -276,6 +295,9 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       slug: eventType.slug,
       title: eventType.title ?? eventType.slug,
       durationMinutes: eventType.durationMinutes,
+      ...(eventType.selectableDurations?.length
+        ? { selectableDurations: eventType.selectableDurations }
+        : {}),
       theme: resolveTheme(eventType.theme),
       ...(eventType.description ? { description: eventType.description } : {}),
       ...((eventType.logoUrl || resolveTheme(eventType.theme) === "tourscale")
@@ -312,11 +334,19 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       end: c.req.query("end"),
       inviteeTimezone: c.req.query("inviteeTimezone"),
       workspaceSlug: c.req.query("workspaceSlug"),
+      durationMinutes: c.req.query("durationMinutes"),
     });
     if (!parsedQuery.success) {
       return c.json({ error: "invalid_query", issues: parsedQuery.error.issues }, 400);
     }
-    const { eventTypeSlug, start, end, inviteeTimezone, workspaceSlug } = parsedQuery.data;
+    const {
+      eventTypeSlug,
+      start,
+      end,
+      inviteeTimezone,
+      workspaceSlug,
+      durationMinutes: requestedDuration,
+    } = parsedQuery.data;
     const requestedHosts = c.req.queries("hosts");
     const requestedOptionalHosts = c.req.queries("optionalHosts") ?? [];
     const overrideHostRoles = c.req.query("overrideHostRoles") === "true";
@@ -346,6 +376,14 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     const eventType = await deps.getEventTypeBySlug(eventTypeSlug, workspaceId);
     if (!eventType) {
       return c.json({ error: "event_type_not_found" }, 404);
+    }
+    const configuredDurations = allowedDurations(
+      eventType.durationMinutes,
+      eventType.selectableDurations,
+    );
+    const durationMinutes = requestedDuration ?? eventType.durationMinutes;
+    if (!configuredDurations.includes(durationMinutes)) {
+      return c.json({ error: "duration_not_allowed" }, 400);
     }
 
     const isGroup = requestedHosts !== undefined && requestedHosts.length > 0;
@@ -391,7 +429,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
 
     const now = deps.now();
     const baseConfig: SlotConfig = {
-      durationMinutes: eventType.durationMinutes,
+      durationMinutes,
       bufferBeforeMin: eventType.bufferBeforeMin,
       bufferAfterMin: eventType.bufferAfterMin,
       minimumNoticeMin: eventType.minimumNoticeMin,

@@ -138,6 +138,7 @@ export type EventTypeMeta = {
   title: string;
   description?: string;
   durationMinutes: number;
+  selectableDurations?: number[];
   capacity?: number;
   theme: string;
   layout?: "focus" | "split" | "compact";
@@ -216,6 +217,26 @@ export function getEventTypeMeta(slug: string, workspaceSlug?: string): Promise<
   return request(`/event-types/${encodeURIComponent(slug)}${query}`);
 }
 
+export type PublicBookingPage = {
+  name: string;
+  slug: string;
+  eventTypes: {
+    slug: string;
+    title: string;
+    description: string | null;
+    durationMinutes: number;
+    selectableDurations: number[];
+    theme: string;
+  }[];
+};
+
+export function getPublicBookingPage(workspaceSlug?: string): Promise<PublicBookingPage> {
+  const query = workspaceSlug
+    ? `?workspaceSlug=${encodeURIComponent(workspaceSlug)}`
+    : "";
+  return request(`/booking-page${query}`);
+}
+
 export function getAvailability(args: {
   eventTypeSlug: string;
   start: string;
@@ -225,6 +246,7 @@ export function getAvailability(args: {
   hosts?: string[];
   optionalHosts?: string[];
   inviteeCalendarToken?: string;
+  durationMinutes?: number;
 }): Promise<AvailabilityResponse> {
   const params = new URLSearchParams({
     eventTypeSlug: args.eventTypeSlug,
@@ -233,6 +255,7 @@ export function getAvailability(args: {
     inviteeTimezone: args.inviteeTimezone,
   });
   if (args.workspaceSlug) params.set("workspaceSlug", args.workspaceSlug);
+  if (args.durationMinutes) params.set("durationMinutes", String(args.durationMinutes));
   for (const host of args.hosts ?? []) params.append("hosts", host);
   if (args.optionalHosts) {
     params.set("overrideHostRoles", "true");
@@ -782,6 +805,7 @@ export type AdminEventType = {
   title: string;
   description?: string | null;
   durationMinutes: number;
+  selectableDurations?: number[];
   capacity: number;
   bufferBeforeMin: number;
   bufferAfterMin: number;

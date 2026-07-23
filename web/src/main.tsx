@@ -16,6 +16,7 @@ import { RoutingFormPage } from "@/pages/routing-form-page";
 import { SignInPage } from "@/pages/sign-in-page";
 import { PollPage } from "@/pages/poll-page";
 import { SignupSheetPage } from "@/pages/signup-sheet-page";
+import { PublicBookingPage } from "@/pages/public-booking-page";
 import type { RoutingAnswers } from "@/lib/api";
 import { BrandMark } from "@/components/brand-mark";
 import "./styles.css";
@@ -155,6 +156,20 @@ const hostedBookRoute = createRoute({
   },
 });
 
+const bookingPageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/booking",
+  component: () => <PublicBookingPage />,
+});
+
+const hostedBookingPageRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/booking/$workspaceSlug",
+  component: function HostedBookingPageRoute() {
+    return <PublicBookingPage workspaceSlug={hostedBookingPageRoute.useParams().workspaceSlug} />;
+  },
+});
+
 const routingFormRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/r/$slug",
@@ -238,6 +253,8 @@ const router = createRouter({
     indexRoute,
     hostedBookRoute,
     bookRoute,
+    hostedBookingPageRoute,
+    bookingPageRoute,
     hostedRoutingFormRoute,
     routingFormRoute,
     rescheduleRoute,

@@ -256,6 +256,7 @@ export const eventTypes = pgTable("event_types", {
   title: text("title").notNull(),
   description: text("description"),
   durationMinutes: integer("duration_minutes").notNull(),
+  selectableDurations: jsonb("selectable_durations").$type<number[]>().notNull().default([]),
   capacity: integer("capacity").notNull().default(1),
   bufferBeforeMin: integer("buffer_before_min").notNull().default(0),
   bufferAfterMin: integer("buffer_after_min").notNull().default(0),

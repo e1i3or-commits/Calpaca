@@ -274,6 +274,13 @@
       "when": 1784841003084,
       "tag": "0038_marvelous_jackpot",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1784841823212,
+      "tag": "0039_swift_the_leader",
+      "breakpoints": true
     }
   ]
 }

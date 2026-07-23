@@ -334,6 +334,7 @@ export interface AdminEventType {
   readonly title: string;
   readonly description?: string | null;
   readonly durationMinutes: number;
+  readonly selectableDurations?: number[];
   readonly capacity?: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -391,6 +392,7 @@ function toAdminEventType(
     title: row.title,
     description: row.description,
     durationMinutes: row.durationMinutes,
+    selectableDurations: row.selectableDurations,
     capacity: row.capacity,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
@@ -451,6 +453,7 @@ export interface EventTypeInput {
   readonly title: string;
   readonly description?: string | null;
   readonly durationMinutes: number;
+  readonly selectableDurations?: number[];
   readonly capacity?: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -532,6 +535,7 @@ export async function updateEventType(
         title: input.title,
         description: input.description,
         durationMinutes: input.durationMinutes,
+        selectableDurations: input.selectableDurations,
         capacity: input.capacity,
         bufferBeforeMin: input.bufferBeforeMin,
         bufferAfterMin: input.bufferAfterMin,

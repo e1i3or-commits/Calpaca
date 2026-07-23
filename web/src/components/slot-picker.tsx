@@ -41,6 +41,7 @@ export function SlotPicker(props: {
   hosts?: string[];
   optionalHosts?: string[];
   inviteeCalendarToken?: string;
+  durationMinutes?: number;
   reloadKey?: number;
   onPick: (slot: SlotDto, missingHostId?: string) => void;
   onLoadError: (e: unknown) => void;
@@ -49,7 +50,7 @@ export function SlotPicker(props: {
   // capture, selected day) resets without effect-ordering choreography
   return (
     <SlotPickerInner
-      key={`${props.workspaceSlug ?? ""}|${props.slug}|${props.timezone}|${props.hosts?.join(",") ?? ""}|${props.optionalHosts?.join(",") ?? ""}|${props.inviteeCalendarToken ?? ""}|${props.reloadKey ?? 0}`}
+      key={`${props.workspaceSlug ?? ""}|${props.slug}|${props.timezone}|${props.durationMinutes ?? ""}|${props.hosts?.join(",") ?? ""}|${props.optionalHosts?.join(",") ?? ""}|${props.inviteeCalendarToken ?? ""}|${props.reloadKey ?? 0}`}
       {...props}
     />
   );
@@ -62,6 +63,7 @@ function SlotPickerInner({
   hosts,
   optionalHosts,
   inviteeCalendarToken,
+  durationMinutes,
   onPick,
   onLoadError,
 }: {
@@ -71,6 +73,7 @@ function SlotPickerInner({
   hosts?: string[];
   optionalHosts?: string[];
   inviteeCalendarToken?: string;
+  durationMinutes?: number;
   onPick: (slot: SlotDto, missingHostId?: string) => void;
   onLoadError: (e: unknown) => void;
 }) {
@@ -110,6 +113,7 @@ function SlotPickerInner({
       hosts,
       optionalHosts,
       inviteeCalendarToken,
+      durationMinutes,
     })
       .then((r) => {
         if (cancelled) return;
@@ -132,7 +136,7 @@ function SlotPickerInner({
     };
     // onLoadError is deliberately not a dependency: parents pass fresh
     // closures every render and only the month in view should refetch
-  }, [slug, workspaceSlug, timezone, hosts, optionalHosts, inviteeCalendarToken, key, months]);
+  }, [slug, workspaceSlug, timezone, hosts, optionalHosts, inviteeCalendarToken, durationMinutes, key, months]);
 
   const byDay = useMemo(() => {
     const groups = new Map<string, SlotDto[]>();

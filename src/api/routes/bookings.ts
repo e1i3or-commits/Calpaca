@@ -46,6 +46,7 @@ import {
   type BookingAnswers,
 } from "../../core/booking/questions";
 import { legacyLocations } from "../../core/booking/locations";
+import { isAllowedDuration } from "../../core/booking/durations";
 import type { RoutingAnswers } from "../../core/routing/condition";
 import { ok, type Result } from "../../lib/result";
 import { suggestEmailDomain } from "../../lib/email-typo";
@@ -419,7 +420,11 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     }
 
     const durationMinutes = slot.start.until(slot.end).total({ unit: "minutes" });
-    if (durationMinutes !== eventType.durationMinutes) {
+    if (!isAllowedDuration(
+      durationMinutes,
+      eventType.durationMinutes,
+      eventType.selectableDurations,
+    )) {
       return c.json({ error: "duration_mismatch" }, 400);
     }
 
@@ -649,7 +654,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     return c.json({
       bookingId: booking.id,
       eventTypeSlug: eventType.slug,
-      durationMinutes: eventType.durationMinutes,
+      durationMinutes: booking.startsAt.until(booking.endsAt).total({ unit: "minutes" }),
       status: booking.status,
       start: renderInstant(booking.startsAt, booking.inviteeTimezone),
       end: renderInstant(booking.endsAt, booking.inviteeTimezone),
@@ -678,7 +683,8 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
 
     const durationMinutes = slot.start.until(slot.end).total({ unit: "minutes" });
-    if (durationMinutes !== eventType.durationMinutes) {
+    const originalDuration = booking.startsAt.until(booking.endsAt).total({ unit: "minutes" });
+    if (durationMinutes !== originalDuration) {
       return c.json({ error: "duration_mismatch" }, 400);
     }
 

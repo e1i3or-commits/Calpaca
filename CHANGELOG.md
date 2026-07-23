@@ -5,6 +5,16 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-23
+
+### Added
+
+- Multiple selectable durations per event type, with duration-aware
+  availability, hold validation, and rescheduling that preserves the booked
+  length.
+- Public workspace booking pages that present several meeting options in one
+  mobile-friendly catalogue.
+
 ## [0.12.0] - 2026-07-23
 
 ### Added

@@ -78,6 +78,7 @@ export function BookingPage({
   const [calendarToken, setCalendarToken] = useState<string | null>(null);
   const [calendarExpiresAt, setCalendarExpiresAt] = useState<string | null>(null);
   const [calendarBusy, setCalendarBusy] = useState(false);
+  const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
 
   useEffect(() => {
     if (window.parent === window) return;
@@ -117,6 +118,9 @@ export function BookingPage({
   useEffect(() => {
     getEventTypeMeta(slug, workspaceSlug).then(setMeta, () => {});
   }, [slug, workspaceSlug]);
+  useEffect(() => {
+    if (meta) setDurationMinutes(meta.durationMinutes);
+  }, [meta]);
   useEffect(() => {
     if (!meta?.selectableHosts) return;
     setHostRoles(
@@ -180,7 +184,7 @@ export function BookingPage({
             {meta && (
               <span className="flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5" />
-                {meta.durationMinutes} min
+                {durationMinutes ?? meta.durationMinutes} min
               </span>
             )}
             {(meta?.capacity ?? 1) > 1 && (
@@ -203,6 +207,37 @@ export function BookingPage({
                   selectedRoles={hostRoles}
                   onChange={changeHostRoles}
                 />
+              )}
+              {(meta?.selectableDurations?.length ?? 0) > 1 && (
+                <section className="flex flex-col gap-2 border-b border-border pb-6">
+                  <div>
+                    <h2 className="text-sm font-medium">How long do you need?</h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Availability updates for the selected duration.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {meta!.selectableDurations!.map((minutes) => (
+                      <Button
+                        key={minutes}
+                        type="button"
+                        size="sm"
+                        variant={durationMinutes === minutes ? "default" : "outline"}
+                        onClick={() => {
+                          setDurationMinutes(minutes);
+                          setStep({ name: "pick" });
+                          setError(null);
+                        }}
+                      >
+                        {minutes < 60
+                          ? `${minutes} min`
+                          : minutes % 60 === 0
+                            ? `${minutes / 60} hr`
+                            : `${Math.floor(minutes / 60)} hr ${minutes % 60} min`}
+                      </Button>
+                    ))}
+                  </div>
+                </section>
               )}
               {meta?.inviteeCalendarOverlay && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/30 p-3">
                 <div className="flex items-center gap-2 text-sm">
@@ -268,6 +303,7 @@ export function BookingPage({
                   hosts={meta?.selectableHosts ? selectedHostIds : undefined}
                   optionalHosts={meta?.selectableHosts ? optionalHostIds : undefined}
                   inviteeCalendarToken={calendarToken ?? undefined}
+                  durationMinutes={durationMinutes ?? meta?.durationMinutes}
                   reloadKey={reloadKey}
                   onLoadError={(e) => setError(errorMessage(e))}
                   onPick={(slot, missingHostId) => {
@@ -311,7 +347,7 @@ export function BookingPage({
               slug={slug}
               workspaceSlug={workspaceSlug}
               timezone={timezone}
-              durationMinutes={meta?.durationMinutes ?? 30}
+              durationMinutes={durationMinutes ?? meta?.durationMinutes ?? 30}
               onBack={() => setStep({ name: "pick" })}
               onSent={(email) => setStep({ name: "suggested", email })}
             />

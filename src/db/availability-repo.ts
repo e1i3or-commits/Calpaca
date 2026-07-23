@@ -3,7 +3,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
 import * as schema from "./schema";
-import { bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, holds, schedules, teams, users } from "./schema";
+import { bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, holds, schedules, teams, users, workspaces } from "./schema";
 import type { Interval } from "../core/availability/intervals";
 import type { WeeklyRule } from "../core/availability/rules";
 import type { ScheduleOverride } from "../core/availability/overrides";
@@ -27,6 +27,7 @@ export interface EventTypeConfig {
   readonly locations?: readonly EventLocation[];
   readonly mode?: AssignmentMode;
   readonly durationMinutes: number;
+  readonly selectableDurations?: readonly number[];
   readonly capacity?: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -43,6 +44,43 @@ export interface EventTypeConfig {
 
 export type AssignmentMode = "solo" | "round_robin" | "group";
 
+export interface PublicBookingPage {
+  readonly name: string;
+  readonly slug: string;
+  readonly eventTypes: readonly {
+    slug: string;
+    title: string;
+    description: string | null;
+    durationMinutes: number;
+    selectableDurations: readonly number[];
+    theme: string;
+  }[];
+}
+
+export async function getPublicBookingPage(
+  workspaceId: string,
+  executor: Db = getDb(),
+): Promise<PublicBookingPage | null> {
+  const [workspace] = await executor
+    .select({ name: workspaces.name, slug: workspaces.slug })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId));
+  if (!workspace) return null;
+  const rows = await executor
+    .select({
+      slug: eventTypes.slug,
+      title: eventTypes.title,
+      description: eventTypes.description,
+      durationMinutes: eventTypes.durationMinutes,
+      selectableDurations: eventTypes.selectableDurations,
+      theme: eventTypes.theme,
+    })
+    .from(eventTypes)
+    .where(eq(eventTypes.workspaceId, workspaceId))
+    .orderBy(eventTypes.title);
+  return { ...workspace, eventTypes: rows };
+}
+
 /** Booking-endpoint view of an event type: adds the assignment mode the
  * availability endpoint has no use for, and drops the fields only it needs. */
 export interface BookingEventTypeConfig {
@@ -55,6 +93,7 @@ export interface BookingEventTypeConfig {
   readonly bookingQuestions?: readonly BookingQuestion[];
   readonly locations?: readonly EventLocation[];
   readonly durationMinutes: number;
+  readonly selectableDurations?: readonly number[];
   readonly capacity?: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
@@ -77,6 +116,7 @@ function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingE
     bookingQuestions: row.bookingQuestions,
     locations: row.locations,
     durationMinutes: row.durationMinutes,
+    selectableDurations: row.selectableDurations,
     capacity: row.capacity,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
@@ -142,6 +182,7 @@ export async function getEventTypeBySlug(
     locations: row.locations,
     mode: row.mode,
     durationMinutes: row.durationMinutes,
+    selectableDurations: row.selectableDurations,
     capacity: row.capacity,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,

@@ -154,7 +154,7 @@ features matter.
 | Multiple connected calendars | Shipped | Per-calendar conflict checking, health, and one write destination |
 | Custom booking questions | Shipped | Text, textarea, select, multiselect, phone, checkbox; required/hidden |
 | Locations | Shipped | In-person, phone, custom URL, Google Meet; per-host override |
-| Multiple selectable durations | M | Preserve buffers, caps, holds, and scoring per selected duration |
+| Multiple selectable durations | Shipped | Buffers, caps, holds, scoring, and rescheduling follow the selected duration |
 | One-off offers and single-use links | M | Curated slots, optional reservation holds, viewed/booked/expired state |
 | Availability troubleshooter | M | Explain why a time is unavailable without exposing private events |
 | Email verification and abuse controls | S–M | Optional OTP for public bookings; retain rate limiting |
@@ -225,7 +225,7 @@ teams.
 | --- | ---: | --- |
 | User directory and lifecycle | L | Invite, resend, status, deactivate/reactivate; preserve booking history |
 | Managed event templates | L | Admin-owned template, assigned members, lockable fields |
-| Team landing pages and grouped links | M | Profile, branding, active event catalogue |
+| Team landing pages and grouped links | Partial | Workspace event catalogue shipped; team-specific catalogues and visibility controls remain |
 | Roles and permissions | L | Owner, admin, team manager, member; capability-based checks |
 | Fixed + rotating host pools | L | One required host plus one choice from each pool |
 | Member attributes and skill routing | L | Language, region, specialty, department |

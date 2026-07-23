@@ -1,0 +1,1 @@
+ALTER TABLE "event_types" ADD COLUMN "selectable_durations" jsonb DEFAULT '[]'::jsonb NOT NULL;
