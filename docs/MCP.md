@@ -4,6 +4,12 @@ Calpaca's MCP server is a thin stdio client over the same public HTTP API as
 the booking page. It does not connect to PostgreSQL or import the API or core
 engine directly.
 
+## Prerequisites
+
+Install the repository dependencies with `bun install` and run or otherwise
+provide access to a Calpaca API. The MCP process communicates over standard
+input/output, so keep logs and other output off stdout.
+
 ## Configuration
 
 `SCHEDULER_API_URL` is the scheduler's public base URL. It defaults to
@@ -14,6 +20,8 @@ From the repository root, add the server to Claude Code:
 ```sh
 claude mcp add calpaca -e SCHEDULER_API_URL=https://cal.example.com -- bun run mcp
 ```
+
+For a local API, use `http://localhost:3000`.
 
 For Claude Desktop, add the equivalent entry to its MCP configuration. Replace
 the source path with the absolute path to this checkout:

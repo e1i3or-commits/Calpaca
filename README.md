@@ -1,125 +1,129 @@
-# Scheduler Handoff Package
+# Calpaca
 
-Open source scheduling platform. Working name: pick one before the repo goes public.
-Two containers total: app + Postgres. TypeScript on Bun, Hono, React 19 + Vite,
-Tailwind v4 + shadcn/ui, Drizzle ORM, pg-boss, BetterAuth, Temporal API.
-Google Calendar only in v1.
+Calpaca is a lightweight, open-source scheduling platform for people and
+agents. It combines a polished booking page with group scheduling, scored
+availability, Google Calendar sync, and an MCP server for AI-assisted booking.
 
-## Package contents
+[Live demo](https://cal.tourscale.com) ·
+[Architecture](docs/ARCHITECTURE.md) ·
+[MCP setup](docs/MCP.md) ·
+[Roadmap](BACKLOG.md)
 
-| Path | Purpose |
+## Why Calpaca
+
+- **One small stack:** Bun application + PostgreSQL. No Redis, message broker,
+  or separate worker service.
+- **Correct availability:** DST-safe time handling, buffers, minimum notice,
+  focus blocks, and ranked suggestions.
+- **Teams built in:** round-robin assignment, required and optional group
+  attendees, and quorum fallback when no time works for everyone.
+- **Agent-ready:** a stdio MCP server exposes availability, holds, booking,
+  rescheduling, and cancellation through the same public API as the web app.
+- **Reliable calendar sync:** Google Calendar busy-cache reads, watch-channel
+  renewal, native calendar writes, and email fallback when Google is
+  unavailable.
+- **Auditable bookings:** an append-only event log is the source of truth;
+  the bookings table is a projection.
+
+## Stack
+
+TypeScript, Bun, Hono, React 19, Vite, Tailwind CSS v4, Drizzle ORM,
+PostgreSQL 16, pg-boss, Better Auth, and the Temporal API.
+
+## Quickstart
+
+You need [Bun](https://bun.sh/) and PostgreSQL 16. The commands below start a
+local PostgreSQL container; an existing PostgreSQL server works just as well.
+
+```sh
+git clone https://github.com/e1i3or-commits/Calpaca.git
+cd Calpaca
+bun install
+cp .env.example .env.local
+
+docker run --name calpaca-postgres \
+  -e POSTGRES_USER=test \
+  -e POSTGRES_PASSWORD=test \
+  -e POSTGRES_DB=app \
+  -p 5434:5432 \
+  -d postgres:16
+
+bunx drizzle-kit migrate
+bun run build:web
+bun run start
+```
+
+Open <http://localhost:3000>. The example environment is enough to start the
+application, but Google sign-in, calendar sync, and email delivery remain
+disabled until their credentials are configured.
+
+For frontend development, run the API and Vite server in separate terminals:
+
+```sh
+bun run start
+bun run dev:web
+```
+
+Then open <http://localhost:5173>.
+
+> Keep `DATABASE_URL` and `TEST_DATABASE_URL` pointed at different databases.
+> Integration tests truncate their database.
+
+## Configuration
+
+Copy `.env.example` to `.env.local`. The main settings are:
+
+| Variable | Purpose |
 |---|---|
-| `CLAUDE.md` | Drop in repo root. Conventions and guardrails Claude Code reads every session. |
-| `docs/ARCHITECTURE.md` | System design, module boundaries, budget rules. |
-| `docs/SCHEMA.md` | Drizzle schema draft with design notes. |
-| `BACKLOG.md` | Full phased backlog, Phase 0 through Phase 3. |
-| `tasks/queue/` | Phase 1 tasks as individual files, each with acceptance criteria. The overnight loop consumes these in order. |
-| `scripts/loop.sh` | The overnight runner. One task per Claude invocation, verify, commit, next. |
-| `scripts/verify.sh` | Independent verification gate. Claude never edits this file. |
-| `scripts/Dockerfile.agent` | Container the loop runs inside. |
+| `DATABASE_URL` | PostgreSQL connection used by the application and jobs |
+| `BETTER_AUTH_SECRET` | Session-signing secret |
+| `BETTER_AUTH_URL` | Public application origin |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth and Calendar sync |
+| `PUBLIC_URL` | Public HTTPS origin for calendar webhooks and email links |
+| `SMTP_URL`, `EMAIL_FROM` | Booking and reminder email delivery |
+| `DISABLE_JOBS=1` | Disable in-process pg-boss workers |
 
-## Overnight run procedure
+See [.env.example](.env.example) for details and safe local defaults.
 
-### 1. One-time setup (do this while awake)
+## MCP server
 
-```bash
-# On the Hetzner box
-git init scheduler && cd scheduler
-cp -r /path/to/handoff/{CLAUDE.md,docs,tasks,scripts,BACKLOG.md} .
-git add -A && git commit -m "chore: handoff package baseline"
-git checkout -b overnight/phase-1
+Once the API is running, add Calpaca to Claude Code:
 
-# Build the agent container (runs as node, uid 1000 — the mounted repo
-# and .git must be writable by uid 1000, never root-owned)
-docker build -f scripts/Dockerfile.agent -t scheduler-agent .
-
-# Auth: subscription OAuth token, not an API key. On your workstation
-# (where you are logged in to Claude Code):
-#   claude setup-token        # browser OAuth flow, prints a 1-year token
-# Then on this box:
-export CLAUDE_CODE_OAUTH_TOKEN=<the token>
-unset ANTHROPIC_API_KEY   # if both are set, the API key silently wins
-                          # and you are back on per-token card billing
-
-# Accept the bypass-permissions confirmation ONCE interactively.
-# Known gotcha: without this, headless runs can park on a one-time
-# confirmation dialog and produce zero work all night. The claude-config
-# volume persists the acknowledgment; it must be owned by uid 1000 and
-# CLAUDE_CODE_OAUTH_TOKEN must point claude at it via CLAUDE_CONFIG_DIR.
-docker run -it -v "$PWD":/work -v claude-config:/home/node/.claude \
-  -e CLAUDE_CONFIG_DIR=/home/node/.claude \
-  -e CLAUDE_CODE_OAUTH_TOKEN scheduler-agent \
-  claude --dangerously-skip-permissions -p "print hello and exit"
+```sh
+claude mcp add calpaca \
+  -e SCHEDULER_API_URL=http://localhost:3000 \
+  -- bun run mcp
 ```
 
-### 2. Launch the loop
+Event types must explicitly allow agent access. See [docs/MCP.md](docs/MCP.md)
+for tool behavior, policy enforcement, and desktop-client configuration.
 
-```bash
-docker network create overnight-net
-docker run -d --name overnight-db --network overnight-net \
-  -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test \
-  -e POSTGRES_DB=test postgres:16
-docker run -d --name overnight --network overnight-net \
-  -v "$PWD":/work \
-  -v claude-config:/home/node/.claude \
-  -e CLAUDE_CONFIG_DIR=/home/node/.claude \
-  -e CLAUDE_CODE_OAUTH_TOKEN \
-  -e TEST_DATABASE_URL=postgres://test:test@overnight-db:5432/test \
-  scheduler-agent bash scripts/loop.sh
+## Development
 
-# Confirm only the OAuth token made it in (no API key = no card billing):
-docker exec overnight env | grep -o -E "ANTHROPIC[A-Z_]*|CLAUDE_CODE[A-Z_]*"
-
-# Watch it live if you want
-docker logs -f overnight
+```sh
+bun run typecheck
+bun run lint
+bun test
+bun run verify
 ```
 
-Subscription-billing caveats: check remaining usage credit before launch —
-if it exhausts mid-run, requests fail and the loop reads that as Claude
-failing (it will burn attempts until the 3-consecutive-blocks stop fires).
-Credit is per-user and does not roll over; a month-end run against unused
-credit costs nothing extra.
+Database-backed tests use `TEST_DATABASE_URL` and skip cleanly when it is not
+set. See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes; Calpaca's
+small infrastructure and dependency budget is a deliberate product constraint.
 
-Note: with `TEST_DATABASE_URL` set for the whole run, integration tests
-execute during verification of every task after 11, not only task 12. That
-is intended; it gates tasks 13-14 on the double-booking invariants.
+## Project status
 
-### 3. Morning review (non-negotiable)
+The core scheduling engine, booking UI, Google integration, outbound
+notifications, routing forms, group scheduling, and MCP read/write tools are
+implemented. Production trust-and-safety and administration work remains on
+the [roadmap](BACKLOG.md).
 
-The loop produces commits, not merges. Before anything leaves the branch:
+Calpaca is under active development. Review configuration and security for your
+environment before operating a public instance.
 
-```bash
-git log --oneline overnight/phase-1        # one commit per green task
-cat logs/loop-summary.md                    # what passed, what blocked, attempt counts
-ls tasks/blocked/                           # tasks that failed 3x, with failure logs
-git diff main...overnight/phase-1 -- tests/ # confirm test assertions were not weakened
-bun run verify                              # full gate, from a clean checkout
+## License
 
-# Teardown
-docker rm -f overnight overnight-db && docker network rm overnight-net
-```
-
-Review the diff like it came from a fast, overconfident contractor. Merge what is
-good, rewrite task files for what blocked, requeue.
-
-## Safety model
-
-- The container has no production credentials, no Google OAuth secrets, and only
-  the project directory mounted. `--dangerously-skip-permissions` is acceptable
-  only because the container boundary does the security work.
-- The Postgres sidecar (`overnight-db`) is a throwaway database on an isolated
-  network with no volume; it is part of the sandbox, not an exception to it.
-- `scripts/verify.sh` and everything under `tests/` are the trust anchors.
-  CLAUDE.md forbids editing them to make a task pass; verify.sh additionally
-  fails any task whose diff touches verify.sh itself.
-- Git is the undo button. Every green task is its own commit. Nothing is pushed
-  automatically.
-- Hard stops: 3 consecutive blocked tasks aborts the run (signals a broken
-  environment, not a hard problem), and an 8 hour wall clock cap ends the night.
-
-## Why Phase 1 overnight and not the whole app
-
-Phase 1 is the availability engine and booking lifecycle: pure functions,
-deterministic tests, zero visual judgment. That is the ideal shape for
-autonomous TDD. The UI (Phase 2 onward) needs human eyes per iteration and
-should be built in interactive sessions.
+Calpaca is licensed under the
+[GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html).
+If you modify Calpaca and provide it as a network service, the AGPL requires
+you to offer the corresponding source code to users of that service.

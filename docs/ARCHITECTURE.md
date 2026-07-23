@@ -145,7 +145,8 @@ Microsoft Graph and CalDAV (Phase 3+ at earliest), mutual mode (v2).
 
 ## Licensing
 
-Decide before the repo is public. AGPL prevents a hosted fork from closing the
-commons (the Cal.com lesson) at the cost of some corporate adoption; MIT
-maximizes adoption. Default recommendation: AGPL, given no plan to monetize
-hosting. Record the decision and rationale in the repo.
+Calpaca uses the GNU Affero General Public License v3.0. The network-use
+provision keeps hosted modifications in the commons: operators who modify
+Calpaca and provide it as a service must offer the corresponding source to
+users of that service. This trades some permissive-license adoption for a
+shared open-source codebase.

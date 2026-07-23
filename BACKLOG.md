@@ -1,6 +1,6 @@
 # Backlog
 
-Phase 3A/3B tasks exist as individual files: overnight-safe ones in
+Phase 3A/3B work is tracked in individual files: automation-safe items in
 `tasks/queue/` (the loop pulls the lowest number), interactive-only ones in
 `tasks/interactive/` (human present, visual review — the loop never reads
 this directory). Numbering is one sequence across both. Phase 3C is listed
@@ -8,8 +8,8 @@ here; convert to task files when it starts.
 
 ## Phase 0: Recon — DONE
 
-`docs/EDGE-CASES.md` seeded the Phase 1 test suites. License and name still
-undecided (see Phase 3C open decisions).
+`docs/EDGE-CASES.md` seeded the Phase 1 test suites. The public project is
+Calpaca and uses the GNU AGPL v3.
 
 ## Phase 1: Core engine — SHIPPED (tasks/done/01–14)
 
@@ -38,13 +38,13 @@ and booking endpoints with signed tokens.
 
 ## Phase 3A: Differentiators (tasks 15–20)
 
-15. Agent policy enforcement in the existing API (queue)
-16. MCP server package: scaffold + read tools (queue)
-17. MCP server: write tools + policy conformance + docs/MCP.md (queue)
+15. Agent policy enforcement in the existing API — DONE
+16. MCP server package: scaffold + read tools — DONE
+17. MCP server: write tools + policy conformance + docs/MCP.md — DONE
 18. Group booking public API: selectableHosts meta + quorum in availability
-    response (queue)
+    response — DONE
 19. Group booking invitee UI: people picker, required/optional, quorum
-    surface (interactive)
+    surface — DONE
 20. Round-robin transparency: persist explainAssignment at confirm, admin
     endpoint (queue)
 
@@ -72,14 +72,13 @@ and booking endpoints with signed tokens.
   page/slot-view tracking — no impression events exist.
 - Theming system: document the token file, extract remaining hardcoded
   styles into it, ship two additional bundled themes as proof.
-- Repo split preparation: move TourScale-specific deployment config
+- Deployment generalization: move TourScale-specific deployment config
   (domains, Infisical paths, compose production values) out of the product
   tree; generic docker-compose.example.yml + .env.example; README
   quickstart targeting "first booking page in under a minute."
-- CONTRIBUTING.md stating the hard budget as policy: Postgres-only,
-  dependency ceiling, 512MB RAM target, webhooks + n8n as the only
-  extension boundary. Issue templates. License file (decision pending:
-  AGPL vs MIT) and project name.
+- Public repository basics — README quickstart, contribution policy, Calpaca
+  name, and AGPL decision — DONE. Remaining: 512MB target validation, issue
+  templates, and a vendored license text.
 - Embeds (script tag + iframe modes); OpenAPI generation from Hono/Zod.
 
 ## Explicitly out of scope (budget defense — reject drift toward these)
