@@ -483,6 +483,7 @@ export const signupSheets = pgTable("signup_sheets", {
   description: text("description"),
   timezone: text("timezone").notNull(),
   status: text("status").notNull().default("open"),
+  rosterVisibility: text("roster_visibility").notNull().default("counts"),
   maxRegistrationsPerPerson: integer("max_registrations_per_person").notNull().default(1),
   questions: jsonb("questions").$type<{
     id: string;

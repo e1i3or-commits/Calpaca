@@ -25,6 +25,7 @@ export type SignupSheetRecord = {
   description: string | null;
   timezone: string;
   status: string;
+  rosterVisibility: string;
   maxRegistrationsPerPerson: number;
   questions: SignupQuestion[];
   sessions: {
@@ -43,6 +44,7 @@ export type SignupSheetRecord = {
       status: string;
       confirmationSentAt: Date | null;
       confirmationError: string | null;
+      createdAt: Date;
     }[];
   }[];
 };
@@ -61,10 +63,8 @@ async function hydrateSheet(
       .where(eq(signupSessions.sheetId, sheet.id))
       .orderBy(asc(signupSessions.startsAt)),
     executor.select().from(signupRegistrations)
-      .where(and(
-        eq(signupRegistrations.sheetId, sheet.id),
-        eq(signupRegistrations.status, "active"),
-      )),
+      .where(eq(signupRegistrations.sheetId, sheet.id))
+      .orderBy(asc(signupRegistrations.createdAt)),
   ]);
   return {
     id: sheet.id,
@@ -73,10 +73,12 @@ async function hydrateSheet(
     description: sheet.description,
     timezone: sheet.timezone,
     status: sheet.status,
+    rosterVisibility: sheet.rosterVisibility,
     maxRegistrationsPerPerson: sheet.maxRegistrationsPerPerson,
     questions: sheet.questions,
     sessions: sessions.map((session) => {
-      const enrolled = registrations.filter((row) => row.sessionId === session.id);
+      const sessionRegistrations = registrations.filter((row) => row.sessionId === session.id);
+      const enrolled = sessionRegistrations.filter((row) => row.status === "active");
       return {
         id: session.id,
         title: session.title,
@@ -85,22 +87,86 @@ async function hydrateSheet(
         endsAt: session.endsAt,
         capacity: session.capacity,
         registrationCount: enrolled.length,
-        ...(ownerView
+        ...((ownerView || sheet.rosterVisibility === "names")
           ? {
-              registrations: enrolled.map((row) => ({
+              registrations: (ownerView ? sessionRegistrations : enrolled).map((row) => ({
                 id: row.id,
                 name: row.name,
-                email: row.email,
-                answers: row.answers,
+                ...(ownerView ? { email: row.email, answers: row.answers } : { email: "", answers: {} }),
                 status: row.status,
-                confirmationSentAt: row.confirmationSentAt,
-                confirmationError: row.confirmationError,
+                confirmationSentAt: ownerView ? row.confirmationSentAt : null,
+                confirmationError: ownerView ? row.confirmationError : null,
+                createdAt: row.createdAt,
               })),
             }
           : {}),
       };
     }),
   };
+}
+
+export async function updateSignupSheetAdministration(input: {
+  workspaceId: string;
+  sheetId: string;
+  status?: "open" | "closed";
+  rosterVisibility?: "hidden" | "counts" | "names";
+  capacities?: { sessionId: string; capacity: number }[];
+}, executor: Db = getDb()): Promise<SignupSheetRecord | null> {
+  return executor.transaction(async (tx) => {
+    const [sheet] = await tx.select().from(signupSheets).where(and(
+      eq(signupSheets.id, input.sheetId),
+      eq(signupSheets.workspaceId, input.workspaceId),
+    )).for("update");
+    if (!sheet) return null;
+    if (input.status || input.rosterVisibility) {
+      await tx.update(signupSheets).set({
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.rosterVisibility ? { rosterVisibility: input.rosterVisibility } : {}),
+      }).where(eq(signupSheets.id, sheet.id));
+    }
+    for (const item of input.capacities ?? []) {
+      await tx.update(signupSessions).set({ capacity: item.capacity }).where(and(
+        eq(signupSessions.id, item.sessionId),
+        eq(signupSessions.sheetId, sheet.id),
+      ));
+    }
+    const [updated] = await tx.select().from(signupSheets).where(eq(signupSheets.id, sheet.id));
+    return updated ? hydrateSheet(updated, true, tx) : null;
+  });
+}
+
+export async function cancelSignupRegistrationByOrganizer(input: {
+  workspaceId: string;
+  sheetId: string;
+  registrationId: string;
+}, executor: Db = getDb()): Promise<boolean> {
+  const rows = await executor.update(signupRegistrations).set({ status: "cancelled" })
+    .where(and(
+      eq(signupRegistrations.id, input.registrationId),
+      eq(signupRegistrations.sheetId, input.sheetId),
+      eq(signupRegistrations.status, "active"),
+      inArray(signupRegistrations.sheetId, executor.select({ id: signupSheets.id })
+        .from(signupSheets).where(eq(signupSheets.workspaceId, input.workspaceId))),
+    ))
+    .returning({ id: signupRegistrations.id });
+  return rows.length > 0;
+}
+
+export async function getSignupRegistrationForResend(input: {
+  workspaceId: string;
+  sheetId: string;
+  registrationId: string;
+}, executor: Db = getDb()): Promise<string[] | null> {
+  const rows = await executor.select({ id: signupRegistrations.id })
+    .from(signupRegistrations)
+    .innerJoin(signupSheets, eq(signupRegistrations.sheetId, signupSheets.id))
+    .where(and(
+      eq(signupRegistrations.id, input.registrationId),
+      eq(signupRegistrations.sheetId, input.sheetId),
+      eq(signupRegistrations.status, "active"),
+      eq(signupSheets.workspaceId, input.workspaceId),
+    ));
+  return rows.length ? rows.map((row) => row.id) : null;
 }
 
 export async function createSignupSheet(input: {
@@ -151,6 +217,18 @@ export async function listSignupSheets(
     .where(eq(signupSheets.workspaceId, workspaceId))
     .orderBy(desc(signupSheets.createdAt));
   return Promise.all(sheets.map((sheet) => hydrateSheet(sheet, true, executor)));
+}
+
+export async function getSignupSheetForWorkspace(
+  workspaceId: string,
+  sheetId: string,
+  executor: Db = getDb(),
+): Promise<SignupSheetRecord | null> {
+  const [sheet] = await executor.select().from(signupSheets).where(and(
+    eq(signupSheets.id, sheetId),
+    eq(signupSheets.workspaceId, workspaceId),
+  ));
+  return sheet ? hydrateSheet(sheet, true, executor) : null;
 }
 
 export async function getPublicSignupSheet(
@@ -297,4 +375,14 @@ export async function recordSignupConfirmation(
     ? { confirmationSentAt: new Date(), confirmationError: null }
     : { confirmationError: outcome.error.slice(0, 1000) })
     .where(inArray(signupRegistrations.id, registrationIds));
+}
+
+export async function markSignupConfirmationPending(
+  registrationIds: string[],
+  executor: Db = getDb(),
+): Promise<void> {
+  await executor.update(signupRegistrations).set({
+    confirmationSentAt: null,
+    confirmationError: null,
+  }).where(inArray(signupRegistrations.id, registrationIds));
 }

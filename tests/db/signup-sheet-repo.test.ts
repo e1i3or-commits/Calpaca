@@ -5,10 +5,14 @@ import { Pool } from "pg";
 import { sql } from "drizzle-orm";
 import * as schema from "../../src/db/schema";
 import {
+  cancelSignupRegistrationByOrganizer,
   cancelSignupRegistrations,
   createSignupSheet,
   getPublicSignupSheet,
+  getSignupRegistrationForResend,
+  getSignupSheetForWorkspace,
   registerForSignupSessions,
+  updateSignupSheetAdministration,
 } from "../../src/db/signup-sheet-repo";
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)("sign-up sheets", () => {
@@ -101,9 +105,50 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("sign-up sheets", () => {
       ]);
       expect(racers.filter((result) => typeof result === "object")).toHaveLength(1);
       expect(racers.filter((result) => result === "session_full")).toHaveLength(1);
+      expect(typeof await registerForSignupSessions({
+        publicId: sheet.publicId,
+        sessionIds: [sheet.sessions[1]!.id],
+        name: "Fourth",
+        email: "fourth@example.test",
+        answers: { role: "Engineer" },
+      }, db)).toBe("object");
+      expect(typeof await registerForSignupSessions({
+        publicId: sheet.publicId,
+        sessionIds: [sheet.sessions[1]!.id],
+        name: "Fifth",
+        email: "fifth@example.test",
+        answers: { role: "Designer" },
+      }, db)).toBe("object");
+      const ownerSheet = await getSignupSheetForWorkspace(workspace!.id, sheet.id, db);
+      const activeRegistration = ownerSheet?.sessions[0]?.registrations?.find(
+        (registration) => registration.status === "active",
+      );
+      expect(activeRegistration).toBeDefined();
+      expect(await getSignupRegistrationForResend({
+        workspaceId: workspace!.id,
+        sheetId: sheet.id,
+        registrationId: activeRegistration!.id,
+      }, db)).toEqual([activeRegistration!.id]);
+      await updateSignupSheetAdministration({
+        workspaceId: workspace!.id,
+        sheetId: sheet.id,
+        status: "closed",
+        rosterVisibility: "names",
+        capacities: [{ sessionId: sheet.sessions[1]!.id, capacity: 1 }],
+      }, db);
       const publicSheet = await getPublicSignupSheet(sheet.publicId, db);
       expect(publicSheet?.sessions[0]?.registrationCount).toBe(1);
-      expect(publicSheet?.sessions[0]?.registrations).toBeUndefined();
+      expect(publicSheet?.status).toBe("closed");
+      expect(publicSheet?.sessions[0]?.registrations?.[0]?.name).toMatch(/Second|Third/);
+      expect(publicSheet?.sessions[0]?.registrations?.[0]?.email).toBe("");
+      expect(publicSheet?.sessions[1]?.registrationCount).toBe(2);
+      expect(publicSheet?.sessions[1]?.capacity).toBe(1);
+      expect(await cancelSignupRegistrationByOrganizer({
+        workspaceId: workspace!.id,
+        sheetId: sheet.id,
+        registrationId: activeRegistration!.id,
+      }, db)).toBe(true);
+      expect((await getPublicSignupSheet(sheet.publicId, db))?.sessions[0]?.registrationCount).toBe(0);
     } finally {
       await pool.end();
     }

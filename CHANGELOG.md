@@ -5,6 +5,14 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-23
+
+### Added
+
+- Sign-up sheet enrollment controls for attendee cancellation, confirmation
+  resend, CSV export, public roster privacy, enrollment state, and session
+  capacity changes that preserve existing registrations.
+
 ## [0.9.0] - 2026-07-23
 
 ### Added

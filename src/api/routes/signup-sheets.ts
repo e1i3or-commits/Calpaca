@@ -4,12 +4,17 @@ import { Temporal } from "@js-temporal/polyfill";
 import { requireSession, type AuthEnv } from "../../auth/session";
 import { isIanaZone } from "../../lib/timezone";
 import {
+  cancelSignupRegistrationByOrganizer,
   cancelSignupRegistrations,
   createSignupSheet,
   getPublicSignupSheet,
+  getSignupRegistrationForResend,
+  getSignupSheetForWorkspace,
   listSignupSheets,
+  markSignupConfirmationPending,
   registerForSignupSessions,
   type SignupSheetRecord,
+  updateSignupSheetAdministration,
 } from "../../db/signup-sheet-repo";
 import { enqueueSignupConfirmation } from "../../jobs/index";
 import { createRateLimitMiddleware } from "../rate-limit";
@@ -44,6 +49,17 @@ const registrationSchema = z.object({
   email: z.string().email(),
   answers: z.record(z.string().max(2000)).default({}),
 });
+const administrationSchema = z.object({
+  status: z.enum(["open", "closed"]).optional(),
+  rosterVisibility: z.enum(["hidden", "counts", "names"]).optional(),
+  capacities: z.array(z.object({
+    sessionId: z.string().uuid(),
+    capacity: z.number().int().min(1).max(500),
+  })).max(100).optional(),
+}).refine(
+  (input) => input.status || input.rosterVisibility || input.capacities?.length,
+  { message: "at least one change is required" },
+);
 
 function renderSheet(sheet: SignupSheetRecord, ownerView: boolean) {
   return {
@@ -53,6 +69,7 @@ function renderSheet(sheet: SignupSheetRecord, ownerView: boolean) {
     description: sheet.description,
     timezone: sheet.timezone,
     status: sheet.status,
+    rosterVisibility: sheet.rosterVisibility,
     maxRegistrationsPerPerson: sheet.maxRegistrationsPerPerson,
     questions: sheet.questions,
     sessions: sheet.sessions.map((session) => ({
@@ -64,7 +81,10 @@ function renderSheet(sheet: SignupSheetRecord, ownerView: boolean) {
       capacity: session.capacity,
       registrationCount: session.registrationCount,
       seatsRemaining: Math.max(0, session.capacity - session.registrationCount),
-      ...(ownerView ? { registrations: session.registrations } : {}),
+      overCapacity: session.registrationCount > session.capacity,
+      ...((ownerView || sheet.rosterVisibility === "names")
+        ? { registrations: session.registrations }
+        : {}),
     })),
   };
 }
@@ -128,6 +148,78 @@ export function createSignupSheetRoutes(): Hono<AuthEnv> {
       sessions,
     });
     return c.json(renderSheet(sheet, true), 201);
+  });
+
+  routes.patch("/api/me/signup-sheets/:id", async (c) => {
+    const parsed = administrationSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "signup_sheet_not_found" }, 404);
+    const sheet = await updateSignupSheetAdministration({
+      workspaceId,
+      sheetId: c.req.param("id"),
+      ...parsed.data,
+    });
+    return sheet
+      ? c.json(renderSheet(sheet, true))
+      : c.json({ error: "signup_sheet_not_found" }, 404);
+  });
+
+  routes.delete("/api/me/signup-sheets/:id/registrations/:registrationId", async (c) => {
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "registration_not_found" }, 404);
+    const cancelled = await cancelSignupRegistrationByOrganizer({
+      workspaceId,
+      sheetId: c.req.param("id"),
+      registrationId: c.req.param("registrationId"),
+    });
+    return cancelled
+      ? c.json({ status: "cancelled" as const })
+      : c.json({ error: "registration_not_found" }, 404);
+  });
+
+  routes.post("/api/me/signup-sheets/:id/registrations/:registrationId/resend", async (c) => {
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "registration_not_found" }, 404);
+    const registrationIds = await getSignupRegistrationForResend({
+      workspaceId,
+      sheetId: c.req.param("id"),
+      registrationId: c.req.param("registrationId"),
+    });
+    if (!registrationIds) return c.json({ error: "registration_not_found" }, 404);
+    await markSignupConfirmationPending(registrationIds);
+    await enqueueSignupConfirmation(registrationIds);
+    return c.json({ status: "pending" as const });
+  });
+
+  routes.get("/api/me/signup-sheets/:id/registrations.csv", async (c) => {
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "signup_sheet_not_found" }, 404);
+    const sheet = await getSignupSheetForWorkspace(workspaceId, c.req.param("id"));
+    if (!sheet) return c.json({ error: "signup_sheet_not_found" }, 404);
+    const escapeCsv = (value: unknown) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
+    const headers = [
+      "session", "start", "end", "name", "email", "status", "confirmation",
+      ...sheet.questions.map((question) => question.label),
+    ];
+    const rows = sheet.sessions.flatMap((session) => (session.registrations ?? []).map(
+      (registration) => [
+        session.title,
+        session.startsAt.toISOString(),
+        session.endsAt.toISOString(),
+        registration.name,
+        registration.email,
+        registration.status,
+        registration.confirmationError
+          ? `failed: ${registration.confirmationError}`
+          : registration.confirmationSentAt ? "sent" : "pending",
+        ...sheet.questions.map((question) => registration.answers[question.id] ?? ""),
+      ],
+    ));
+    const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\r\n");
+    c.header("Content-Type", "text/csv; charset=utf-8");
+    c.header("Content-Disposition", `attachment; filename="signup-${sheet.publicId}.csv"`);
+    return c.body(csv);
   });
 
   routes.get("/signup-sheets/:publicId", async (c) => {

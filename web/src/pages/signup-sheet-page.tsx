@@ -85,6 +85,11 @@ export function SignupSheetPage({
         </CardHeader>
         <CardContent className="space-y-5">
           {error && <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+          {sheet?.status === "closed" && !complete && (
+            <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+              Enrollment is currently closed.
+            </p>
+          )}
           {complete ? (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-5">
               <p className="flex items-center gap-2 font-medium"><Check className="h-5 w-5" /> You're registered</p>
@@ -99,14 +104,24 @@ export function SignupSheetPage({
                   return (
                     <label key={session.id} className={`block rounded-xl border p-4 ${checked ? "border-primary bg-primary/5" : "border-border"} ${full ? "opacity-55" : "cursor-pointer"}`}>
                       <div className="flex items-start gap-3">
-                        <input type="checkbox" className="mt-1" disabled={full} checked={checked} onChange={() => setSelected((current) => checked ? current.filter((id) => id !== session.id) : [...current, session.id])} />
+                        <input type="checkbox" className="mt-1" disabled={full || sheet.status !== "open"} checked={checked} onChange={() => setSelected((current) => checked ? current.filter((id) => id !== session.id) : [...current, session.id])} />
                         <div className="min-w-0 flex-1">
                           <p className="font-medium">{session.title}</p>
                           <p className="text-sm text-muted-foreground">{sessionLabel(session.start, session.end, sheet.timezone)}</p>
                           {session.description && <p className="mt-1 text-sm">{session.description}</p>}
                         </div>
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground"><Users className="h-3.5 w-3.5" /> {full ? "Full" : `${session.seatsRemaining} left`}</span>
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Users className="h-3.5 w-3.5" />
+                          {full
+                            ? "Full"
+                            : sheet.rosterVisibility === "hidden" ? "Available" : `${session.seatsRemaining} left`}
+                        </span>
                       </div>
+                      {sheet.rosterVisibility === "names" && session.registrations && session.registrations.length > 0 && (
+                        <p className="mt-2 pl-6 text-xs text-muted-foreground">
+                          Attending: {session.registrations.map((registration) => registration.name).join(", ")}
+                        </p>
+                      )}
                     </label>
                   );
                 })}
@@ -121,7 +136,7 @@ export function SignupSheetPage({
                   <Input id={`signup-${question.id}`} className="mt-1" value={answers[question.id] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))} />
                 </div>
               ))}
-              <Button disabled={busy || selected.length === 0 || !name.trim() || !email.trim()} onClick={async () => {
+              <Button disabled={busy || sheet?.status !== "open" || selected.length === 0 || !name.trim() || !email.trim()} onClick={async () => {
                 if (!sheet) return;
                 setBusy(true);
                 setError(null);

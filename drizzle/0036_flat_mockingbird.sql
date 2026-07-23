@@ -1,0 +1,1 @@
+ALTER TABLE "signup_sheets" ADD COLUMN "roster_visibility" text DEFAULT 'counts' NOT NULL;

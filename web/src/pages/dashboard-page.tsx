@@ -30,6 +30,7 @@ import {
   addTeamMember,
   addWorkspaceDomain,
   analyticsCsvUrl,
+  cancelSignupRegistrationByOrganizer,
   connectCalendar,
   createEventType,
   createApiToken,
@@ -68,6 +69,7 @@ import {
   removeWorkspaceDomain,
   resendPollFinalization,
   resendPollInvitation,
+  resendSignupConfirmation,
   markBookingNoShow,
   finalizeMeetingPoll,
   signOut,
@@ -81,6 +83,7 @@ import {
   verifyWorkspaceDomain,
   updateRoutingForm,
   updateSchedule,
+  updateSignupSheetAdministration,
   updateTeamMemberRole,
   type AdminEventType,
   type AdminBooking,
@@ -983,6 +986,40 @@ function SignupSheetsTab() {
     }
   };
 
+  const updateAdministration = async (
+    sheetId: string,
+    patch: Parameters<typeof updateSignupSheetAdministration>[1],
+  ) => {
+    setError(null);
+    try {
+      await updateSignupSheetAdministration(sheetId, patch);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  const cancelRegistration = async (sheetId: string, registrationId: string, name: string) => {
+    if (!window.confirm(`Cancel ${name}'s registration? Their seat will be released immediately.`)) return;
+    setError(null);
+    try {
+      await cancelSignupRegistrationByOrganizer(sheetId, registrationId);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  const resendConfirmation = async (sheetId: string, registrationId: string) => {
+    setError(null);
+    try {
+      await resendSignupConfirmation(sheetId, registrationId);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
@@ -1033,27 +1070,114 @@ function SignupSheetsTab() {
         <Card key={sheet.id}>
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div><CardTitle>{sheet.title}</CardTitle><CardDescription>{sheet.sessions.length} session{sheet.sessions.length === 1 ? "" : "s"}</CardDescription></div>
-              <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/signup/${sheet.publicId}`)}><Copy className="h-4 w-4" /> Copy link</Button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <CardTitle>{sheet.title}</CardTitle>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${sheet.status === "open" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                    {sheet.status === "open" ? "Open" : "Closed"}
+                  </span>
+                </div>
+                <CardDescription>{sheet.sessions.length} session{sheet.sessions.length === 1 ? "" : "s"}</CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => {
+                  window.location.href = `/api/me/signup-sheets/${encodeURIComponent(sheet.id)}/registrations.csv`;
+                }}><Download className="h-4 w-4" /> Export CSV</Button>
+                <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/signup/${sheet.publicId}`)}><Copy className="h-4 w-4" /> Copy link</Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/20 p-3 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <Label htmlFor={`roster-${sheet.id}`}>Public roster</Label>
+                <select
+                  id={`roster-${sheet.id}`}
+                  className="mt-1 flex h-9 w-full rounded-md border border-border bg-card px-3 text-sm sm:max-w-xs"
+                  value={sheet.rosterVisibility}
+                  onChange={(event) => void updateAdministration(sheet.id, {
+                    rosterVisibility: event.target.value as SignupSheet["rosterVisibility"],
+                  })}
+                >
+                  <option value="hidden">Hide enrollment</option>
+                  <option value="counts">Show seat counts</option>
+                  <option value="names">Show attendee names</option>
+                </select>
+              </div>
+              <Button
+                variant={sheet.status === "open" ? "outline" : "default"}
+                onClick={() => void updateAdministration(sheet.id, {
+                  status: sheet.status === "open" ? "closed" : "open",
+                })}
+              >
+                {sheet.status === "open" ? "Close enrollment" : "Reopen enrollment"}
+              </Button>
+            </div>
             {sheet.sessions.map((session) => (
               <div key={session.id} className="rounded-xl border border-border p-3">
-                <div className="flex flex-wrap justify-between gap-2">
-                  <div><p className="font-medium">{session.title}</p><p className="text-sm text-muted-foreground">{formatBookingDate(session.start)} · {formatBookingTime(session.start)}</p></div>
-                  <span className="text-sm">{session.registrationCount}/{session.capacity} registered</span>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{session.title}</p>
+                    <p className="text-sm text-muted-foreground">{formatBookingDate(session.start)} · {formatBookingTime(session.start)}</p>
+                    {session.overCapacity && (
+                      <p className="mt-1 text-xs font-medium text-destructive">
+                        Over capacity by {session.registrationCount - session.capacity}; existing registrations are preserved.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <div>
+                      <Label htmlFor={`capacity-${session.id}`} className="text-xs">Capacity</Label>
+                      <Input
+                        id={`capacity-${session.id}`}
+                        className="mt-1 w-20"
+                        type="number"
+                        min={1}
+                        max={500}
+                        defaultValue={session.capacity}
+                        onBlur={(event) => {
+                          const capacity = Number(event.target.value);
+                          if (capacity !== session.capacity && capacity >= 1 && capacity <= 500) {
+                            void updateAdministration(sheet.id, {
+                              capacities: [{ sessionId: session.id, capacity }],
+                            });
+                          }
+                        }}
+                      />
+                    </div>
+                    <span className="pb-2 text-sm">{session.registrationCount}/{session.capacity} registered</span>
+                  </div>
                 </div>
                 {session.registrations && session.registrations.length > 0 && (
-                  <div className="mt-3 border-t border-border pt-2 text-sm">
+                  <div className="mt-3 divide-y divide-border border-t border-border pt-2 text-sm">
                     {session.registrations.map((registration) => (
-                      <div key={registration.id} className="py-1">
-                        <p>{registration.name} <span className="text-muted-foreground">{registration.email}</span></p>
-                        {Object.entries(registration.answers).map(([questionId, answer]) => (
-                          <p key={questionId} className="text-xs text-muted-foreground">
-                            {sheet.questions.find((question) => question.id === questionId)?.label ?? questionId}: {answer}
+                      <div key={registration.id} className={`flex flex-col gap-2 py-3 sm:flex-row sm:items-start ${registration.status === "cancelled" ? "opacity-55" : ""}`}>
+                        <div className="min-w-0 flex-1">
+                          <p>
+                            {registration.name} <span className="text-muted-foreground">{registration.email}</span>
+                            {registration.status === "cancelled" && <span className="ml-2 text-xs">Cancelled</span>}
                           </p>
-                        ))}
+                          <p className={`text-xs ${registration.confirmationError ? "text-destructive" : "text-muted-foreground"}`}>
+                            Confirmation: {registration.confirmationError
+                              ? "failed"
+                              : registration.confirmationSentAt ? "sent" : "pending"}
+                          </p>
+                          {Object.entries(registration.answers).map(([questionId, answer]) => (
+                            <p key={questionId} className="text-xs text-muted-foreground">
+                              {sheet.questions.find((question) => question.id === questionId)?.label ?? questionId}: {answer}
+                            </p>
+                          ))}
+                        </div>
+                        {registration.status === "active" && (
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => void resendConfirmation(sheet.id, registration.id)}>
+                              Resend
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => void cancelRegistration(sheet.id, registration.id, registration.name)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

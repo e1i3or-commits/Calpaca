@@ -81,6 +81,7 @@ export type SignupSheet = {
   description: string | null;
   timezone: string;
   status: string;
+  rosterVisibility: "hidden" | "counts" | "names";
   maxRegistrationsPerPerson: number;
   questions: { id: string; label: string; required: boolean }[];
   sessions: {
@@ -92,6 +93,7 @@ export type SignupSheet = {
     capacity: number;
     registrationCount: number;
     seatsRemaining: number;
+    overCapacity: boolean;
     registrations?: {
       id: string;
       name: string;
@@ -100,6 +102,7 @@ export type SignupSheet = {
       status: string;
       confirmationSentAt: string | null;
       confirmationError: string | null;
+      createdAt: string;
     }[];
   }[];
 };
@@ -360,6 +363,40 @@ export function createSignupSheet(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function updateSignupSheetAdministration(
+  sheetId: string,
+  input: {
+    status?: "open" | "closed";
+    rosterVisibility?: "hidden" | "counts" | "names";
+    capacities?: { sessionId: string; capacity: number }[];
+  },
+): Promise<SignupSheet> {
+  return request(`/api/me/signup-sheets/${encodeURIComponent(sheetId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function cancelSignupRegistrationByOrganizer(
+  sheetId: string,
+  registrationId: string,
+): Promise<{ status: "cancelled" }> {
+  return request(
+    `/api/me/signup-sheets/${encodeURIComponent(sheetId)}/registrations/${encodeURIComponent(registrationId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function resendSignupConfirmation(
+  sheetId: string,
+  registrationId: string,
+): Promise<{ status: "pending" }> {
+  return request(
+    `/api/me/signup-sheets/${encodeURIComponent(sheetId)}/registrations/${encodeURIComponent(registrationId)}/resend`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
 }
 
 export function getSignupSheet(publicId: string): Promise<SignupSheet> {

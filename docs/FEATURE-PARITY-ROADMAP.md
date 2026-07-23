@@ -94,9 +94,9 @@ Sources:
 | Suggest a time | Shipped | Invitee form and organizer email notification |
 | User management | Shipped | Invitations, owner/admin/member roles, and safe deactivation |
 | MCP scheduling client | Shipped | Differentiated |
-| Meeting polls | Missing | Major Doodle/Calendly gap |
-| Capacity/group attendee events | Missing | Major Calendly/Doodle gap |
-| Sign-up sheets/session enrollment | Missing | Major Doodle gap |
+| Meeting polls | Shipped | Doodle/Calendly coordination parity |
+| Capacity/group attendee events | v1 shipped | Shared solo-host sessions; waitlists remain |
+| Sign-up sheets/session enrollment | Shipped | Fixed sessions with enrollment administration |
 | One-off and single-use links | Missing | Common convenience gap |
 | Recurring series | Missing | Common service/education gap |
 | Date overrides and explicit OOO | Shipped | Alternate hours, ranges, and teammate forwarding |
@@ -209,7 +209,7 @@ Goal: cover Doodle's core coordination jobs and Calendly meeting polls.
 | Calendar-aware voting | Shipped | Signed voter link; optional free/busy overlay, no invitee account requirement |
 | Capacity event types | v1 shipped | Solo-host shared sessions, remaining-seat display, transaction-safe limits; waitlists remain |
 | Sign-up sheets | v1 shipped | Named sessions, capacity, custom questions, per-person limits, confirmations, and public cancellation |
-| Enrollment administration | M | Roster, removal, export, resend, privacy controls |
+| Enrollment administration | Shipped | Roster, removal, export, resend, privacy controls, state, and safe capacity changes |
 | Finalization notifications | Shipped | Participant-aware email/ICS delivery, status, resend, and signed webhook |
 
 P3 exit: Calpaca can handle “find one time for this group,” “let many people
