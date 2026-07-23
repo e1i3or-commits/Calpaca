@@ -50,6 +50,7 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/api/me/polls/{id}", "Meeting polls", "Get meeting poll results", "session"],
   ["post", "/api/me/polls/{id}/finalize", "Meeting polls", "Finalize a meeting poll option", "session"],
   ["post", "/api/me/polls/{id}/state", "Meeting polls", "Close or reopen poll voting", "session"],
+  ["post", "/api/me/polls/{id}/participants/{participantId}/resend", "Meeting polls", "Resend a poll finalization notice", "session"],
   ["get", "/api/me/bookings/{id}", "Organizer", "Get booking detail and timeline", "session"],
   ["get", "/api/me/bookings/{id}/assignment", "Organizer", "Explain round-robin assignment", "session"],
   ["post", "/api/me/bookings/{id}/no-show", "Organizer", "Mark a booking as no-show", "session"],

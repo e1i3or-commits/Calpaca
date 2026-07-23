@@ -5,6 +5,15 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-23
+
+### Added
+
+- Participant-specific poll finalization emails with calendar invitations for
+  available and if-needed voters.
+- Poll finalization delivery status, organizer resend controls, and signed
+  `poll.finalized` webhooks.
+
 ## [0.4.0] - 2026-07-23
 
 ### Added
@@ -59,3 +68,4 @@ First tracked public release.
 [0.2.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.2.0
 [0.3.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.3.0
 [0.4.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.4.0
+[0.5.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.5.0

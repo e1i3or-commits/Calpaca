@@ -11,11 +11,13 @@ import { reapRateLimits } from "../db/rate-limit-repo";
 import {
   deliverWebhook,
   fanOutBookingWebhooks,
+  fanOutPollWebhooks,
   fanOutSuggestionWebhooks,
   type BookingWebhookKind,
   type DeliveryJob,
 } from "./webhook-delivery";
 import { sendSuggestionEmail } from "./suggestion-email";
+import { sendPollFinalization } from "./poll-finalization-email";
 import {
   getConnection,
   listConnectionsNeedingChannel,
@@ -51,6 +53,7 @@ const SWEEP_QUEUE = "sync-sweep";
 const RENEWAL_QUEUE = "channel-renewal";
 const INVITE_QUEUE = "invite-email";
 const SUGGESTION_EMAIL_QUEUE = "suggestion-email";
+const POLL_FINALIZATION_EMAIL_QUEUE = "poll-finalization-email";
 const WEBHOOK_FANOUT_QUEUE = "webhook-fanout";
 const WEBHOOK_DELIVERY_QUEUE = "webhook-delivery";
 const REMINDER_SWEEP_QUEUE = "reminder-sweep";
@@ -132,6 +135,32 @@ export async function emitSuggestionWebhook(suggestionId: string): Promise<void>
   }
 }
 
+export async function enqueuePollFinalizationEmail(
+  pollId: string,
+  participantId?: string,
+): Promise<void> {
+  try {
+    await getBoss().send(POLL_FINALIZATION_EMAIL_QUEUE, { pollId, participantId }, {
+      retryLimit: 3,
+      retryDelay: 60,
+      retryBackoff: true,
+    });
+  } catch (e) {
+    console.error(`[jobs] enqueue poll finalization for ${pollId} failed:`, e);
+  }
+}
+
+export async function emitPollFinalizedWebhook(pollId: string): Promise<void> {
+  try {
+    await getBoss().send(WEBHOOK_FANOUT_QUEUE, { pollId }, {
+      retryLimit: 3,
+      retryDelay: 30,
+    });
+  } catch (e) {
+    console.error(`[jobs] enqueue poll webhook for ${pollId} failed:`, e);
+  }
+}
+
 async function runSync(connectionId: string, forceFull: boolean): Promise<void> {
   const conn = await getConnection(connectionId);
   if (!conn) return; // connection removed since enqueue
@@ -195,6 +224,7 @@ export async function startJobs(): Promise<void> {
   await b.createQueue(SWEEP_QUEUE);
   await b.createQueue(INVITE_QUEUE);
   await b.createQueue(SUGGESTION_EMAIL_QUEUE);
+  await b.createQueue(POLL_FINALIZATION_EMAIL_QUEUE);
 
   await b.work<{ connectionId: string; forceFull?: boolean }>(SYNC_QUEUE, async ([job]) => {
     if (job) await runSync(job.data.connectionId, job.data.forceFull ?? false);
@@ -208,21 +238,31 @@ export async function startJobs(): Promise<void> {
   await b.work<{ suggestionId: string }>(SUGGESTION_EMAIL_QUEUE, async ([job]) => {
     if (job) await sendSuggestionEmail(job.data.suggestionId);
   });
+  await b.work<{ pollId: string; participantId?: string }>(
+    POLL_FINALIZATION_EMAIL_QUEUE,
+    async ([job]) => {
+      if (job) await sendPollFinalization(job.data.pollId, job.data.participantId);
+    },
+  );
 
   await b.createQueue(WEBHOOK_FANOUT_QUEUE);
   await b.createQueue(WEBHOOK_DELIVERY_QUEUE);
 
   await b.work<
-    { bookingId: string; kind: BookingWebhookKind; reason?: string } | { suggestionId: string }
+    | { bookingId: string; kind: BookingWebhookKind; reason?: string }
+    | { suggestionId: string }
+    | { pollId: string }
   >(
     WEBHOOK_FANOUT_QUEUE,
     async ([job]) => {
       if (!job) return;
       const deliveries = "suggestionId" in job.data
         ? await fanOutSuggestionWebhooks(job.data.suggestionId)
-        : await fanOutBookingWebhooks(job.data.bookingId, job.data.kind, {
-            reason: job.data.reason,
-          });
+        : "pollId" in job.data
+          ? await fanOutPollWebhooks(job.data.pollId)
+          : await fanOutBookingWebhooks(job.data.bookingId, job.data.kind, {
+              reason: job.data.reason,
+            });
       for (const delivery of deliveries) {
         await b.send(WEBHOOK_DELIVERY_QUEUE, delivery, {
           retryLimit: 8,

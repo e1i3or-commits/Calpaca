@@ -210,7 +210,7 @@ Goal: cover Doodle's core coordination jobs and Calendly meeting polls.
 | Capacity event types | L | One or more invitees per slot, seat counts, waitlist-ready model |
 | Sign-up sheets | L | Named sessions, capacity, custom questions, per-person registration cap |
 | Enrollment administration | M | Roster, removal, export, resend, privacy controls |
-| Finalization notifications | M | Calendar invite and lifecycle events to all confirmed participants |
+| Finalization notifications | Shipped | Participant-aware email/ICS delivery, status, resend, and signed webhook |
 
 P3 exit: Calpaca can handle “find one time for this group,” “let many people
 join this slot,” and “let people enroll across these sessions” as distinct,

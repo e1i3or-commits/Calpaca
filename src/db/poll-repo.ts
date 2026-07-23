@@ -39,8 +39,12 @@ export type PollRecord = {
     no: number;
   }[];
   responses?: {
+    id: string;
     name: string;
     email: string;
+    finalizationStatus: string;
+    finalizationSentAt: Date | null;
+    finalizationError: string | null;
     votes: { optionId: string; choice: PollChoice }[];
   }[];
 };
@@ -57,6 +61,9 @@ async function hydratePoll(
     id: meetingPollParticipants.id,
     name: meetingPollParticipants.name,
     email: meetingPollParticipants.email,
+    finalizationStatus: meetingPollParticipants.finalizationStatus,
+    finalizationSentAt: meetingPollParticipants.finalizationSentAt,
+    finalizationError: meetingPollParticipants.finalizationError,
   })
     .from(meetingPollParticipants)
     .where(eq(meetingPollParticipants.pollId, poll.id));
@@ -94,8 +101,12 @@ async function hydratePoll(
     ...(includeParticipants
       ? {
           responses: participants.map((participant) => ({
+            id: participant.id,
             name: participant.name,
             email: participant.email,
+            finalizationStatus: participant.finalizationStatus,
+            finalizationSentAt: participant.finalizationSentAt,
+            finalizationError: participant.finalizationError,
             votes: votes
               .filter((vote) => vote.participantId === participant.id)
               .map((vote) => ({
@@ -327,6 +338,125 @@ export async function finalizeMeetingPoll(
       finalizedOptionId: optionId,
       updatedAt: new Date(),
     }).where(eq(meetingPolls.id, poll.id)).returning();
+    await tx.update(meetingPollParticipants).set({
+      finalizationStatus: "pending",
+      finalizationSentAt: null,
+      finalizationError: null,
+    }).where(eq(meetingPollParticipants.pollId, poll.id));
     return hydratePoll(updated!, tx);
   });
+}
+
+export type PollFinalizationContext = {
+  poll: {
+    id: string;
+    publicId: string;
+    title: string;
+    description: string | null;
+    timezone: string;
+  };
+  owner: { name: string; email: string };
+  option: { startsAt: Date; endsAt: Date };
+  participants: {
+    id: string;
+    name: string;
+    email: string;
+    choice: PollChoice;
+    status: string;
+  }[];
+};
+
+export async function getPollFinalizationContext(
+  pollId: string,
+  executor: Db = getDb(),
+): Promise<PollFinalizationContext | null> {
+  const [row] = await executor.select({
+    id: meetingPolls.id,
+    publicId: meetingPolls.publicId,
+    title: meetingPolls.title,
+    description: meetingPolls.description,
+    timezone: meetingPolls.timezone,
+    finalizedOptionId: meetingPolls.finalizedOptionId,
+    ownerName: schema.users.name,
+    ownerEmail: schema.users.email,
+  }).from(meetingPolls)
+    .innerJoin(schema.users, eq(meetingPolls.ownerUserId, schema.users.id))
+    .where(eq(meetingPolls.id, pollId));
+  if (!row?.finalizedOptionId) return null;
+  const [option] = await executor.select({
+    startsAt: meetingPollOptions.startsAt,
+    endsAt: meetingPollOptions.endsAt,
+  }).from(meetingPollOptions).where(and(
+    eq(meetingPollOptions.id, row.finalizedOptionId),
+    eq(meetingPollOptions.pollId, row.id),
+  ));
+  if (!option) return null;
+  const participants = await executor.select({
+    id: meetingPollParticipants.id,
+    name: meetingPollParticipants.name,
+    email: meetingPollParticipants.email,
+    choice: meetingPollVotes.choice,
+    status: meetingPollParticipants.finalizationStatus,
+  }).from(meetingPollParticipants)
+    .innerJoin(meetingPollVotes, and(
+      eq(meetingPollVotes.participantId, meetingPollParticipants.id),
+      eq(meetingPollVotes.optionId, row.finalizedOptionId),
+    ))
+    .where(eq(meetingPollParticipants.pollId, row.id));
+  return {
+    poll: {
+      id: row.id,
+      publicId: row.publicId,
+      title: row.title,
+      description: row.description,
+      timezone: row.timezone,
+    },
+    owner: { name: row.ownerName, email: row.ownerEmail },
+    option,
+    participants: participants.map((participant) => ({
+      ...participant,
+      choice: participant.choice as PollChoice,
+    })),
+  };
+}
+
+export async function recordPollFinalizationDelivery(
+  participantId: string,
+  outcome: { sent: true } | { sent: false; error: string },
+  executor: Db = getDb(),
+): Promise<void> {
+  await executor.update(meetingPollParticipants).set(outcome.sent
+    ? {
+        finalizationStatus: "sent",
+        finalizationSentAt: new Date(),
+        finalizationError: null,
+      }
+    : {
+        finalizationStatus: "failed",
+        finalizationError: outcome.error.slice(0, 1000),
+      })
+    .where(eq(meetingPollParticipants.id, participantId));
+}
+
+export async function resetPollFinalizationDelivery(
+  pollId: string,
+  workspaceId: string,
+  participantId: string,
+  executor: Db = getDb(),
+): Promise<boolean> {
+  const [row] = await executor.select({ id: meetingPollParticipants.id })
+    .from(meetingPollParticipants)
+    .innerJoin(meetingPolls, eq(meetingPollParticipants.pollId, meetingPolls.id))
+    .where(and(
+      eq(meetingPollParticipants.id, participantId),
+      eq(meetingPolls.id, pollId),
+      eq(meetingPolls.workspaceId, workspaceId),
+      eq(meetingPolls.status, "finalized"),
+    ));
+  if (!row) return false;
+  await executor.update(meetingPollParticipants).set({
+    finalizationStatus: "pending",
+    finalizationError: null,
+  }).where(eq(meetingPollParticipants.id, participantId));
+  return true;
 }

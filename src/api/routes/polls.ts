@@ -12,6 +12,7 @@ import {
   getPublicMeetingPoll,
   listMeetingPolls,
   saveMeetingPollVotes,
+  resetPollFinalizationDelivery,
   setMeetingPollOpenState,
   type PollRecord,
 } from "../../db/poll-repo";
@@ -30,6 +31,10 @@ import { effectiveOpenIntervals } from "../../core/availability/overrides";
 import { intersectMany, subtract, type Interval } from "../../core/availability/intervals";
 import { generateSlots } from "../../core/availability/slots";
 import { scoreSlots } from "../../core/availability/scoring";
+import {
+  emitPollFinalizedWebhook,
+  enqueuePollFinalizationEmail,
+} from "../../jobs/index";
 
 const optionSchema = z.object({
   start: z.string().min(1),
@@ -69,12 +74,16 @@ export interface PollSuggestionDeps {
   readonly getSchedulesForUsers: (userIds: readonly string[]) => Promise<HostSchedule[]>;
   readonly getBusyForUsers: (userIds: readonly string[], window: Interval) => Promise<HostBusy[]>;
   readonly now: () => Temporal.Instant;
+  readonly enqueueFinalizationEmail?: (pollId: string, participantId?: string) => Promise<void>;
+  readonly emitFinalizedWebhook?: (pollId: string) => Promise<void>;
 }
 
 const defaultSuggestionDeps: PollSuggestionDeps = {
   getSchedulesForUsers,
   getBusyForUsers,
   now: () => Temporal.Now.instant(),
+  enqueueFinalizationEmail: enqueuePollFinalizationEmail,
+  emitFinalizedWebhook: emitPollFinalizedWebhook,
 };
 
 function renderPoll(
@@ -130,6 +139,14 @@ function renderPoll(
           responses: poll.responses.map((response) => ({
             name: response.name,
             ...(!publicView ? { email: response.email } : {}),
+            ...(!publicView
+              ? {
+                  id: response.id,
+                  finalizationStatus: response.finalizationStatus,
+                  finalizationSentAt: response.finalizationSentAt?.toISOString() ?? null,
+                  finalizationError: response.finalizationError,
+                }
+              : {}),
             votes: response.votes,
           })),
         }
@@ -312,7 +329,25 @@ export function createPollRoutes(
     if (result === "not_found") return c.json({ error: "poll_not_found" }, 404);
     if (result === "closed") return c.json({ error: "poll_closed" }, 409);
     if (result === "invalid_option") return c.json({ error: "invalid_option" }, 400);
+    await Promise.all([
+      suggestionDeps.enqueueFinalizationEmail?.(result.id),
+      suggestionDeps.emitFinalizedWebhook?.(result.id),
+    ]);
     return c.json(renderPoll(result));
+  });
+
+  routes.post("/api/me/polls/:id/participants/:participantId/resend", async (c) => {
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "poll_not_found" }, 404);
+    const participantId = c.req.param("participantId");
+    const reset = await resetPollFinalizationDelivery(
+      c.req.param("id"),
+      workspaceId,
+      participantId,
+    );
+    if (!reset) return c.json({ error: "participant_not_found" }, 404);
+    await suggestionDeps.enqueueFinalizationEmail?.(c.req.param("id"), participantId);
+    return c.json({ status: "pending" });
   });
 
   routes.post("/api/me/polls/:id/state", async (c) => {

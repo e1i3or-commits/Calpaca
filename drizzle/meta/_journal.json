@@ -225,6 +225,13 @@
       "when": 1784832858802,
       "tag": "0031_empty_fallen_one",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784833715614,
+      "tag": "0032_gifted_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

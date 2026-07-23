@@ -14,7 +14,8 @@ export type WebhookEventKind =
   | "booking.invite_delivered"
   | "booking.invite_failed"
   | "booking.reminder_sent"
-  | "suggestion.created";
+  | "suggestion.created"
+  | "poll.finalized";
 
 export const WEBHOOK_EVENT_KINDS: readonly WebhookEventKind[] = [
   "booking.created",
@@ -27,6 +28,7 @@ export const WEBHOOK_EVENT_KINDS: readonly WebhookEventKind[] = [
   "booking.invite_failed",
   "booking.reminder_sent",
   "suggestion.created",
+  "poll.finalized",
 ];
 
 /** A subscription's `events` list matches an event when it names it or
@@ -63,6 +65,36 @@ export function buildSuggestionWebhookBody(input: {
           end: renderInstant(slot.end, tz),
         })),
         ...(input.suggestion.message !== undefined && { message: input.suggestion.message }),
+      },
+    },
+  });
+}
+
+export function buildPollFinalizedWebhookBody(input: {
+  readonly deliveryId: string;
+  readonly occurredAt: Temporal.Instant;
+  readonly poll: {
+    readonly id: string;
+    readonly publicId: string;
+    readonly title: string;
+    readonly timezone: string;
+    readonly start: Temporal.Instant;
+    readonly end: Temporal.Instant;
+    readonly participantCount: number;
+  };
+}): string {
+  return JSON.stringify({
+    deliveryId: input.deliveryId,
+    event: "poll.finalized",
+    occurredAt: input.occurredAt.toString(),
+    data: {
+      poll: {
+        id: input.poll.id,
+        publicId: input.poll.publicId,
+        title: input.poll.title,
+        start: renderInstant(input.poll.start, input.poll.timezone),
+        end: renderInstant(input.poll.end, input.poll.timezone),
+        participantCount: input.poll.participantCount,
       },
     },
   });

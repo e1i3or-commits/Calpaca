@@ -436,6 +436,9 @@ export const meetingPollParticipants = pgTable("meeting_poll_participants", {
   name: text("name").notNull(),
   email: text("email").notNull(),
   editTokenHash: text("edit_token_hash").notNull().unique(),
+  finalizationStatus: text("finalization_status").notNull().default("none"),
+  finalizationSentAt: timestamp("finalization_sent_at", { withTimezone: true }),
+  finalizationError: text("finalization_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [

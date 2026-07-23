@@ -61,6 +61,7 @@ import {
   revokeUserInvitation,
   revokeApiToken,
   removeWorkspaceDomain,
+  resendPollFinalization,
   markBookingNoShow,
   finalizeMeetingPoll,
   signOut,
@@ -949,6 +950,12 @@ function PollsTab() {
       .catch((cause: unknown) => setError(errorText(cause)));
   }, []);
   useEffect(() => reload(), [reload]);
+  useEffect(() => {
+    const refresh = window.setInterval(() => {
+      void listMeetingPolls().then((result) => setPolls(result.polls), () => {});
+    }, 10_000);
+    return () => window.clearInterval(refresh);
+  }, []);
 
   const create = async () => {
     setError(null);
@@ -1021,6 +1028,15 @@ function PollsTab() {
   const changeOpenState = async (poll: MeetingPoll, open: boolean) => {
     try {
       await setMeetingPollOpenState(poll.id, open);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  const resendFinalization = async (pollId: string, participantId: string) => {
+    try {
+      await resendPollFinalization(pollId, participantId);
       reload();
     } catch (cause) {
       setError(errorText(cause));
@@ -1168,15 +1184,36 @@ function PollsTab() {
             {poll.responses && poll.responses.length > 0 && (
               <div className="mt-4 overflow-x-auto border-t border-border pt-4">
                 <table className="w-full min-w-[36rem] text-left text-xs">
-                  <thead><tr><th className="pb-2 pr-4 font-medium">Participant</th>{poll.options.map((option) => <th key={option.id} className="px-2 pb-2 text-center font-medium">#{option.rank}</th>)}</tr></thead>
+                  <thead><tr><th className="pb-2 pr-4 font-medium">Participant</th>{poll.options.map((option) => <th key={option.id} className="px-2 pb-2 text-center font-medium">#{option.rank}</th>)}{poll.status === "finalized" && <th className="pb-2 pl-2 text-right font-medium">Delivery</th>}</tr></thead>
                   <tbody>
                     {poll.responses.map((response) => (
                       <tr key={response.email} className="border-t border-border">
-                        <td className="py-2 pr-4"><span className="font-medium">{response.name}</span><span className="ml-2 text-muted-foreground">{response.email}</span></td>
+                        <td className="py-2 pr-4">
+                          <span className="font-medium">{response.name}</span>
+                          <span className="ml-2 text-muted-foreground">{response.email}</span>
+                          {poll.status === "finalized" && (
+                            <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              response.finalizationStatus === "sent"
+                                ? "bg-emerald-500/15 text-emerald-700"
+                                : response.finalizationStatus === "failed"
+                                  ? "bg-red-500/15 text-red-700"
+                                  : "bg-amber-400/20 text-amber-700"
+                            }`}>
+                              {response.finalizationStatus ?? "pending"}
+                            </span>
+                          )}
+                        </td>
                         {poll.options.map((option) => {
                           const choice = response.votes.find((vote) => vote.optionId === option.id)?.choice ?? "no";
                           return <td key={option.id} className="px-2 py-2 text-center capitalize">{choice.replace("_", " ")}</td>;
                         })}
+                        {poll.status === "finalized" && response.id && (
+                          <td className="py-2 pl-2 text-right">
+                            <Button size="sm" variant="ghost" disabled={response.finalizationStatus === "pending"} onClick={() => void resendFinalization(poll.id, response.id!)}>
+                              Resend
+                            </Button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

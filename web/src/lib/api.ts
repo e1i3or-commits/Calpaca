@@ -52,8 +52,12 @@ export type MeetingPoll = {
     rank: number;
   }[];
   responses?: {
+    id?: string;
     name: string;
     email?: string;
+    finalizationStatus?: "none" | "pending" | "sent" | "failed";
+    finalizationSentAt?: string | null;
+    finalizationError?: string | null;
     votes: { optionId: string; choice: PollChoice }[];
   }[];
 };
@@ -249,6 +253,16 @@ export function setMeetingPollOpenState(id: string, open: boolean): Promise<Meet
   return request(`/api/me/polls/${id}/state`, {
     method: "POST",
     body: JSON.stringify({ open }),
+  });
+}
+
+export function resendPollFinalization(
+  pollId: string,
+  participantId: string,
+): Promise<{ status: "pending" }> {
+  return request(`/api/me/polls/${pollId}/participants/${participantId}/resend`, {
+    method: "POST",
+    body: JSON.stringify({}),
   });
 }
 

@@ -1,6 +1,7 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { getInviteContext } from "../db/booking-repo";
 import { getTimeSuggestionContext } from "../db/suggestion-repo";
+import { getMeetingPollWorkspaceId, getPollFinalizationContext } from "../db/poll-repo";
 import {
   createWebhookDelivery,
   getWebhook,
@@ -10,6 +11,7 @@ import {
 } from "../db/webhook-repo";
 import {
   buildWebhookBody,
+  buildPollFinalizedWebhookBody,
   buildSuggestionWebhookBody,
   matchesSubscription,
   type WebhookEventKind,
@@ -83,6 +85,42 @@ export async function fanOutSuggestionWebhooks(
             end: Temporal.Instant.from(slot.end),
           })),
           ...(ctx.message !== undefined && { message: ctx.message }),
+        },
+      }),
+    };
+  }));
+}
+
+export async function fanOutPollWebhooks(
+  pollId: string,
+  deps: Pick<FanOutDeps, "listActiveWebhooks" | "createWebhookDelivery" | "now" | "deliveryId"> = defaultFanOutDeps,
+): Promise<DeliveryJob[]> {
+  const event = "poll.finalized" as const;
+  const ctx = await getPollFinalizationContext(pollId);
+  if (!ctx) return [];
+  const workspaceId = await getMeetingPollWorkspaceId(ctx.poll.publicId);
+  if (!workspaceId) return [];
+  const hooks = (await deps.listActiveWebhooks(workspaceId))
+    .filter((hook) => matchesSubscription(hook.events, event));
+  const occurredAt = deps.now();
+  return Promise.all(hooks.map(async (hook) => {
+    const deliveryId = deps.deliveryId();
+    await deps.createWebhookDelivery({ id: deliveryId, webhookId: hook.id, event });
+    return {
+      webhookId: hook.id,
+      deliveryId,
+      event,
+      body: buildPollFinalizedWebhookBody({
+        deliveryId,
+        occurredAt,
+        poll: {
+          id: ctx.poll.id,
+          publicId: ctx.poll.publicId,
+          title: ctx.poll.title,
+          timezone: ctx.poll.timezone,
+          start: Temporal.Instant.fromEpochMilliseconds(ctx.option.startsAt.getTime()),
+          end: Temporal.Instant.fromEpochMilliseconds(ctx.option.endsAt.getTime()),
+          participantCount: ctx.participants.length,
         },
       }),
     };
