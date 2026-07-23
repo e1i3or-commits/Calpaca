@@ -3,9 +3,11 @@ import {
   Calendar,
   CalendarDays,
   CalendarRange,
+  ChartNoAxesCombined,
   CheckCircle2,
   Clock3,
   Copy,
+  Download,
   Home,
   LogOut,
   Menu,
@@ -18,6 +20,7 @@ import {
 import {
   ApiError,
   addTeamMember,
+  analyticsCsvUrl,
   connectCalendar,
   createEventType,
   createRoutingForm,
@@ -29,6 +32,7 @@ import {
   disconnectCalendar,
   getMyCalendars,
   getAdminBooking,
+  getAnalytics,
   getBookingAssignment,
   listAdminBookings,
   listEventTypes,
@@ -47,6 +51,7 @@ import {
   type AdminEventType,
   type AdminBooking,
   type AdminBookingDetail,
+  type AnalyticsReport,
   type AssignmentExplanation,
   type CalendarEntry,
   type DirectoryUser,
@@ -76,6 +81,7 @@ const TABS = [
   { key: "home", label: "Home", icon: Home, group: "primary" },
   { key: "event-types", label: "Scheduling", icon: CalendarDays, group: "primary" },
   { key: "bookings", label: "Bookings", icon: CalendarRange, group: "primary" },
+  { key: "analytics", label: "Analytics", icon: ChartNoAxesCombined, group: "primary" },
   { key: "schedules", label: "Availability", icon: Clock3, group: "setup" },
   { key: "routing", label: "Routing", icon: Route, group: "setup" },
   { key: "team", label: "People & teams", icon: Users, group: "setup" },
@@ -167,6 +173,7 @@ export function DashboardPage() {
               {tab === "home" && <HomeTab onNavigate={setTab} />}
               {tab === "event-types" && <EventTypesTab users={users} />}
               {tab === "bookings" && <BookingsTab users={users} />}
+              {tab === "analytics" && <AnalyticsTab />}
               {tab === "schedules" && <SchedulesTab />}
               {tab === "routing" && <RoutingTab users={users} />}
               {tab === "team" && <TeamTab users={users} />}
@@ -181,11 +188,9 @@ export function DashboardPage() {
           TABS[0],
           TABS[1],
           TABS[2],
-          { ...TABS[3], label: "More" },
+          TABS[3],
         ].map((item) => {
-          const active = item.key === "schedules"
-            ? TABS.some((candidate) => candidate.group === "setup" && candidate.key === tab)
-            : item.key === tab;
+          const active = item.key === tab;
           return (
             <button
               key={item.key}
@@ -241,6 +246,7 @@ const PAGE_COPY: Record<TabKey, { title: string; description: string }> = {
   home: { title: "Good day", description: "A quiet view of what needs your attention." },
   "event-types": { title: "Scheduling", description: "Booking links and the people behind them." },
   bookings: { title: "Bookings", description: "Upcoming conversations and recent history." },
+  analytics: { title: "Analytics", description: "A clear view of volume, outcomes, and team balance." },
   schedules: { title: "Availability", description: "The recurring hours your booking links can offer." },
   routing: { title: "Routing", description: "Send each invitee to the right conversation." },
   team: { title: "People & teams", description: "Hosts, membership, and shared scheduling." },
@@ -401,6 +407,175 @@ function Metric({
     <div className={`rounded-xl border border-border/70 bg-card p-4 ${className}`}>
       <p className={`text-2xl font-semibold tabular-nums ${tone === "danger" ? "text-destructive" : ""}`}>{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function shiftMonth(month: string, delta: number): string {
+  const [year, rawMonth] = month.split("-").map(Number);
+  const index = year! * 12 + rawMonth! - 1 + delta;
+  return `${Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`;
+}
+
+function percent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function hours(value: number): string {
+  if (value < 24) return `${value.toFixed(value < 10 ? 1 : 0)}h`;
+  return `${(value / 24).toFixed(1)}d`;
+}
+
+function AnalyticsTab() {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const [from, setFrom] = useState(() => shiftMonth(currentMonth, -5));
+  const [to, setTo] = useState(currentMonth);
+  const [report, setReport] = useState<AnalyticsReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setReport(null);
+    setError(null);
+    getAnalytics(from, to)
+      .then(setReport)
+      .catch((cause: unknown) => setError(errorText(cause)));
+  }, [from, to]);
+
+  const outcomeTotals = new Map<AnalyticsReport["outcomes"][number]["status"], number>();
+  const eventTotals = new Map<string, { confirmed: number; cancelled: number; noShow: number }>();
+  for (const row of report?.outcomes ?? []) {
+    outcomeTotals.set(row.status, (outcomeTotals.get(row.status) ?? 0) + row.count);
+    const current = eventTotals.get(row.eventTypeSlug) ?? { confirmed: 0, cancelled: 0, noShow: 0 };
+    if (row.status === "confirmed") current.confirmed += row.count;
+    if (row.status === "cancelled") current.cancelled += row.count;
+    if (row.status === "no_show") current.noShow += row.count;
+    eventTotals.set(row.eventTypeSlug, current);
+  }
+  const total = [...outcomeTotals.values()].reduce((sum, count) => sum + count, 0);
+  const confirmed = outcomeTotals.get("confirmed") ?? 0;
+  const cancelled = outcomeTotals.get("cancelled") ?? 0;
+  const noShow = outcomeTotals.get("no_show") ?? 0;
+  const leadBookings = report?.leadTime.reduce((sum, row) => sum + row.bookingCount, 0) ?? 0;
+  const averageLead = leadBookings
+    ? (report?.leadTime.reduce((sum, row) => sum + row.averageHours * row.bookingCount, 0) ?? 0) / leadBookings
+    : null;
+
+  return (
+    <div className="space-y-5">
+      <section className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="analytics-from">From</Label>
+            <Input id="analytics-from" type="month" value={from} max={to} onChange={(event) => setFrom(event.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="analytics-to">Through</Label>
+            <Input id="analytics-to" type="month" value={to} min={from} max={currentMonth} onChange={(event) => setTo(event.target.value)} />
+          </div>
+        </div>
+        <a
+          href={analyticsCsvUrl(from, to)}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
+        >
+          <Download className="h-4 w-4" /> Export CSV
+        </a>
+      </section>
+
+      {error && <p className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
+      {!report && !error && <DashboardSkeleton />}
+      {report && (
+        <>
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Metric label="Bookings" value={total} />
+            <Metric label="Still confirmed" value={total ? percent(confirmed / total) : "—"} />
+            <Metric label="Cancelled" value={cancelled} />
+            <Metric label="Average lead time" value={averageLead === null ? "—" : hours(averageLead)} />
+          </section>
+
+          <section className="grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
+            <div className="rounded-xl border border-border/70 bg-card p-5">
+              <div className="mb-5">
+                <h2 className="font-semibold tracking-[-0.02em]">Booking outcomes</h2>
+                <p className="mt-1 text-xs text-muted-foreground">Selected months · scheduled meeting date in UTC</p>
+              </div>
+              {eventTotals.size === 0 ? (
+                <p className="py-10 text-center text-sm text-muted-foreground">No bookings in this range.</p>
+              ) : (
+                <div className="space-y-5">
+                  {[...eventTotals.entries()].map(([slug, values]) => {
+                    const rowTotal = values.confirmed + values.cancelled + values.noShow;
+                    return (
+                      <div key={slug}>
+                        <div className="mb-2 flex items-center justify-between text-sm">
+                          <span className="font-medium">/{slug}</span>
+                          <span className="tabular-nums text-muted-foreground">{rowTotal}</span>
+                        </div>
+                        <div className="flex h-2.5 overflow-hidden rounded-full bg-muted" aria-label={`${slug}: ${values.confirmed} confirmed, ${values.cancelled} cancelled, ${values.noShow} no-shows`}>
+                          <span className="bg-primary" style={{ width: `${(values.confirmed / rowTotal) * 100}%` }} />
+                          <span className="bg-warning" style={{ width: `${(values.cancelled / rowTotal) * 100}%` }} />
+                          <span className="bg-destructive" style={{ width: `${(values.noShow / rowTotal) * 100}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="flex flex-wrap gap-4 border-t border-border pt-4 text-xs text-muted-foreground">
+                    <span><i className="mr-1.5 inline-block h-2 w-2 rounded-full bg-primary" />Confirmed {confirmed}</span>
+                    <span><i className="mr-1.5 inline-block h-2 w-2 rounded-full bg-warning" />Cancelled {cancelled}</span>
+                    <span><i className="mr-1.5 inline-block h-2 w-2 rounded-full bg-destructive" />No-show {noShow}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-card p-5">
+              <h2 className="font-semibold tracking-[-0.02em]">No-show health</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Lifetime completed meetings</p>
+              <div className="mt-5 space-y-4">
+                {report.noShowRates.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">No completed meetings yet.</p>}
+                {report.noShowRates.map((row) => (
+                  <div key={row.eventTypeSlug}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="truncate">/{row.eventTypeSlug}</span>
+                      <span className="font-medium tabular-nums">{percent(row.noShowRate)}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{row.noShowCount} of {row.completedCount} meetings</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="grid gap-5 lg:grid-cols-2">
+            <div className="rounded-xl border border-border/70 bg-card p-5">
+              <h2 className="font-semibold tracking-[-0.02em]">Lead time</h2>
+              <p className="mt-1 text-xs text-muted-foreground">How far ahead people book</p>
+              <div className="mt-4 divide-y divide-border">
+                {report.leadTime.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">No lead-time data in this range.</p>}
+                {report.leadTime.map((row) => (
+                  <div key={row.eventTypeSlug} className="flex items-center justify-between py-3 text-sm">
+                    <div><p className="font-medium">/{row.eventTypeSlug}</p><p className="text-xs text-muted-foreground">{row.bookingCount} bookings</p></div>
+                    <div className="text-right"><p className="font-medium">{hours(row.medianHours)} median</p><p className="text-xs text-muted-foreground">{hours(row.averageHours)} average</p></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-card p-5">
+              <h2 className="font-semibold tracking-[-0.02em]">Round-robin balance</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Lifetime booking share compared with configured weight</p>
+              <div className="mt-4 divide-y divide-border">
+                {report.roundRobin.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">No round-robin pools configured.</p>}
+                {report.roundRobin.map((row) => (
+                  <div key={`${row.eventTypeSlug}-${row.hostEmail}`} className="flex items-center justify-between gap-4 py-3 text-sm">
+                    <div className="min-w-0"><p className="truncate font-medium">{row.hostName}</p><p className="truncate text-xs text-muted-foreground">/{row.eventTypeSlug}</p></div>
+                    <div className="shrink-0 text-right"><p className="font-medium tabular-nums">{percent(row.bookingShare)} actual</p><p className="text-xs text-muted-foreground">{percent(row.weightShare)} target · {row.bookingCount} bookings</p></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

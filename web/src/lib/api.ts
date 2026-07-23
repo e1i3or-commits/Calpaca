@@ -499,3 +499,41 @@ export async function signInWithGoogle(callbackURL: string): Promise<string> {
 export function signOut(): Promise<unknown> {
   return request("/api/auth/sign-out", { method: "POST", body: "{}" });
 }
+
+export type AnalyticsReport = {
+  outcomes: {
+    eventTypeSlug: string;
+    month: string;
+    status: "confirmed" | "cancelled" | "no_show";
+    count: number;
+  }[];
+  leadTime: {
+    eventTypeSlug: string;
+    bookingCount: number;
+    averageHours: number;
+    medianHours: number;
+  }[];
+  noShowRates: {
+    eventTypeSlug: string;
+    completedCount: number;
+    noShowCount: number;
+    noShowRate: number;
+  }[];
+  roundRobin: {
+    eventTypeSlug: string;
+    hostName: string;
+    hostEmail: string;
+    weight: number;
+    bookingCount: number;
+    bookingShare: number;
+    weightShare: number;
+  }[];
+};
+
+export function getAnalytics(from: string, to: string): Promise<AnalyticsReport> {
+  return request(`/api/me/analytics?${new URLSearchParams({ from, to })}`);
+}
+
+export function analyticsCsvUrl(from: string, to: string): string {
+  return `/api/me/analytics.csv?${new URLSearchParams({ from, to })}`;
+}

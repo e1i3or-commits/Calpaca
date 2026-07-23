@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { getAuth } from "../auth/index";
 import { adminRoutes } from "./routes/admin";
+import { analyticsRoutes } from "./routes/analytics";
 import { availabilityRoutes } from "./routes/availability";
 import { bookingRoutes } from "./routes/bookings";
 import { meRoutes } from "./routes/me";
@@ -18,6 +19,7 @@ app.route("/", availabilityRoutes);
 app.route("/", bookingRoutes);
 app.route("/", meRoutes);
 app.route("/", adminRoutes);
+app.route("/", analyticsRoutes);
 app.route("/", routingRoutes);
 app.route("/", webhookAdminRoutes);
 app.route("/", webhookRoutes);

@@ -89,7 +89,7 @@ Sources:
 | Booking questions | Partial | Notes and routing fields only |
 | Workflows | Partial | Fixed reminders and webhooks, no user-authored automation |
 | Webhooks and delivery log | Shipped | Strong extension boundary |
-| Analytics | SQL views shipped | Data exists; admin experience and exports missing |
+| Analytics | Dashboard and CSV shipped | Outcomes, lead time, no-shows, and round-robin balance are visible |
 | Admin bookings | API shipped | UI pending |
 | Suggest a time | Backend shipped | Invitee UI pending |
 | MCP scheduling client | Shipped | Differentiated |
@@ -137,7 +137,7 @@ friction before adding new domains.
 | --- | ---: | --- |
 | Admin bookings list/detail, delivery state, no-show, assignment explanation | M | Task 27 visual and mobile review |
 | Invitee “Suggest a different time” form | M | Task 28 visual and mobile review |
-| Analytics dashboard and CSV export over the four views | M | Results match SQL views exactly |
+| Analytics dashboard and CSV export over the four views | Shipped | Results match SQL views exactly |
 | Generic deployment example, vendored AGPL text, issue templates | S | Clean self-host install |
 | Embed v1: responsive iframe + small script launcher | M | CSP, resize, and mobile tests |
 | OpenAPI document generated from the live contracts | M | Contract drift check in verification |
@@ -204,6 +204,7 @@ teams.
 
 | Deliverable | Effort | Notes |
 | --- | ---: | --- |
+| User directory and lifecycle | L | Invite, resend, status, deactivate/reactivate; preserve booking history |
 | Managed event templates | L | Admin-owned template, assigned members, lockable fields |
 | Team landing pages and grouped links | M | Profile, branding, active event catalogue |
 | Roles and permissions | L | Owner, admin, team manager, member; capability-based checks |
@@ -213,8 +214,9 @@ teams.
 | Team OOO administration and delegation | M | Coverage and forwarding visible to admins |
 | Provisioning health dashboard | M | Missing calendar/location, sync health, pending invitations |
 
-P4 exit: a sales, recruiting, or support organization can standardize event
-types, route by fit, inspect the decision, and manage coverage.
+P4 exit: a sales, recruiting, or support organization can securely invite,
+govern, deactivate, and organize its users; standardize event types; route
+by fit; inspect the decision; and manage coverage.
 
 ### P5 — Calendar and meeting ecosystem
 
