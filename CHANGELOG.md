@@ -5,6 +5,14 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-23
+
+### Added
+
+- Typed custom booking questions for event types, including required,
+  hidden, select, multiselect, phone, checkbox, and long-text fields with
+  server-side validation and lifecycle propagation.
+
 ## [0.10.0] - 2026-07-23
 
 ### Added

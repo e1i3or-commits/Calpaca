@@ -269,6 +269,19 @@ const eventTypeBodySchema = z
     logoUrl: z.string().url().max(2048).nullable().default(null),
     meetingFormats: z.array(z.enum(["phone", "google_meet"])).min(1).max(2)
       .default(["google_meet"]),
+    bookingQuestions: z.array(z.object({
+      id: z.string().min(1).max(80).regex(/^[a-z0-9][a-z0-9_-]*$/),
+      label: z.string().trim().min(1).max(200),
+      type: z.enum(["text", "textarea", "select", "multiselect", "phone", "checkbox"]),
+      required: z.boolean(),
+      hidden: z.boolean(),
+      options: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
+    }).superRefine((question, context) => {
+      const needsOptions = question.type === "select" || question.type === "multiselect";
+      if (needsOptions && (!question.options || question.options.length < 1)) {
+        context.addIssue({ code: "custom", message: "select questions require options" });
+      }
+    })).max(20).default([]),
     agentPolicy: z
       .object({
         enabled: z.boolean(),
@@ -291,6 +304,9 @@ const eventTypeBodySchema = z
   })
   .refine((et) => et.capacity === 1 || et.mode === "solo", {
     message: "capacity event types must use solo mode",
+  })
+  .refine((et) => new Set(et.bookingQuestions.map((question) => question.id)).size === et.bookingQuestions.length, {
+    message: "booking question ids must be unique",
   });
 
 const teamBodySchema = z.object({
@@ -357,6 +373,54 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     });
   });
 
+  router.get("/api/me/bookings.csv", async (c) => {
+    const parsed = bookingListQuerySchema.omit({ page: true, pageSize: true }).safeParse(c.req.query());
+    if (!parsed.success) return c.json({ error: "invalid_query", issues: parsed.error.issues }, 400);
+    const { timezone, ...filters } = parsed.data;
+    const user = c.get("user");
+    const now = deps.now?.() ?? Temporal.Now.instant();
+    const all: AdminBookingPage["bookings"][number][] = [];
+    let page = 1;
+    let total = 0;
+    do {
+      const result = await deps.listBookingsForUser?.({
+        userId: user.id,
+        workspaceId: user.workspaceId,
+        ...filters,
+        page,
+        pageSize: 100,
+        now,
+      }) ?? { bookings: [], total: 0 };
+      all.push(...result.bookings);
+      total = result.total;
+      page += 1;
+    } while (all.length < total);
+    const details = await Promise.all(all.map((booking) =>
+      deps.getBookingDetailForUser?.(booking.id, user.id, user.workspaceId)));
+    const escapeCsv = (value: unknown) => `"${String(value ?? "").replaceAll("\"", "\"\"")}"`;
+    const rows = all.map((booking, index) => {
+      const detail = details[index];
+      return [
+        booking.id,
+        booking.eventType.title,
+        renderAdminInstant(booking.startsAt, timezone).invitee,
+        renderAdminInstant(booking.endsAt, timezone).invitee,
+        booking.inviteeName,
+        booking.inviteeEmail,
+        booking.status,
+        booking.inviteStatus,
+        detail?.bookingAnswers ? JSON.stringify(detail.bookingAnswers) : "",
+      ];
+    });
+    const csv = [
+      ["booking_id", "event_type", "start", "end", "invitee_name", "invitee_email", "status", "invite_status", "booking_answers"],
+      ...rows,
+    ].map((row) => row.map(escapeCsv).join(",")).join("\r\n");
+    c.header("Content-Type", "text/csv; charset=utf-8");
+    c.header("Content-Disposition", `attachment; filename="calpaca-${filters.filter}-bookings.csv"`);
+    return c.body(csv);
+  });
+
   router.get("/api/me/bookings/:id", async (c) => {
     const timezone = c.req.query("timezone") ?? "UTC";
     if (!isIanaZone(timezone)) return c.json({ error: "invalid_timezone" }, 400);
@@ -374,6 +438,9 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
       meetingFormat: detail.meetingFormat,
       inviteePhone: detail.inviteePhone,
       routingAnswers: detail.routingAnswers,
+      ...(detail.bookingAnswers
+        ? { bookingAnswers: detail.bookingAnswers, bookingQuestions: detail.bookingQuestions ?? [] }
+        : {}),
       hasGoogleEvent: detail.hasGoogleEvent,
       events: detail.events.map((event) => ({
         kind: event.kind,

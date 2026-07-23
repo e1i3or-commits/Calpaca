@@ -86,7 +86,7 @@ Sources:
 | Google Calendar sync and write-through | Shipped | Partial; one provider |
 | Reschedule, cancel, reminders, no-show | Shipped | Baseline operational lifecycle |
 | Routing forms | Shipped | Baseline rules, behind Cal.com's attribute routing |
-| Booking questions | Partial | Notes and routing fields only |
+| Booking questions | Shipped | Typed per-event fields with hidden prefill support |
 | Workflows | Partial | Fixed reminders and webhooks, no user-authored automation |
 | Webhooks and delivery log | Shipped | Strong extension boundary |
 | Analytics | Dashboard and CSV shipped | Outcomes, lead time, no-shows, and round-robin balance are visible |
@@ -152,7 +152,7 @@ features matter.
 | --- | ---: | --- |
 | Date overrides and OOO ranges | Shipped | Unavailable/alternate hours, DST-safe ranges, and teammate forwarding |
 | Multiple connected calendars | Shipped | Per-calendar conflict checking, health, and one write destination |
-| Custom booking questions | M | Text, textarea, select, multiselect, phone, checkbox; required/hidden |
+| Custom booking questions | Shipped | Text, textarea, select, multiselect, phone, checkbox; required/hidden |
 | Locations | M | In-person, phone, custom URL, Google Meet; per-host override |
 | Multiple selectable durations | M | Preserve buffers, caps, holds, and scoring per selected duration |
 | One-off offers and single-use links | M | Curated slots, optional reservation holds, viewed/booked/expired state |

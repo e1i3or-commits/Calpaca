@@ -189,6 +189,9 @@ export async function fanOutBookingWebhooks(
             timezone: ctx.booking.inviteeTimezone,
           },
           hosts: ctx.hosts.map((h) => ({ id: h.id, name: h.name, email: h.email })),
+          ...(Object.keys(ctx.booking.bookingAnswers ?? {}).length
+            ? { answers: ctx.booking.bookingAnswers }
+            : {}),
           ...(opts?.reason !== undefined && { reason: opts.reason }),
         },
       }),

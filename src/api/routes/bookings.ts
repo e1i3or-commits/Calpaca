@@ -41,6 +41,10 @@ import {
 import { subtract, type Interval } from "../../core/availability/intervals";
 import type { AssignmentCandidate, BookingRecord } from "../../core/assignment/round-robin";
 import type { BookingState, BookingStateError } from "../../core/booking/state";
+import {
+  validateBookingAnswers,
+  type BookingAnswers,
+} from "../../core/booking/questions";
 import type { RoutingAnswers } from "../../core/routing/condition";
 import { ok, type Result } from "../../lib/result";
 import { suggestEmailDomain } from "../../lib/email-typo";
@@ -89,6 +93,7 @@ export interface BookingDeps {
     assignment?: RoundRobinAssignment,
     routingAnswers?: RoutingAnswers,
     meeting?: MeetingDetails,
+    bookingAnswers?: BookingAnswers,
   ) => Promise<Result<ConfirmedBooking, ConfirmHoldError>>;
   readonly confirmReschedule: (
     bookingId: string,
@@ -133,8 +138,8 @@ const defaultDeps: BookingDeps = {
   getCapacityAwareBusyForUsers: (userIds, window, eventTypeId, capacity) =>
     dbGetCapacityAwareBusyForUsers(userIds, window, eventTypeId, capacity),
   createHold: (eventTypeId, hostUserIds, slot, ttl) => dbCreateHold(eventTypeId, hostUserIds, slot, ttl),
-  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting) =>
-    dbConfirmHold(holdIds, invitee, undefined, assignment, routingAnswers, meeting),
+  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting, bookingAnswers) =>
+    dbConfirmHold(holdIds, invitee, undefined, assignment, routingAnswers, meeting, bookingAnswers),
   confirmReschedule: (bookingId, holdIds) => dbConfirmReschedule(bookingId, holdIds),
   cancelBooking: async (bookingId, reason) => {
     const result = await appendEvent(bookingId, "cancelled", { reason });
@@ -189,6 +194,11 @@ const bookingBodySchema = z.object({
   routingAnswers: z
     .record(z.string(), z.union([z.string().max(1000), z.array(z.string().max(200)).max(50)]))
     .optional(),
+  bookingAnswers: z.record(z.string(), z.union([
+    z.string().max(2000),
+    z.array(z.string().max(200)).max(50),
+    z.boolean(),
+  ])).default({}),
   agent: z.literal(true).optional(),
 });
 
@@ -549,6 +559,13 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (meetingFormat === "phone" && !inviteePhone) {
       return c.json({ error: "phone_required" }, 400);
     }
+    const validatedAnswers = validateBookingAnswers(
+      eventType.bookingQuestions ?? [],
+      parsed.data.bookingAnswers,
+    );
+    if (!validatedAnswers.ok) {
+      return c.json({ error: "invalid_booking_answers", issues: validatedAnswers.issues }, 400);
+    }
 
     let assignment: RoundRobinAssignment | undefined;
     if (eventType.mode === "round_robin") {
@@ -578,6 +595,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       assignment,
       routingAnswers,
       { format: meetingFormat, ...(inviteePhone ? { phone: inviteePhone } : {}) },
+      validatedAnswers.answers,
     );
     if (!confirmed.ok) {
       return c.json({ error: confirmed.error.kind }, confirmHoldErrorStatus(confirmed.error.kind));

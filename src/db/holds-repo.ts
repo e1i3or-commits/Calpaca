@@ -15,6 +15,7 @@ import {
 } from "../core/assignment/round-robin";
 import type { BookingState, BookingStateError } from "../core/booking/state";
 import type { RoutingAnswers } from "../core/routing/condition";
+import type { BookingAnswers } from "../core/booking/questions";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -166,6 +167,7 @@ export async function confirmHold(
   assignment?: RoundRobinAssignment,
   routingAnswers?: RoutingAnswers,
   meeting?: MeetingDetails,
+  bookingAnswers?: BookingAnswers,
 ): Promise<Result<ConfirmedBooking, ConfirmHoldError>> {
   return executor.transaction(async (tx) => {
     const rows = await tx
@@ -241,6 +243,7 @@ export async function confirmHold(
         rescheduleToken: generateToken(),
         cancelToken: generateToken(),
         routingAnswers: routingAnswers ?? null,
+        bookingAnswers: bookingAnswers ?? {},
       })
       .returning();
     if (!booking) throw new Error("booking insert returned no row");
@@ -253,6 +256,7 @@ export async function confirmHold(
         endsAt,
         hostUserIds,
         ...(routingAnswers ? { routingAnswers } : {}),
+        ...(bookingAnswers ? { bookingAnswers } : {}),
         ...(meeting ? { meeting } : {}),
         ...(assignmentExplanation ? { assignment: assignmentExplanation } : {}),
       },

@@ -109,6 +109,7 @@ export interface WebhookBookingInput {
   readonly invitee: { readonly email: string; readonly name: string; readonly timezone: string };
   readonly hosts: readonly { readonly id: string; readonly name: string; readonly email: string }[];
   readonly reason?: string;
+  readonly answers?: Readonly<Record<string, string | readonly string[] | boolean>>;
 }
 
 export interface WebhookPayloadInput {
@@ -147,6 +148,7 @@ export function buildWebhookBody(input: WebhookPayloadInput): string {
         status: input.booking.status,
         invitee: input.booking.invitee,
         hosts: input.booking.hosts,
+        ...(input.booking.answers ? { answers: input.booking.answers } : {}),
         ...(input.booking.reason !== undefined && { reason: input.booking.reason }),
       },
     },

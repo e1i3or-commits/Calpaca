@@ -16,6 +16,7 @@ import {
 } from "../core/booking/state";
 import type { BookingRecord } from "../core/assignment/round-robin";
 import type { AssignmentExplanation } from "../core/assignment/round-robin";
+import type { BookingAnswers } from "../core/booking/questions";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -33,6 +34,7 @@ function serializePayload(event: BookingEvent): StoredPayload {
         endsAt: event.payload.endsAt.toString(),
         hostUserIds: event.payload.hostUserIds,
         ...(event.payload.routingAnswers ? { routingAnswers: event.payload.routingAnswers } : {}),
+        ...(event.payload.bookingAnswers ? { bookingAnswers: event.payload.bookingAnswers } : {}),
         ...(event.payload.assignment ? { assignment: event.payload.assignment } : {}),
       };
     case "rescheduled":
@@ -66,6 +68,7 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
         | Record<string, string | string[]>
         | undefined;
       const assignment = payload["assignment"] as AssignmentExplanation | undefined;
+      const bookingAnswers = payload["bookingAnswers"] as BookingAnswers | undefined;
       return {
         kind: "created",
         payload: {
@@ -73,6 +76,7 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
           endsAt: Temporal.Instant.from(payload["endsAt"] as string),
           hostUserIds: payload["hostUserIds"] as string[],
           ...(routingAnswers ? { routingAnswers } : {}),
+          ...(bookingAnswers ? { bookingAnswers } : {}),
           ...(assignment ? { assignment } : {}),
         },
       };
@@ -213,6 +217,7 @@ export interface BookingRow {
   readonly rescheduleToken: string;
   readonly cancelToken: string;
   readonly routingAnswers?: Record<string, string | string[]> | null;
+  readonly bookingAnswers?: BookingAnswers;
   /** Google Calendar event id once written through to the organizer host's
    * calendar; null/absent means the ICS email is the calendar artifact.
    * Optional for the same fixture-compatibility reason as inviteStatus. */
@@ -243,6 +248,7 @@ export async function getBookingById(id: string, executor: Db = getDb()): Promis
     rescheduleToken: row.rescheduleToken,
     cancelToken: row.cancelToken,
     routingAnswers: row.routingAnswers as Record<string, string | string[]> | null,
+    bookingAnswers: row.bookingAnswers,
     googleEventId: row.googleEventId,
   };
 }
@@ -271,6 +277,7 @@ export interface InviteContext {
   readonly eventTypeSlug: string;
   readonly eventTypeTheme?: string;
   readonly eventTypeLogoUrl?: string | null;
+  readonly bookingQuestions?: readonly import("../core/booking/questions").BookingQuestion[];
   readonly hosts: readonly InviteHost[];
   /** Number of reschedules so far — the ICS SEQUENCE for iTIP updates. */
   readonly rescheduleCount: number;
@@ -292,6 +299,7 @@ export async function getInviteContext(
       slug: eventTypes.slug,
       theme: eventTypes.theme,
       logoUrl: eventTypes.logoUrl,
+      bookingQuestions: eventTypes.bookingQuestions,
     })
     .from(eventTypes)
     .where(eq(eventTypes.id, booking.eventTypeId));
@@ -322,6 +330,7 @@ export async function getInviteContext(
     eventTypeSlug: eventType.slug,
     eventTypeTheme: eventType.theme,
     eventTypeLogoUrl: eventType.logoUrl,
+    bookingQuestions: eventType.bookingQuestions,
     hosts,
     rescheduleCount: rescheduled.length,
   };
@@ -457,6 +466,8 @@ export interface AdminBookingDetail extends AdminBookingRow {
   readonly meetingFormat?: string | null;
   readonly inviteePhone?: string | null;
   readonly routingAnswers: Record<string, string | string[]> | null;
+  readonly bookingAnswers?: BookingAnswers;
+  readonly bookingQuestions?: readonly import("../core/booking/questions").BookingQuestion[];
   readonly hasGoogleEvent: boolean;
   readonly events: readonly {
     readonly kind: BookingEventKind;
@@ -585,6 +596,8 @@ export async function getBookingDetailForUser(
       status: bookings.status,
       inviteStatus: bookings.inviteStatus,
       routingAnswers: bookings.routingAnswers,
+      bookingAnswers: bookings.bookingAnswers,
+      bookingQuestions: eventTypes.bookingQuestions,
       googleEventId: bookings.googleEventId,
     })
     .from(bookings)
@@ -617,6 +630,8 @@ export async function getBookingDetailForUser(
     meetingFormat: row.meetingFormat,
     inviteePhone: row.inviteePhone,
     routingAnswers: row.routingAnswers as Record<string, string | string[]> | null,
+    bookingAnswers: row.bookingAnswers,
+    bookingQuestions: row.bookingQuestions,
     hasGoogleEvent: row.googleEventId !== null,
     events: events.map((event) => ({
       kind: event.kind,

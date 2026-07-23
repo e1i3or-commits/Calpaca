@@ -2,6 +2,7 @@ import {
   pgTable, uuid, text, integer, boolean, timestamp, jsonb,
   pgEnum, uniqueIndex, index, primaryKey,
 } from "drizzle-orm/pg-core";
+import type { BookingAnswers, BookingQuestion } from "../core/booking/questions";
 import { sql } from "drizzle-orm";
 
 export const bookingEventKind = pgEnum("booking_event_kind", [
@@ -269,6 +270,8 @@ export const eventTypes = pgTable("event_types", {
   logoUrl: text("logo_url"),
   meetingFormats: jsonb("meeting_formats").$type<("phone" | "google_meet")[]>()
     .notNull().default(["google_meet"]),
+  bookingQuestions: jsonb("booking_questions").$type<BookingQuestion[]>()
+    .notNull().default([]),
   // group booking on public links: explicit allowlist, empty = auth-only
   publicSelectableHostIds: jsonb("public_selectable_host_ids")
     .$type<string[]>().notNull().default([]),
@@ -320,6 +323,7 @@ export const bookings = pgTable("bookings", {
   rescheduleToken: text("reschedule_token").notNull(),
   cancelToken: text("cancel_token").notNull(),
   routingAnswers: jsonb("routing_answers"),
+  bookingAnswers: jsonb("booking_answers").$type<BookingAnswers>().notNull().default({}),
   // set once the booking is written to the organizer host's Google calendar;
   // null means the ICS email is the only calendar artifact (fallback path)
   googleEventId: text("google_event_id"),

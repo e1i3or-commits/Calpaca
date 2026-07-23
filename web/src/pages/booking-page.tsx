@@ -10,6 +10,8 @@ import {
   disconnectInviteeCalendar,
   suggestTimes,
   type BookingConfirmation,
+  type BookingAnswers,
+  type BookingQuestion,
   type EventTypeMeta,
   type EventTypeProfile,
   type RoutingAnswers,
@@ -48,6 +50,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_request: "Check the form and try again.",
   invalid_slots: "Choose future times and try again.",
   rate_limited: "Too many suggestions were sent. Please wait a minute and try again.",
+  invalid_booking_answers: "Check the booking questions and try again.",
 };
 
 export function errorMessage(e: unknown): string {
@@ -323,6 +326,7 @@ export function BookingPage({
               optionalHosts={step.optionalHosts}
               routingAnswers={routingAnswers}
               meetingFormats={meta?.meetingFormats ?? ["google_meet"]}
+              bookingQuestions={meta?.bookingQuestions ?? []}
               onBack={() => setStep({ name: "pick" })}
               onError={(e) => {
                 setError(errorMessage(e));
@@ -538,6 +542,81 @@ export function TimezoneSelect({ value, onChange }: { value: string; onChange: (
   );
 }
 
+function BookingQuestionField({
+  question,
+  value,
+  onChange,
+}: {
+  question: BookingQuestion;
+  value: string | string[] | boolean | undefined;
+  onChange: (value: string | string[] | boolean) => void;
+}) {
+  const label = <>{question.label}{question.required ? " *" : ""}</>;
+  if (question.type === "checkbox") {
+    return (
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          className="mt-1"
+          type="checkbox"
+          required={question.required}
+          checked={value === true}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        <span>{label}</span>
+      </label>
+    );
+  }
+  if (question.type === "textarea") {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`booking-question-${question.id}`}>{label}</Label>
+        <Textarea
+          id={`booking-question-${question.id}`}
+          required={question.required}
+          maxLength={2000}
+          value={typeof value === "string" ? value : ""}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </div>
+    );
+  }
+  if (question.type === "select" || question.type === "multiselect") {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`booking-question-${question.id}`}>{label}</Label>
+        <select
+          id={`booking-question-${question.id}`}
+          className="min-h-9 rounded-md border border-border bg-card px-3 py-2 text-sm"
+          required={question.required}
+          multiple={question.type === "multiselect"}
+          value={question.type === "multiselect"
+            ? (Array.isArray(value) ? value : [])
+            : (typeof value === "string" ? value : "")}
+          onChange={(event) => onChange(question.type === "multiselect"
+            ? Array.from(event.target.selectedOptions, (option) => option.value)
+            : event.target.value)}
+        >
+          {question.type === "select" && <option value="">Choose…</option>}
+          {(question.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={`booking-question-${question.id}`}>{label}</Label>
+      <Input
+        id={`booking-question-${question.id}`}
+        type={question.type === "phone" ? "tel" : "text"}
+        required={question.required}
+        maxLength={2000}
+        value={typeof value === "string" ? value : ""}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </div>
+  );
+}
+
 function DetailsStep({
   slot,
   slug,
@@ -547,6 +626,7 @@ function DetailsStep({
   optionalHosts,
   routingAnswers,
   meetingFormats,
+  bookingQuestions,
   onBack,
   onError,
   onConfirmed,
@@ -559,6 +639,7 @@ function DetailsStep({
   optionalHosts?: string[];
   routingAnswers?: RoutingAnswers;
   meetingFormats: ("phone" | "google_meet")[];
+  bookingQuestions: BookingQuestion[];
   onBack: () => void;
   onError: (e: unknown) => void;
   onConfirmed: (confirmation: BookingConfirmation) => void;
@@ -570,6 +651,13 @@ function DetailsStep({
     meetingFormats[0] ?? "google_meet",
   );
   const [phone, setPhone] = useState("");
+  const [bookingAnswers, setBookingAnswers] = useState<BookingAnswers>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return Object.fromEntries(
+      bookingQuestions.filter((question) => question.hidden && params.has(question.id))
+        .map((question) => [question.id, params.get(question.id) ?? ""]),
+    );
+  });
   const [submitting, setSubmitting] = useState(false);
 
   async function submit() {
@@ -594,6 +682,7 @@ function DetailsStep({
         hosts,
         meetingFormat,
         ...(meetingFormat === "phone" ? { inviteePhone: phone.trim() } : {}),
+        bookingAnswers,
       });
       onConfirmed(confirmation);
     } catch (e) {
@@ -675,6 +764,14 @@ function DetailsStep({
             />
           </div>
         )}
+        {bookingQuestions.filter((question) => !question.hidden).map((question) => (
+          <BookingQuestionField
+            key={question.id}
+            question={question}
+            value={bookingAnswers[question.id]}
+            onChange={(value) => setBookingAnswers((current) => ({ ...current, [question.id]: value }))}
+          />
+        ))}
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="notes">
             Notes <span className="font-normal text-muted-foreground">(optional)</span>

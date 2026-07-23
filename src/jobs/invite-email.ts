@@ -58,6 +58,20 @@ function emailLogoUrl(ctx: InviteContext): string | null {
   return path && base ? `${base}${path.startsWith("/") ? "" : "/"}${path}` : null;
 }
 
+function preparationText(ctx: InviteContext): string {
+  const answerLines = Object.entries(ctx.booking.bookingAnswers ?? {}).map(([id, value]) => {
+    const label = ctx.bookingQuestions?.find((question) => question.id === id)?.label ?? id;
+    const rendered = Array.isArray(value)
+      ? value.join(", ")
+      : typeof value === "boolean" ? (value ? "Yes" : "No") : value;
+    return `${label}: ${rendered}`;
+  });
+  return [
+    ...(ctx.booking.inviteeNotes ? [ctx.booking.inviteeNotes] : []),
+    ...(answerLines.length ? ["Booking answers:", ...answerLines] : []),
+  ].join("\n\n");
+}
+
 export async function sendInvite(bookingId: string, kind: InviteKind): Promise<void> {
   if (!isMailerConfigured()) {
     console.log(`[jobs] invite ${kind} for ${bookingId} skipped: SMTP not configured`);
@@ -136,8 +150,9 @@ async function syncGoogleEvent(ctx: InviteContext, kind: InviteKind): Promise<bo
     }
 
     const links = buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken);
+    const preparation = preparationText(ctx);
     const descriptionParts = [
-      ...(booking.inviteeNotes ? [`Notes from ${booking.inviteeName}:\n${booking.inviteeNotes}`] : []),
+      ...(preparation ? [`Details from ${booking.inviteeName}:\n${preparation}`] : []),
       ...(links ? [`Reschedule: ${links.reschedule}\nCancel: ${links.cancel}`] : []),
     ];
     const r = await insertEvent({
@@ -259,6 +274,7 @@ export function buildMail(
   const { booking, hosts } = ctx;
   const [organizer] = hosts;
   if (!organizer) throw new Error(`booking ${booking.id} has no hosts`);
+  const preparation = preparationText(ctx);
 
   const email = composeInviteEmail({
     kind,
@@ -270,7 +286,7 @@ export function buildMail(
     timezone: booking.inviteeTimezone,
     links: kind === "cancelled" ? null : buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken),
     icsAttached: includeIcs,
-    notes: booking.inviteeNotes,
+    notes: preparation || null,
     theme: ctx.eventTypeTheme,
     brandLogoUrl: emailLogoUrl(ctx),
   });
@@ -284,8 +300,8 @@ export function buildMail(
         start: booking.startsAt,
         end: booking.endsAt,
         summary: `${ctx.eventTypeTitle}: ${organizer.name} and ${booking.inviteeName}`,
-        ...(booking.inviteeNotes
-          ? { description: `Notes from ${booking.inviteeName}:\n${booking.inviteeNotes}` }
+        ...(preparation
+          ? { description: `Details from ${booking.inviteeName}:\n${preparation}` }
           : {}),
         organizer: { name: organizer.name, email: organizer.email },
         attendees: [

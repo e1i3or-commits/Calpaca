@@ -705,7 +705,12 @@ function BookingsTab({ users }: { users: DirectoryUser[] }) {
             </button>
           ))}
         </div>
-        <p className="hidden text-xs text-muted-foreground sm:block">{timezone}</p>
+        <div className="flex items-center gap-2">
+          <span className="hidden text-xs text-muted-foreground sm:block">{timezone}</span>
+          <Button variant="outline" size="sm" onClick={() => {
+            window.location.href = `/api/me/bookings.csv?filter=${filter}&timezone=${encodeURIComponent(timezone)}`;
+          }}><Download className="h-4 w-4" /> Export CSV</Button>
+        </div>
       </div>
 
       {error && <p className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
@@ -893,6 +898,21 @@ function BookingDetailPanel({
                     <div key={key} className="grid grid-cols-[8rem_1fr] gap-3 text-sm">
                       <dt className="text-muted-foreground">{key}</dt>
                       <dd>{Array.isArray(value) ? value.join(", ") : value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </DetailSection>
+            )}
+
+            {Object.keys(booking.bookingAnswers ?? {}).length > 0 && (
+              <DetailSection title="Booking answers">
+                <dl className="space-y-2">
+                  {Object.entries(booking.bookingAnswers ?? {}).map(([key, value]) => (
+                    <div key={key} className="grid grid-cols-[8rem_1fr] gap-3 text-sm">
+                      <dt className="text-muted-foreground">
+                        {booking.bookingQuestions?.find((question) => question.id === key)?.label ?? key}
+                      </dt>
+                      <dd>{Array.isArray(value) ? value.join(", ") : typeof value === "boolean" ? (value ? "Yes" : "No") : value}</dd>
                     </div>
                   ))}
                 </dl>
@@ -1668,6 +1688,7 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   layout: "focus",
   logoUrl: null,
   meetingFormats: ["google_meet"],
+  bookingQuestions: [],
   hosts: [],
 };
 
@@ -1852,6 +1873,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                           layout: et.layout ?? "focus",
                           logoUrl: et.logoUrl ?? null,
                           meetingFormats: et.meetingFormats ?? ["google_meet"],
+                          bookingQuestions: et.bookingQuestions ?? [],
                           hosts: et.hosts.map(({ userId, role, weight }) => ({
                             userId,
                             role,
@@ -2173,6 +2195,63 @@ function EventTypeForm({
             })}
           </div>
           <p className="text-xs text-muted-foreground">Invitees choose one of the enabled formats when they book.</p>
+        </div>
+        <div className="flex flex-col gap-3 sm:col-span-2">
+          <div>
+            <Label>Booking questions</Label>
+            <p className="text-xs text-muted-foreground">Collect structured information with each booking. Hidden fields accept URL-prefilled or API values.</p>
+          </div>
+          {(form.bookingQuestions ?? []).map((question, index) => {
+            const setQuestion = (patch: Partial<typeof question>) => set(
+              "bookingQuestions",
+              (form.bookingQuestions ?? []).map((item, itemIndex) =>
+                itemIndex === index ? { ...item, ...patch } : item,
+              ),
+            );
+            const usesOptions = question.type === "select" || question.type === "multiselect";
+            return (
+              <div key={question.id} className="grid gap-2 rounded-xl border border-border p-3 sm:grid-cols-[1fr_150px_auto]">
+                <Input value={question.label} placeholder="Question label" onChange={(event) => setQuestion({
+                  label: event.target.value,
+                  id: question.id.startsWith("question-") ? `question-${index + 1}` : question.id,
+                })} />
+                <select className="h-9 rounded-md border border-border bg-card px-3 text-sm" value={question.type} onChange={(event) => setQuestion({
+                  type: event.target.value as typeof question.type,
+                  ...(event.target.value === "select" || event.target.value === "multiselect"
+                    ? { options: question.options?.length ? question.options : ["Option 1"] }
+                    : { options: undefined }),
+                })}>
+                  <option value="text">Short text</option>
+                  <option value="textarea">Long text</option>
+                  <option value="select">Select</option>
+                  <option value="multiselect">Multiselect</option>
+                  <option value="phone">Phone</option>
+                  <option value="checkbox">Checkbox</option>
+                </select>
+                <Button type="button" variant="ghost" size="sm" aria-label={`Remove ${question.label || "question"}`} onClick={() => set(
+                  "bookingQuestions",
+                  (form.bookingQuestions ?? []).filter((_, itemIndex) => itemIndex !== index),
+                )}><Trash2 className="h-4 w-4" /></Button>
+                <Input value={question.id} placeholder="field-id" onChange={(event) => setQuestion({ id: slugify(event.target.value) })} />
+                <div className="flex flex-wrap items-center gap-3 text-sm sm:col-span-2">
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={question.required} onChange={(event) => setQuestion({ required: event.target.checked })} /> Required</label>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={question.hidden} onChange={(event) => setQuestion({ hidden: event.target.checked })} /> Hidden</label>
+                </div>
+                {usesOptions && (
+                  <Input className="sm:col-span-3" value={(question.options ?? []).join(", ")} placeholder="Option 1, Option 2" onChange={(event) => setQuestion({
+                    options: event.target.value.split(",").map((option) => option.trim()).filter(Boolean),
+                  })} />
+                )}
+              </div>
+            );
+          })}
+          <Button type="button" variant="outline" className="self-start" onClick={() => {
+            const next = (form.bookingQuestions?.length ?? 0) + 1;
+            set("bookingQuestions", [
+              ...(form.bookingQuestions ?? []),
+              { id: `question-${next}`, label: "", type: "text", required: false, hidden: false },
+            ]);
+          }}><Plus className="h-4 w-4" /> Add question</Button>
         </div>
         <div className="flex flex-col gap-1.5 sm:col-span-2">
           <Label htmlFor="et-logo">Whitelabel logo URL</Label>

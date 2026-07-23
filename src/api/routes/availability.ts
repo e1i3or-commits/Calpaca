@@ -281,6 +281,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
         ? { logoUrl: eventType.logoUrl ?? "/brand/tourscale-logo-color.svg" }
         : {}),
       ...(eventType.meetingFormats ? { meetingFormats: eventType.meetingFormats } : {}),
+      ...(eventType.bookingQuestions ? { bookingQuestions: eventType.bookingQuestions } : {}),
       ...((eventType.capacity ?? 1) > 1 ? { capacity: eventType.capacity } : {}),
       ...(eventType.layout ? { layout: resolveBookingLayout(eventType.layout) } : {}),
       ...(profile ? { profile } : {}),

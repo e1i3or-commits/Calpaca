@@ -7,6 +7,7 @@ import { bookings, calendarBusyCache, calendarConnections, eventTypeHosts, event
 import type { Interval } from "../core/availability/intervals";
 import type { WeeklyRule } from "../core/availability/rules";
 import type { ScheduleOverride } from "../core/availability/overrides";
+import type { BookingQuestion } from "../core/booking/questions";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -21,6 +22,7 @@ export interface EventTypeConfig {
   readonly layout?: string;
   readonly logoUrl?: string | null;
   readonly meetingFormats?: readonly ("phone" | "google_meet")[];
+  readonly bookingQuestions?: readonly BookingQuestion[];
   readonly mode?: AssignmentMode;
   readonly durationMinutes: number;
   readonly capacity?: number;
@@ -48,6 +50,7 @@ export interface BookingEventTypeConfig {
   readonly theme?: string;
   readonly layout?: string;
   readonly meetingFormats?: readonly ("phone" | "google_meet")[];
+  readonly bookingQuestions?: readonly BookingQuestion[];
   readonly durationMinutes: number;
   readonly capacity?: number;
   readonly bufferBeforeMin: number;
@@ -68,6 +71,7 @@ function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingE
     theme: row.theme,
     layout: row.layout,
     meetingFormats: row.meetingFormats,
+    bookingQuestions: row.bookingQuestions,
     durationMinutes: row.durationMinutes,
     capacity: row.capacity,
     bufferBeforeMin: row.bufferBeforeMin,
@@ -130,6 +134,7 @@ export async function getEventTypeBySlug(
     layout: row.layout,
     logoUrl: row.logoUrl,
     meetingFormats: row.meetingFormats,
+    bookingQuestions: row.bookingQuestions,
     mode: row.mode,
     durationMinutes: row.durationMinutes,
     capacity: row.capacity,

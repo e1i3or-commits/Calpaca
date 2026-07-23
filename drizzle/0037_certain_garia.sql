@@ -1,0 +1,2 @@
+ALTER TABLE "bookings" ADD COLUMN "booking_answers" jsonb DEFAULT '{}'::jsonb NOT NULL;--> statement-breakpoint
+ALTER TABLE "event_types" ADD COLUMN "booking_questions" jsonb DEFAULT '[]'::jsonb NOT NULL;

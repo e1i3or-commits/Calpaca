@@ -31,6 +31,8 @@ release notes live in [CHANGELOG.md](CHANGELOG.md), and releases are tagged
   the final seat transactionally.
 - **Sign-up sheets:** publish fixed sessions with seat limits, registration
   questions, and calendar confirmations.
+- **Booking questions:** collect validated text, choice, phone, consent, and
+  hidden prefill data on each event type.
 - **Date-aware availability:** recurring hours, alternate-date hours, time-off
   ranges, and teammate forwarding.
 - **Agent-ready:** a stdio MCP server exposes availability, holds, booking,
