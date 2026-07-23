@@ -38,6 +38,14 @@ function buildAuth() {
       database: { generateId: () => crypto.randomUUID() },
     },
     databaseHooks: {
+      user: {
+        create: {
+          after: async (user) => {
+            const { claimUserInvitation } = await import("../db/user-management-repo");
+            await claimUserInvitation(user.id, user.email);
+          },
+        },
+      },
       account: {
         create: {
           // First Google sign-in seeds the primary-calendar connection so a

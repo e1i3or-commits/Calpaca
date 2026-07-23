@@ -1,4 +1,7 @@
 import type { MiddlewareHandler } from "hono";
+import { eq } from "drizzle-orm";
+import { getDb } from "../db/client";
+import { users } from "../db/schema";
 import { getAuth } from "./index";
 
 export type SessionUser = {
@@ -17,6 +20,14 @@ export const requireSession: MiddlewareHandler<AuthEnv> = async (c, next) => {
   });
   if (!session) {
     return c.json({ error: "unauthorized" }, 401);
+  }
+  const [account] = await getDb()
+    .select({ status: users.status })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1);
+  if (!account || account.status !== "active") {
+    return c.json({ error: "account_inactive" }, 403);
   }
   c.set("user", {
     id: session.user.id,

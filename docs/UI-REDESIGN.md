@@ -20,7 +20,7 @@ components.
    routing, and delivery details open on demand.
 4. **Mobile is the base layout.** Desktop adds room and persistent navigation,
    not different capabilities.
-5. **Quiet confidence.** Use whitespace, typography, and state language before
+5. **Calm confidence.** Use whitespace, typography, and state language before
    borders, shadows, badges, or color.
 6. **Character in small doses.** A warm palette, gentle shapes, and concise
    alpaca-flavored microcopy—not mascots on every empty state.
@@ -77,7 +77,7 @@ Top to bottom:
    - webhook retries exhausted.
 5. Recent activity timeline, maximum five rows.
 
-When everything is healthy, replace the warning area with one quiet line:
+When everything is healthy, replace the warning area with one concise line:
 “Everything is in step.”
 
 ### Scheduling
@@ -249,7 +249,7 @@ first commit.
 - Healthy integrations: “Everything is in step.”
 - Copied link feedback: “Link tucked away.”
 - Loading skeletons may use a very subtle wool-like scallop at one edge.
-- Celebrate the first published booking link once, quietly. Avoid confetti in
+- Celebrate the first published booking link once, without fanfare. Avoid confetti in
   routine organizer work.
 
 Character must never obscure a status, slow a task, or make error copy cute.

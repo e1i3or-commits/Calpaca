@@ -9,6 +9,7 @@ import { routingRoutes } from "./routes/routing";
 import { webhookAdminRoutes } from "./routes/webhook-admin";
 import { webhookRoutes } from "./routes/webhooks";
 import { suggestionRoutes } from "./routes/suggestions";
+import { userManagementRoutes } from "./routes/user-management";
 
 export const app = new Hono();
 
@@ -24,3 +25,4 @@ app.route("/", routingRoutes);
 app.route("/", webhookAdminRoutes);
 app.route("/", webhookRoutes);
 app.route("/", suggestionRoutes);
+app.route("/", userManagementRoutes);

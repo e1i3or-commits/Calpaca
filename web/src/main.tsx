@@ -86,7 +86,7 @@ const indexRoute = createRoute({
             <div className="mt-6 flex items-center gap-3 border-t border-border pt-5">
               <span className="h-9 w-9 rounded-full bg-muted" />
               <div>
-                <p className="text-sm font-medium">Your schedule, quietly organized.</p>
+                <p className="text-sm font-medium">Your schedule, clearly organized.</p>
                 <p className="text-xs text-muted-foreground">Availability stays in sync.</p>
               </div>
             </div>

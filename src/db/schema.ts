@@ -20,6 +20,11 @@ export const hostRole = pgEnum("host_role", [
 export const holdStatus = pgEnum("hold_status", [
   "active", "confirmed", "expired", "released",
 ]);
+export const appRole = pgEnum("app_role", ["owner", "admin", "member"]);
+export const userStatus = pgEnum("user_status", ["active", "inactive"]);
+export const invitationStatus = pgEnum("invitation_status", [
+  "pending", "accepted", "revoked",
+]);
 
 // Doubles as BetterAuth's user model (drizzleAdapter usePlural maps user ->
 // users). BetterAuth requires emailVerified/image/updatedAt; timezone and
@@ -31,6 +36,8 @@ export const users = pgTable("users", {
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
   timezone: text("timezone").notNull().default("UTC"), // IANA
+  appRole: appRole("app_role").notNull().default("member"),
+  status: userStatus("status").notNull().default("active"),
   // scoring preferences
   prefs: jsonb("prefs").$type<{
     morningWeight?: number;       // 0..1, default 1
@@ -40,6 +47,21 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const userInvitations = pgTable("user_invitations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull(),
+  role: appRole("role").notNull().default("member"),
+  status: invitationStatus("status").notNull().default("pending"),
+  token: text("token").notNull().unique(),
+  invitedByUserId: uuid("invited_by_user_id").notNull().references(() => users.id),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("pending_user_invitation_email_uq").on(t.email)
+    .where(sql`status = 'pending'`),
+]);
 
 // BetterAuth-managed tables. uuid ids (not BetterAuth's default text ids)
 // via advanced.database.generateId = crypto.randomUUID in src/auth.

@@ -113,6 +113,13 @@
       "when": 1784815979709,
       "tag": "0015_pale_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1784819134689,
+      "tag": "0016_blushing_leper_queen",
+      "breakpoints": true
     }
   ]
 }

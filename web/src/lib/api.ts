@@ -238,6 +238,26 @@ export type Team = { id: string; name: string; slug: string };
 
 export type TeamMember = { userId: string; name: string; email: string; isAdmin: boolean };
 
+export type AppRole = "owner" | "admin" | "member";
+export type ManagedUser = DirectoryUser & {
+  role: AppRole;
+  status: "active" | "inactive";
+  createdAt: string;
+};
+export type UserInvitation = {
+  id: string;
+  email: string;
+  role: AppRole;
+  status: "pending" | "accepted" | "revoked";
+  expiresAt: string;
+  createdAt: string;
+};
+export type UserManagementDirectory = {
+  actor: { id: string; role: AppRole };
+  users: ManagedUser[];
+  invitations: UserInvitation[];
+};
+
 export type EventTypeHost = {
   userId: string;
   role: "member" | "required" | "optional";
@@ -281,6 +301,34 @@ export function listPresentationOptions(): Promise<{
 
 export function listUsers(): Promise<{ users: DirectoryUser[] }> {
   return request("/api/me/users");
+}
+
+export function getUserManagement(): Promise<UserManagementDirectory> {
+  return request("/api/me/user-management");
+}
+
+export function inviteUser(input: { email: string; role: AppRole }): Promise<{
+  invitation: UserInvitation;
+  delivery: "sent" | "not_configured" | "failed" | "existing_user";
+}> {
+  return request("/api/me/user-management/invitations", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateManagedUser(
+  id: string,
+  patch: Partial<Pick<ManagedUser, "role" | "status">>,
+): Promise<{ user: ManagedUser }> {
+  return request(`/api/me/user-management/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function revokeUserInvitation(id: string): Promise<{ ok: true }> {
+  return request(`/api/me/user-management/invitations/${id}`, { method: "DELETE" });
 }
 
 export function listSchedules(): Promise<{ schedules: Schedule[] }> {

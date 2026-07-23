@@ -23,6 +23,7 @@ export async function listUsers(executor: Db = getDb()): Promise<DirectoryUser[]
   const rows = await executor
     .select({ id: users.id, name: users.name, email: users.email, timezone: users.timezone })
     .from(users)
+    .where(eq(users.status, "active"))
     .orderBy(users.name);
   return rows;
 }

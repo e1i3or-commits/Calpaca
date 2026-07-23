@@ -14,7 +14,9 @@ import {
   Pencil,
   Plus,
   Route,
+  ShieldCheck,
   Trash2,
+  UserPlus,
   Users,
 } from "lucide-react";
 import {
@@ -34,6 +36,8 @@ import {
   getAdminBooking,
   getAnalytics,
   getBookingAssignment,
+  getUserManagement,
+  inviteUser,
   listAdminBookings,
   listEventTypes,
   listPresentationOptions,
@@ -43,15 +47,18 @@ import {
   listTeams,
   listUsers,
   removeTeamMember,
+  revokeUserInvitation,
   markBookingNoShow,
   signOut,
   updateEventType,
+  updateManagedUser,
   updateRoutingForm,
   updateSchedule,
   type AdminEventType,
   type AdminBooking,
   type AdminBookingDetail,
   type AnalyticsReport,
+  type AppRole,
   type AssignmentExplanation,
   type CalendarEntry,
   type DirectoryUser,
@@ -66,6 +73,7 @@ import {
   type ScheduleRule,
   type Team,
   type TeamMember,
+  type UserManagementDirectory,
 } from "@/lib/api";
 import { themeOptions } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
@@ -243,7 +251,7 @@ function NavButton({
 }
 
 const PAGE_COPY: Record<TabKey, { title: string; description: string }> = {
-  home: { title: "Good day", description: "A quiet view of what needs your attention." },
+  home: { title: "Good day", description: "A focused view of what needs your attention." },
   "event-types": { title: "Scheduling", description: "Booking links and the people behind them." },
   bookings: { title: "Bookings", description: "Upcoming conversations and recent history." },
   analytics: { title: "Analytics", description: "A clear view of volume, outcomes, and team balance." },
@@ -2131,6 +2139,197 @@ function RoutingRuleEditor({
 
 // ---- team ----
 
+function UserManagementPanel() {
+  const [directory, setDirectory] = useState<UserManagementDirectory | null>(null);
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<AppRole>("member");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const reload = useCallback(() => {
+    getUserManagement()
+      .then(setDirectory)
+      .catch((cause: unknown) => setError(errorText(cause)));
+  }, []);
+
+  useEffect(() => reload(), [reload]);
+
+  const invite = async () => {
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await inviteUser({ email, role });
+      const messages = {
+        sent: "Invitation sent.",
+        not_configured: "Invitation created. Email delivery is not configured.",
+        failed: "Invitation created, but email delivery failed.",
+        existing_user: "Existing user reactivated and updated.",
+      };
+      setNotice(messages[result.delivery]);
+      setEmail("");
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateUser = async (
+    user: UserManagementDirectory["users"][number],
+    patch: { role?: AppRole; status?: "active" | "inactive" },
+  ) => {
+    if (
+      patch.status === "inactive"
+      && !window.confirm(`Deactivate ${user.name} (${user.email})? Their active sessions will end immediately.`)
+    ) return;
+    setError(null);
+    try {
+      await updateManagedUser(user.id, patch);
+      reload();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  };
+
+  if (!directory && !error) return <DashboardSkeleton />;
+  if (!directory) {
+    return (
+      <Card>
+        <CardContent className="p-5 text-sm text-muted-foreground">
+          User management is available to owners and admins.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="gap-1">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-primary" />
+          <CardTitle className="text-xl">User management</CardTitle>
+        </div>
+        <CardDescription>Invite people, set access, and safely deactivate accounts.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <form
+          className="grid gap-3 rounded-xl border border-border/70 bg-muted/30 p-4 sm:grid-cols-[1fr_140px_auto] sm:items-end"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void invite();
+          }}
+        >
+          <div>
+            <Label htmlFor="invite-email">Email address</Label>
+            <Input
+              id="invite-email"
+              type="email"
+              placeholder="teammate@company.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="invite-role">Role</Label>
+            <select
+              id="invite-role"
+              className="flex h-9 w-full rounded-md border border-border bg-card px-3 text-sm"
+              value={role}
+              onChange={(event) => setRole(event.target.value as AppRole)}
+            >
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+              {directory.actor.role === "owner" && <option value="owner">Owner</option>}
+            </select>
+          </div>
+          <Button type="submit" disabled={saving || email.trim() === ""}>
+            <UserPlus className="mr-1.5 h-4 w-4" /> Invite
+          </Button>
+        </form>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {notice && <p className="text-sm text-primary">{notice}</p>}
+
+        <div className="divide-y divide-border rounded-xl border border-border/70">
+          {directory.users.map((user) => {
+            const canEditOwner = directory.actor.role === "owner" || user.role !== "owner";
+            return (
+              <div key={user.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {user.name}
+                    {user.id === directory.actor.id && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">You</span>
+                    )}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:flex">
+                  <select
+                    aria-label={`Role for ${user.name}`}
+                    className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+                    value={user.role}
+                    disabled={!canEditOwner}
+                    onChange={(event) => void updateUser(user, { role: event.target.value as AppRole })}
+                  >
+                    <option value="member">Member</option>
+                    <option value="admin">Admin</option>
+                    {directory.actor.role === "owner" && <option value="owner">Owner</option>}
+                  </select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!canEditOwner || user.id === directory.actor.id}
+                    onClick={() => void updateUser(user, {
+                      status: user.status === "active" ? "inactive" : "active",
+                    })}
+                  >
+                    {user.status === "active" ? "Deactivate" : "Reactivate"}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {directory.invitations.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Pending invitations
+            </p>
+            <div className="divide-y divide-border rounded-xl border border-border/70">
+              {directory.invitations.map((invitation) => (
+                <div key={invitation.id} className="flex items-center gap-3 p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{invitation.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {invitation.role} · expires {new Date(invitation.expiresAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      void revokeUserInvitation(invitation.id).then(reload).catch((cause: unknown) => {
+                        setError(errorText(cause));
+                      });
+                    }}
+                  >
+                    Revoke
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function TeamTab({ users }: { users: DirectoryUser[] }) {
   const [teams, setTeams] = useState<Team[] | null>(null);
   const [creating, setCreating] = useState(false);
@@ -2160,7 +2359,9 @@ function TeamTab({ users }: { users: DirectoryUser[] }) {
   };
 
   return (
-    <Card>
+    <div className="space-y-5">
+      <UserManagementPanel />
+      <Card>
       <CardHeader className="flex-row items-center justify-between">
         <div className="flex flex-col gap-1.5">
           <CardTitle className="text-xl">Teams</CardTitle>
@@ -2215,7 +2416,8 @@ function TeamTab({ users }: { users: DirectoryUser[] }) {
           teams.map((team) => <TeamMembers key={team.id} team={team} users={users} />)
         )}
       </CardContent>
-    </Card>
+      </Card>
+    </div>
   );
 }
 
