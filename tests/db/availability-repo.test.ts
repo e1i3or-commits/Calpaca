@@ -5,7 +5,10 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { sql } from "drizzle-orm";
 import { Temporal } from "@js-temporal/polyfill";
 import * as schema from "../../src/db/schema";
-import { getBusyForUsers } from "../../src/db/availability-repo";
+import {
+  getBusyForUsers,
+  getCapacityAwareBusyForUsers,
+} from "../../src/db/availability-repo";
 
 /**
  * Integration coverage for the busy-interval source against a real Postgres
@@ -87,6 +90,50 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("availability-repo getBusyForUse
       expect(byUser.get(host2.id)).toHaveLength(2);
       expect(byUser.get(host1.id)?.[0]?.start.toString()).toBe("2027-05-01T10:00:00Z");
       expect(byUser.get(host1.id)?.[0]?.end.toString()).toBe("2027-05-01T10:30:00Z");
+    } finally {
+      await pool.end();
+    }
+  });
+
+  test("capacity bookings block their slot only after the final seat is taken", async () => {
+    const { pool, db, eventType, host1 } = await setup();
+    try {
+      await db.update(schema.eventTypes).set({ capacity: 2 })
+        .where(sql`${schema.eventTypes.id} = ${eventType.id}`);
+      await db.insert(schema.bookings).values(
+        bookingValues(
+          eventType.id,
+          [host1.id],
+          "2027-05-01T10:00Z",
+          "2027-05-01T10:30Z",
+        ),
+      );
+      expect(await getCapacityAwareBusyForUsers(
+        [host1.id],
+        window,
+        eventType.id,
+        2,
+        db,
+      )).toHaveLength(0);
+      await db.insert(schema.bookings).values({
+        ...bookingValues(
+          eventType.id,
+          [host1.id],
+          "2027-05-01T10:00Z",
+          "2027-05-01T10:30Z",
+        ),
+        inviteeEmail: "second@example.com",
+        rescheduleToken: "second-reschedule",
+        cancelToken: "second-cancel",
+      });
+      const busy = await getCapacityAwareBusyForUsers(
+        [host1.id],
+        window,
+        eventType.id,
+        2,
+        db,
+      );
+      expect(busy[0]?.intervals).toHaveLength(2);
     } finally {
       await pool.end();
     }

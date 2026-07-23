@@ -173,6 +173,11 @@ function SlotPickerInner({
               onClick={() => onPick(slot)}
             >
               <span>{formatDayTime(slot.start.utc, timezone)}</span>
+              {slot.seatsRemaining !== undefined && (
+                <span className="text-xs text-muted-foreground">
+                  {slot.seatsRemaining} seat{slot.seatsRemaining === 1 ? "" : "s"} left
+                </span>
+              )}
               {slot.mutual && <CalendarCheck aria-label="Works with your calendar" className="h-4 w-4 text-primary" />}
               {slot.localHourWarning && <AlertTriangle className="h-4 w-4 text-warning" />}
             </Button>
@@ -223,6 +228,11 @@ function SlotPickerInner({
                 {daySlots.map((slot) => (
                   <Button key={slot.start.utc} variant="outline" size="sm" onClick={() => onPick(slot)}>
                     {formatTime(slot.start.utc, timezone)}
+                    {slot.seatsRemaining !== undefined && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {slot.seatsRemaining} left
+                      </span>
+                    )}
                     {slot.mutual && <CalendarCheck aria-label="Works with your calendar" className="h-3 w-3 text-primary" />}
                     {slot.localHourWarning && <AlertTriangle className="h-3 w-3 text-warning" />}
                   </Button>

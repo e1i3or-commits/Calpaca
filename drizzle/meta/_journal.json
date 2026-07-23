@@ -239,6 +239,13 @@
       "when": 1784834525076,
       "tag": "0033_greedy_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784835855844,
+      "tag": "0034_whole_sinister_six",
+      "breakpoints": true
     }
   ]
 }

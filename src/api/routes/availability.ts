@@ -7,6 +7,8 @@ import {
   getEventTypeProfile as dbGetEventTypeProfile,
   getSchedulesForUsers as dbGetSchedulesForUsers,
   getBusyForUsers as dbGetBusyForUsers,
+  getCapacityAwareBusyForUsers as dbGetCapacityAwareBusyForUsers,
+  getEventTypeSlotOccupancy as dbGetEventTypeSlotOccupancy,
   type EventTypeConfig,
   type EventTypeHostRecord,
   type EventTypeProfile,
@@ -50,6 +52,17 @@ export interface AvailabilityDeps {
   readonly getEventTypeProfile?: (eventTypeId: string) => Promise<EventTypeProfile>;
   readonly getSchedulesForUsers: (userIds: readonly string[]) => Promise<HostSchedule[]>;
   readonly getBusyForUsers: (userIds: readonly string[], window: Interval) => Promise<HostBusy[]>;
+  readonly getCapacityAwareBusyForUsers?: (
+    userIds: readonly string[],
+    window: Interval,
+    eventTypeId: string,
+    capacity: number,
+  ) => Promise<HostBusy[]>;
+  readonly getEventTypeSlotOccupancy?: (
+    eventTypeId: string,
+    window: Interval,
+    now: Temporal.Instant,
+  ) => Promise<Map<string, number>>;
   readonly now: () => Temporal.Instant;
   readonly getInviteeCalendarSession?: (
     capability: string,
@@ -65,6 +78,10 @@ const defaultDeps: AvailabilityDeps = {
   getEventTypeProfile: (eventTypeId) => dbGetEventTypeProfile(eventTypeId),
   getSchedulesForUsers: (userIds) => dbGetSchedulesForUsers(userIds),
   getBusyForUsers: (userIds, window) => dbGetBusyForUsers(userIds, window),
+  getCapacityAwareBusyForUsers: (userIds, window, eventTypeId, capacity) =>
+    dbGetCapacityAwareBusyForUsers(userIds, window, eventTypeId, capacity),
+  getEventTypeSlotOccupancy: (eventTypeId, window, now) =>
+    dbGetEventTypeSlotOccupancy(eventTypeId, window, now),
   now: () => Temporal.Now.instant(),
   getInviteeCalendarSession: (capability) => dbGetInviteeCalendarSession(capability),
   inviteeCalendarEnabled: async (workspaceId) =>
@@ -90,6 +107,7 @@ interface SlotDto {
   readonly score: number;
   readonly localHourWarning: boolean;
   readonly mutual?: boolean;
+  readonly seatsRemaining?: number;
 }
 
 const LOCAL_HOUR_MIN = 7;
@@ -106,6 +124,7 @@ function renderSlot(
   score: number,
   inviteeTimezone: string,
   mutual?: boolean,
+  seatsRemaining?: number,
 ): SlotDto {
   return {
     start: {
@@ -119,6 +138,7 @@ function renderSlot(
     score,
     localHourWarning: isOutsideLocalHours(slot.start, inviteeTimezone),
     ...(mutual === undefined ? {} : { mutual }),
+    ...(seatsRemaining === undefined ? {} : { seatsRemaining }),
   };
 }
 
@@ -261,6 +281,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
         ? { logoUrl: eventType.logoUrl ?? "/brand/tourscale-logo-color.svg" }
         : {}),
       ...(eventType.meetingFormats ? { meetingFormats: eventType.meetingFormats } : {}),
+      ...((eventType.capacity ?? 1) > 1 ? { capacity: eventType.capacity } : {}),
       ...(eventType.layout ? { layout: resolveBookingLayout(eventType.layout) } : {}),
       ...(profile ? { profile } : {}),
       ...(eventType.agentPolicy
@@ -340,10 +361,18 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
 
     const userIds = selectedHosts.map((h) => h.userId);
     const scheduleRows = await deps.getSchedulesForUsers(userIds);
-    const busyRows = await deps.getBusyForUsers(
-      scheduleRows.map((schedule) => schedule.userId),
-      window,
-    );
+    const capacity = eventType.capacity ?? 1;
+    const busyRows = capacity > 1 && deps.getCapacityAwareBusyForUsers
+      ? await deps.getCapacityAwareBusyForUsers(
+          scheduleRows.map((schedule) => schedule.userId),
+          window,
+          eventType.id,
+          capacity,
+        )
+      : await deps.getBusyForUsers(
+          scheduleRows.map((schedule) => schedule.userId),
+          window,
+        );
     const schedulesByUser = new Map(scheduleRows.map((s) => [s.userId, s]));
     const busyByUser = new Map(busyRows.map((b) => [b.userId, b.intervals]));
 
@@ -429,14 +458,20 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     const ranked: { slot: Interval; score: number; mutual?: boolean }[] = inviteeBusy
       ? rankByMutualAvailability(scoredSlots, inviteeBusy)
       : scoredSlots;
+    const occupancy = capacity > 1 && deps.getEventTypeSlotOccupancy
+      ? await deps.getEventTypeSlotOccupancy(eventType.id, window, now)
+      : null;
     const rendered = ranked.map((s) =>
       renderSlot(
         s.slot,
         s.score,
         inviteeTimezone,
         s.mutual,
+        occupancy
+          ? Math.max(0, capacity - (occupancy.get(s.slot.start.toString()) ?? 0))
+          : undefined,
       ),
-    );
+    ).filter((slot) => slot.seatsRemaining === undefined || slot.seatsRemaining > 0);
     const curated = rendered.slice(0, eventType.curatedSlotCount);
 
     return c.json({

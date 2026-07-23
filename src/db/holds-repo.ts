@@ -61,17 +61,11 @@ function toInstant(date: Date): Temporal.Instant {
   return Temporal.Instant.fromEpochMilliseconds(date.getTime());
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "23505";
-}
-
 /**
- * Inserts one active hold per host inside a single transaction. The partial
- * unique index on (host_user_id, slot_start) WHERE status = 'active' is what
- * actually adjudicates a race between two concurrent callers; a losing insert
- * throws a unique-violation that this maps to err("slot_taken"). For group
- * bookings every host's hold must land or none does, so any failure aborts
- * the whole transaction (thrown errors roll it back automatically).
+ * Inserts one active hold per host inside a single transaction. Locking the
+ * event type serializes capacity checks, so concurrent requests cannot both
+ * claim the final seat. Capacity greater than one is restricted to solo event
+ * types; group and round-robin links retain their single-booking behavior.
  */
 export async function createHold(
   eventTypeId: string,
@@ -84,8 +78,30 @@ export async function createHold(
   const slotStart = toDate(slot.start);
   const slotEnd = toDate(slot.end);
 
-  try {
-    const inserted = await executor.transaction(async (tx) => {
+  const inserted = await executor.transaction(async (tx) => {
+      const [eventType] = await tx.select({
+        capacity: eventTypes.capacity,
+      }).from(eventTypes)
+        .where(eq(eventTypes.id, eventTypeId))
+        .for("update");
+      if (!eventType) return null;
+      const [activeHolds, confirmedBookings] = await Promise.all([
+        tx.select({ count: count() }).from(holds).where(and(
+          eq(holds.eventTypeId, eventTypeId),
+          eq(holds.slotStart, slotStart),
+          eq(holds.status, "active"),
+          gt(holds.expiresAt, new Date()),
+        )),
+        tx.select({ count: count() }).from(bookings).where(and(
+          eq(bookings.eventTypeId, eventTypeId),
+          eq(bookings.startsAt, slotStart),
+          eq(bookings.status, "confirmed"),
+        )),
+      ]);
+      if (
+        (activeHolds[0]?.count ?? 0) + (confirmedBookings[0]?.count ?? 0)
+        >= eventType.capacity
+      ) return null;
       const records: HoldRecord[] = [];
       for (const hostUserId of hostUserIds) {
         const [row] = await tx
@@ -97,12 +113,7 @@ export async function createHold(
       }
       return records;
     });
-
-    return ok(inserted);
-  } catch (error) {
-    if (isUniqueViolation(error)) return err({ kind: "slot_taken" });
-    throw error;
-  }
+  return inserted ? ok(inserted) : err({ kind: "slot_taken" });
 }
 
 /** Live active rows only: expired-but-unreaped holds never consume capacity. */

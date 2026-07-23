@@ -79,6 +79,24 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("holds-repo", () => {
     }
   });
 
+  test("capacity event admits only the configured number of concurrent holds", async () => {
+    const { pool, db, eventType, host1 } = await setup();
+    try {
+      await db.update(schema.eventTypes).set({ capacity: 2 })
+        .where(eq(schema.eventTypes.id, eventType.id));
+      const outcomes = await Promise.all([
+        createHold(eventType.id, [host1.id], slot, ttl, db),
+        createHold(eventType.id, [host1.id], slot, ttl, db),
+        createHold(eventType.id, [host1.id], slot, ttl, db),
+      ]);
+      expect(outcomes.filter((result) => result.ok)).toHaveLength(2);
+      expect(outcomes.filter((result) => !result.ok)).toHaveLength(1);
+      expect(await db.select().from(schema.holds)).toHaveLength(2);
+    } finally {
+      await pool.end();
+    }
+  });
+
   test("confirm after expiry fails", async () => {
     const { pool, db, eventType, host1 } = await setup();
 

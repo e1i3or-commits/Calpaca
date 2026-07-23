@@ -5,6 +5,18 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-23
+
+### Added
+
+- Capacity event types with configurable seats per time, live remaining-seat
+  counts, and transaction-safe final-seat enforcement.
+
+### Changed
+
+- Capacity greater than one currently uses solo-host assignment; round-robin
+  and group event types retain one booking per time.
+
 ## [0.7.0] - 2026-07-23
 
 ### Added
@@ -94,3 +106,4 @@ First tracked public release.
 [0.5.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.5.0
 [0.6.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.6.0
 [0.7.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.7.0
+[0.8.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.8.0

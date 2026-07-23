@@ -179,6 +179,9 @@ export function BookingPage({
                 {meta.durationMinutes} min
               </span>
             )}
+            {(meta?.capacity ?? 1) > 1 && (
+              <span>{meta?.capacity} seats per time</span>
+            )}
             <span className="flex min-w-0 items-center gap-1.5">
               <Globe className="h-3.5 w-3.5" />
               <TimezoneSelect value={timezone} onChange={setTimezone} />

@@ -256,6 +256,7 @@ const eventTypeBodySchema = z
     title: z.string().min(1).max(200),
     description: z.string().max(2000).nullable().default(null),
     durationMinutes: z.number().int().min(5).max(480),
+    capacity: z.number().int().min(1).max(500).default(1),
     bufferBeforeMin: z.number().int().min(0).max(240),
     bufferAfterMin: z.number().int().min(0).max(240),
     minimumNoticeMin: z.number().int().min(0).max(10080),
@@ -287,6 +288,9 @@ const eventTypeBodySchema = z
   })
   .refine((et) => et.mode !== "solo" || et.hosts.length === 1, {
     message: "solo event types have exactly one host",
+  })
+  .refine((et) => et.capacity === 1 || et.mode === "solo", {
+    message: "capacity event types must use solo mode",
   });
 
 const teamBodySchema = z.object({

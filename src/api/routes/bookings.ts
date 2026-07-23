@@ -8,6 +8,7 @@ import {
   getEventTypeHosts as dbGetEventTypeHosts,
   getSchedulesForUsers as dbGetSchedulesForUsers,
   getBusyForUsers as dbGetBusyForUsers,
+  getCapacityAwareBusyForUsers as dbGetCapacityAwareBusyForUsers,
   type BookingEventTypeConfig,
   type EventTypeHostRecord,
   type HostSchedule,
@@ -70,6 +71,12 @@ export interface BookingDeps {
   readonly getEventTypeHosts: (eventTypeId: string) => Promise<EventTypeHostRecord[]>;
   readonly getSchedulesForUsers: (userIds: readonly string[]) => Promise<HostSchedule[]>;
   readonly getBusyForUsers: (userIds: readonly string[], window: Interval) => Promise<HostBusy[]>;
+  readonly getCapacityAwareBusyForUsers?: (
+    userIds: readonly string[],
+    window: Interval,
+    eventTypeId: string,
+    capacity: number,
+  ) => Promise<HostBusy[]>;
   readonly createHold: (
     eventTypeId: string,
     hostUserIds: readonly string[],
@@ -123,6 +130,8 @@ const defaultDeps: BookingDeps = {
   getEventTypeHosts: (eventTypeId) => dbGetEventTypeHosts(eventTypeId),
   getSchedulesForUsers: (userIds) => dbGetSchedulesForUsers(userIds),
   getBusyForUsers: (userIds, window) => dbGetBusyForUsers(userIds, window),
+  getCapacityAwareBusyForUsers: (userIds, window, eventTypeId, capacity) =>
+    dbGetCapacityAwareBusyForUsers(userIds, window, eventTypeId, capacity),
   createHold: (eventTypeId, hostUserIds, slot, ttl) => dbCreateHold(eventTypeId, hostUserIds, slot, ttl),
   confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting) =>
     dbConfirmHold(holdIds, invitee, undefined, assignment, routingAnswers, meeting),
@@ -432,10 +441,18 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
 
     const window = paddedWindow(slot, eventType.bufferBeforeMin, eventType.bufferAfterMin);
     const scheduleRows = await deps.getSchedulesForUsers(targetHostIds);
-    const busyRows = await deps.getBusyForUsers(
-      scheduleRows.map((schedule) => schedule.userId),
-      window,
-    );
+    const capacity = eventType.capacity ?? 1;
+    const busyRows = capacity > 1 && deps.getCapacityAwareBusyForUsers
+      ? await deps.getCapacityAwareBusyForUsers(
+          scheduleRows.map((schedule) => schedule.userId),
+          window,
+          eventType.id,
+          capacity,
+        )
+      : await deps.getBusyForUsers(
+          scheduleRows.map((schedule) => schedule.userId),
+          window,
+        );
     const schedulesByUser = new Map(scheduleRows.map((s) => [s.userId, s]));
     const busyByUser = new Map(busyRows.map((b) => [b.userId, b.intervals]));
 
@@ -630,10 +647,18 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     const now = deps.now();
     const window = paddedWindow(slot, eventType.bufferBeforeMin, eventType.bufferAfterMin);
     const scheduleRows = await deps.getSchedulesForUsers(booking.hostUserIds);
-    const busyRows = await deps.getBusyForUsers(
-      scheduleRows.map((schedule) => schedule.userId),
-      window,
-    );
+    const capacity = eventType.capacity ?? 1;
+    const busyRows = capacity > 1 && deps.getCapacityAwareBusyForUsers
+      ? await deps.getCapacityAwareBusyForUsers(
+          scheduleRows.map((schedule) => schedule.userId),
+          window,
+          eventType.id,
+          capacity,
+        )
+      : await deps.getBusyForUsers(
+          scheduleRows.map((schedule) => schedule.userId),
+          window,
+        );
     const schedulesByUser = new Map(scheduleRows.map((s) => [s.userId, s]));
     const busyByUser = new Map(busyRows.map((b) => [b.userId, b.intervals]));
 

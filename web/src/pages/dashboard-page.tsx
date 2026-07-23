@@ -1390,6 +1390,7 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   title: "",
   description: null,
   durationMinutes: 30,
+  capacity: 1,
   bufferBeforeMin: 0,
   bufferAfterMin: 0,
   minimumNoticeMin: 240,
@@ -1573,6 +1574,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                           title: et.title,
                           description: et.description ?? null,
                           durationMinutes: et.durationMinutes,
+                          capacity: et.capacity,
                           bufferBeforeMin: et.bufferBeforeMin,
                           bufferAfterMin: et.bufferAfterMin,
                           minimumNoticeMin: et.minimumNoticeMin,
@@ -1741,12 +1743,40 @@ function EventTypeForm({
           />
         </div>
         <div className="flex flex-col gap-1.5">
+          <Label htmlFor="et-capacity">Seats per time</Label>
+          <Input
+            id="et-capacity"
+            type="number"
+            min={1}
+            max={500}
+            value={form.capacity}
+            onChange={(e) => {
+              const capacity = Number(e.target.value);
+              onChange({
+                ...form,
+                capacity,
+                ...(capacity > 1 ? { mode: "solo" as const } : {}),
+              });
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            Use more than one for a shared session. Capacity sessions use solo mode.
+          </p>
+        </div>
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-mode">Mode</Label>
           <select
             id="et-mode"
             className="flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
             value={form.mode}
-            onChange={(e) => set("mode", e.target.value as EventTypeInput["mode"])}
+            onChange={(e) => {
+              const mode = e.target.value as EventTypeInput["mode"];
+              onChange({
+                ...form,
+                mode,
+                ...(mode !== "solo" ? { capacity: 1 } : {}),
+              });
+            }}
           >
             <option value="solo">Solo</option>
             <option value="round_robin">Round robin</option>

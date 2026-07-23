@@ -27,6 +27,8 @@ release notes live in [CHANGELOG.md](CHANGELOG.md), and releases are tagged
   focus blocks, and ranked suggestions.
 - **Teams built in:** round-robin assignment, required and optional group
   attendees, and quorum fallback when no time works for everyone.
+- **Shared sessions:** capacity event types show remaining seats and enforce
+  the final seat transactionally.
 - **Date-aware availability:** recurring hours, alternate-date hours, time-off
   ranges, and teammate forwarding.
 - **Agent-ready:** a stdio MCP server exposes availability, holds, booking,

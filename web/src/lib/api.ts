@@ -13,6 +13,7 @@ export type SlotDto = {
   score: number;
   localHourWarning: boolean;
   mutual?: boolean;
+  seatsRemaining?: number;
 };
 
 export type AvailabilityResponse = {
@@ -83,6 +84,7 @@ export type EventTypeMeta = {
   title: string;
   description?: string;
   durationMinutes: number;
+  capacity?: number;
   theme: string;
   layout?: "focus" | "split" | "compact";
   logoUrl?: string;
@@ -638,6 +640,7 @@ export type AdminEventType = {
   title: string;
   description?: string | null;
   durationMinutes: number;
+  capacity: number;
   bufferBeforeMin: number;
   bufferAfterMin: number;
   minimumNoticeMin: number;

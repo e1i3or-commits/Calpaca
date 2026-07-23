@@ -254,6 +254,7 @@ export const eventTypes = pgTable("event_types", {
   title: text("title").notNull(),
   description: text("description"),
   durationMinutes: integer("duration_minutes").notNull(),
+  capacity: integer("capacity").notNull().default(1),
   bufferBeforeMin: integer("buffer_before_min").notNull().default(0),
   bufferAfterMin: integer("buffer_after_min").notNull().default(0),
   minimumNoticeMin: integer("minimum_notice_min").notNull().default(240),
@@ -294,8 +295,7 @@ export const holds = pgTable("holds", {
   status: holdStatus("status").notNull().default("active"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 }, (t) => [
-  // one active hold per host per slot start; group bookings create one per host
-  uniqueIndex("active_hold_uq").on(t.hostUserId, t.slotStart)
+  index("active_hold_slot_idx").on(t.eventTypeId, t.slotStart)
     .where(sql`status = 'active'`),
 ]);
 

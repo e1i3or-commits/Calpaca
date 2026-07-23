@@ -1,9 +1,9 @@
-import { and, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, lt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
 import * as schema from "./schema";
-import { bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, schedules, teams, users } from "./schema";
+import { bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, holds, schedules, teams, users } from "./schema";
 import type { Interval } from "../core/availability/intervals";
 import type { WeeklyRule } from "../core/availability/rules";
 import type { ScheduleOverride } from "../core/availability/overrides";
@@ -23,6 +23,7 @@ export interface EventTypeConfig {
   readonly meetingFormats?: readonly ("phone" | "google_meet")[];
   readonly mode?: AssignmentMode;
   readonly durationMinutes: number;
+  readonly capacity?: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
   readonly minimumNoticeMin: number;
@@ -48,6 +49,7 @@ export interface BookingEventTypeConfig {
   readonly layout?: string;
   readonly meetingFormats?: readonly ("phone" | "google_meet")[];
   readonly durationMinutes: number;
+  readonly capacity?: number;
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
   readonly minimumNoticeMin: number;
@@ -67,6 +69,7 @@ function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingE
     layout: row.layout,
     meetingFormats: row.meetingFormats,
     durationMinutes: row.durationMinutes,
+    capacity: row.capacity,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
     minimumNoticeMin: row.minimumNoticeMin,
@@ -129,6 +132,7 @@ export async function getEventTypeBySlug(
     meetingFormats: row.meetingFormats,
     mode: row.mode,
     durationMinutes: row.durationMinutes,
+    capacity: row.capacity,
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
     minimumNoticeMin: row.minimumNoticeMin,
@@ -328,4 +332,107 @@ export async function getBusyForUsers(
   }
 
   return [...byUser.entries()].map(([userId, intervals]) => ({ userId, intervals }));
+}
+
+export async function getCapacityAwareBusyForUsers(
+  userIds: readonly string[],
+  window: Interval,
+  eventTypeId: string,
+  capacity: number,
+  executor: Db = getDb(),
+): Promise<HostBusy[]> {
+  if (capacity <= 1) return getBusyForUsers(userIds, window, executor);
+  const [cacheRows, bookingRows] = await Promise.all([
+    executor.select({
+      userId: calendarConnections.userId,
+      externalEventId: calendarBusyCache.externalEventId,
+      startsAt: calendarBusyCache.startsAt,
+      endsAt: calendarBusyCache.endsAt,
+    }).from(calendarBusyCache)
+      .innerJoin(calendarConnections, eq(calendarBusyCache.connectionId, calendarConnections.id))
+      .where(and(
+        inArray(calendarConnections.userId, [...userIds]),
+        eq(calendarConnections.conflictEnabled, true),
+        lt(calendarBusyCache.startsAt, toDate(window.end)),
+        gte(calendarBusyCache.endsAt, toDate(window.start)),
+      )),
+    executor.select({
+      eventTypeId: bookings.eventTypeId,
+      googleEventId: bookings.googleEventId,
+      hostUserIds: bookings.hostUserIds,
+      startsAt: bookings.startsAt,
+      endsAt: bookings.endsAt,
+    }).from(bookings).where(and(
+      eq(bookings.status, "confirmed"),
+      lt(bookings.startsAt, toDate(window.end)),
+      gte(bookings.endsAt, toDate(window.start)),
+    )),
+  ]);
+  const ownCounts = new Map<string, number>();
+  for (const row of bookingRows) {
+    if (row.eventTypeId !== eventTypeId) continue;
+    const key = `${row.startsAt.toISOString()}|${row.endsAt.toISOString()}`;
+    ownCounts.set(key, (ownCounts.get(key) ?? 0) + 1);
+  }
+  const nonBlockingGoogleEventIds = new Set<string>();
+  for (const row of bookingRows) {
+    const googleEventId = row.googleEventId;
+    if (row.eventTypeId !== eventTypeId || !googleEventId) continue;
+    const key = `${row.startsAt.toISOString()}|${row.endsAt.toISOString()}`;
+    if ((ownCounts.get(key) ?? 0) < capacity) {
+      nonBlockingGoogleEventIds.add(googleEventId);
+    }
+  }
+  const wanted = new Set(userIds);
+  const byUser = new Map<string, Interval[]>();
+  const push = (userId: string, startsAt: Date, endsAt: Date) => {
+    const intervals = byUser.get(userId) ?? [];
+    intervals.push({ start: toInstant(startsAt), end: toInstant(endsAt) });
+    byUser.set(userId, intervals);
+  };
+  for (const row of cacheRows) {
+    if (!row.externalEventId || !nonBlockingGoogleEventIds.has(row.externalEventId)) {
+      push(row.userId, row.startsAt, row.endsAt);
+    }
+  }
+  for (const row of bookingRows) {
+    const ownKey = `${row.startsAt.toISOString()}|${row.endsAt.toISOString()}`;
+    if (row.eventTypeId === eventTypeId && (ownCounts.get(ownKey) ?? 0) < capacity) continue;
+    for (const hostId of row.hostUserIds) {
+      if (wanted.has(hostId)) push(hostId, row.startsAt, row.endsAt);
+    }
+  }
+  return [...byUser.entries()].map(([userId, intervals]) => ({ userId, intervals }));
+}
+
+export async function getEventTypeSlotOccupancy(
+  eventTypeId: string,
+  window: Interval,
+  now: Temporal.Instant,
+  executor: Db = getDb(),
+): Promise<Map<string, number>> {
+  const [bookingRows, holdRows] = await Promise.all([
+    executor.select({ startsAt: bookings.startsAt }).from(bookings).where(and(
+      eq(bookings.eventTypeId, eventTypeId),
+      eq(bookings.status, "confirmed"),
+      gte(bookings.startsAt, toDate(window.start)),
+      lt(bookings.startsAt, toDate(window.end)),
+    )),
+    executor.select({ slotStart: holds.slotStart }).from(holds).where(and(
+      eq(holds.eventTypeId, eventTypeId),
+      eq(holds.status, "active"),
+      gt(holds.expiresAt, toDate(now)),
+      gte(holds.slotStart, toDate(window.start)),
+      lt(holds.slotStart, toDate(window.end)),
+    )),
+  ]);
+  const counts = new Map<string, number>();
+  for (const start of [
+    ...bookingRows.map((row) => row.startsAt),
+    ...holdRows.map((row) => row.slotStart),
+  ]) {
+    const key = start.toISOString();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
 }
