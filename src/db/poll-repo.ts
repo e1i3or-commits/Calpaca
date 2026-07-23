@@ -154,7 +154,17 @@ export async function getPublicMeetingPoll(
 ): Promise<PollRecord | null> {
   const [poll] = await executor.select().from(meetingPolls)
     .where(eq(meetingPolls.publicId, publicId));
-  return poll ? hydratePoll(poll, executor) : null;
+  return poll ? hydratePoll(poll, executor, true) : null;
+}
+
+export async function getMeetingPollWorkspaceId(
+  publicId: string,
+  executor: Db = getDb(),
+): Promise<string | null> {
+  const [poll] = await executor.select({ workspaceId: meetingPolls.workspaceId })
+    .from(meetingPolls)
+    .where(eq(meetingPolls.publicId, publicId));
+  return poll?.workspaceId ?? null;
 }
 
 export async function saveMeetingPollVotes(input: {

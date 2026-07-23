@@ -5,6 +5,18 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-23
+
+### Added
+
+- Live public meeting-poll result matrices with automatic refresh.
+- Temporary Google Calendar free/busy assessment for poll responders.
+
+### Changed
+
+- Poll voting is grouped chronologically with compact choices, explicit
+  unanswered progress, and a mobile-friendly response bar.
+
 ## [0.2.0] - 2026-07-23
 
 ### Added
@@ -33,3 +45,4 @@ First tracked public release.
 
 [0.1.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.1.0
 [0.2.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.2.0
+[0.3.0]: https://github.com/e1i3or-commits/Calpaca/releases/tag/v0.3.0

@@ -46,7 +46,7 @@ export type MeetingPoll = {
   }[];
   responses?: {
     name: string;
-    email: string;
+    email?: string;
     votes: { optionId: string; choice: PollChoice }[];
   }[];
 };
@@ -169,10 +169,11 @@ export function getAvailability(args: {
 export function startInviteeCalendarConnection(
   returnPath: string,
   workspaceSlug?: string,
+  pollPublicId?: string,
 ): Promise<{ authorizationUrl: string }> {
   return request("/invitee-calendar/connect", {
     method: "POST",
-    body: JSON.stringify({ returnPath, workspaceSlug }),
+    body: JSON.stringify({ returnPath, workspaceSlug, pollPublicId }),
   });
 }
 
@@ -243,6 +244,21 @@ export function getMeetingPollResponse(publicId: string, token: string): Promise
   votes: { optionId: string; choice: PollChoice }[];
 }> {
   return request(`/polls/${encodeURIComponent(publicId)}/response?token=${encodeURIComponent(token)}`);
+}
+
+export function assessMeetingPollCalendar(
+  publicId: string,
+  capability: string,
+): Promise<{
+  assessment: { optionId: string; choice: "yes" | "no" }[];
+  expiresAt: string;
+}> {
+  return request(`/polls/${encodeURIComponent(publicId)}/calendar-assessment`, {
+    headers: {
+      "content-type": "application/json",
+      "x-calpaca-invitee-calendar": capability,
+    },
+  });
 }
 
 export function saveMeetingPollVotes(input: {

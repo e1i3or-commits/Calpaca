@@ -8,11 +8,13 @@ import {
   finalizeMeetingPoll,
   getMeetingPollForOwner,
   getMeetingPollResponse,
+  getMeetingPollWorkspaceId,
   getPublicMeetingPoll,
   listMeetingPolls,
   saveMeetingPollVotes,
   type PollRecord,
 } from "../../db/poll-repo";
+import { getInviteeCalendarSession } from "../../db/invitee-calendar-repo";
 import { isIanaZone } from "../../lib/timezone";
 import { createRateLimitMiddleware } from "../rate-limit";
 import { bucketStart, decide } from "../../core/ratelimit/window";
@@ -70,7 +72,7 @@ const defaultSuggestionDeps: PollSuggestionDeps = {
   now: () => Temporal.Now.instant(),
 };
 
-function renderPoll(poll: PollRecord) {
+function renderPoll(poll: PollRecord, publicView = false) {
   return {
     id: poll.id,
     publicId: poll.publicId,
@@ -89,7 +91,15 @@ function renderPoll(poll: PollRecord) {
       no: option.no,
       rank: rank + 1,
     })),
-    ...(poll.responses ? { responses: poll.responses } : {}),
+    ...(poll.responses
+      ? {
+          responses: poll.responses.map((response) => ({
+            name: response.name,
+            ...(!publicView ? { email: response.email } : {}),
+            votes: response.votes,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -168,7 +178,7 @@ export function createPollRoutes(
   routes.get("/api/me/polls", async (c) => {
     const workspaceId = c.get("user").workspaceId;
     if (!workspaceId) return c.json({ error: "workspace_not_found" }, 404);
-    return c.json({ polls: (await listMeetingPolls(workspaceId)).map(renderPoll) });
+    return c.json({ polls: (await listMeetingPolls(workspaceId)).map((poll) => renderPoll(poll)) });
   });
 
   routes.post("/api/me/polls/suggestions", async (c) => {
@@ -266,7 +276,45 @@ export function createPollRoutes(
 
   routes.get("/polls/:publicId", async (c) => {
     const poll = await getPublicMeetingPoll(c.req.param("publicId"));
-    return poll ? c.json(renderPoll(poll)) : c.json({ error: "poll_not_found" }, 404);
+    return poll ? c.json(renderPoll(poll, true)) : c.json({ error: "poll_not_found" }, 404);
+  });
+
+  routes.get("/polls/:publicId/calendar-assessment", async (c) => {
+    const capability = c.req.header("x-calpaca-invitee-calendar");
+    const session = capability ? await getInviteeCalendarSession(capability) : null;
+    if (!session) return c.json({ error: "calendar_session_not_found" }, 401);
+    const publicId = c.req.param("publicId");
+    const workspaceId = await getMeetingPollWorkspaceId(publicId);
+    const entitlements = workspaceId
+      ? await getPublicWorkspaceEntitlements(workspaceId)
+      : null;
+    if (!entitlements?.inviteeCalendarOverlay) {
+      return c.json({ error: workspaceId ? "feature_not_available" : "poll_not_found" }, workspaceId ? 403 : 404);
+    }
+    const poll = await getPublicMeetingPoll(publicId);
+    if (!poll) return c.json({ error: "poll_not_found" }, 404);
+    const busy = session.busy.flatMap((interval) => {
+      try {
+        return [{
+          start: Temporal.Instant.from(interval.start),
+          end: Temporal.Instant.from(interval.end),
+        }];
+      } catch {
+        return [];
+      }
+    });
+    return c.json({
+      assessment: poll.options.map((option) => {
+        const start = Temporal.Instant.from(option.startsAt.toISOString());
+        const end = Temporal.Instant.from(option.endsAt.toISOString());
+        const conflicts = busy.some((interval) =>
+          Temporal.Instant.compare(interval.start, end) < 0
+          && Temporal.Instant.compare(start, interval.end) < 0
+        );
+        return { optionId: option.id, choice: conflicts ? "no" : "yes" };
+      }),
+      expiresAt: session.expiresAt.toISOString(),
+    });
   });
 
   routes.get("/polls/:publicId/response", async (c) => {

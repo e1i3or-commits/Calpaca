@@ -27,6 +27,7 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/invitee-calendar/status", "Invitee calendar", "Check a calendar overlay capability"],
   ["delete", "/invitee-calendar/session", "Invitee calendar", "Disconnect and erase a calendar overlay"],
   ["get", "/polls/{publicId}", "Meeting polls", "Get a public meeting poll"],
+  ["get", "/polls/{publicId}/calendar-assessment", "Meeting polls", "Assess poll options against temporary calendar free/busy"],
   ["get", "/polls/{publicId}/response", "Meeting polls", "Get a token-authorized participant response"],
   ["post", "/polls/{publicId}/votes", "Meeting polls", "Create or update a participant response"],
   ["get", "/routing/{slug}", "Routing", "Get a public routing form"],

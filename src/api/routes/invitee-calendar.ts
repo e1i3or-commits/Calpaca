@@ -10,6 +10,7 @@ import {
 } from "../../db/invitee-calendar-repo";
 import { queryFreeBusy } from "../../sync/google";
 import { getPublicWorkspaceEntitlements, resolvePublicWorkspace } from "../../db/workspace-repo";
+import { getMeetingPollWorkspaceId } from "../../db/poll-repo";
 
 const STATE_TTL_MS = 10 * 60_000;
 const OVERLAY_TTL_MS = 60 * 60_000;
@@ -43,7 +44,10 @@ function safeReturnUrl(request: Request, returnPath: string): string | null {
   } catch {
     return null;
   }
-  if (parsed.origin !== requestOrigin(request) || !parsed.pathname.startsWith("/book/")) return null;
+  if (
+    parsed.origin !== requestOrigin(request)
+    || (!parsed.pathname.startsWith("/book/") && !parsed.pathname.startsWith("/poll/"))
+  ) return null;
   parsed.hash = "";
   return parsed.toString();
 }
@@ -80,16 +84,22 @@ export function createInviteeCalendarRoutes(): Hono {
     const parsed = z.object({
       returnPath: z.string().min(1),
       workspaceSlug: z.string().min(1).optional(),
+      pollPublicId: z.string().min(1).optional(),
     }).safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
     const returnUrl = safeReturnUrl(c.req.raw, parsed.data.returnPath);
     if (!returnUrl) return c.json({ error: "invalid_return_path" }, 400);
-    const workspace = await resolvePublicWorkspace({
-      hostname: new URL(returnUrl).hostname,
-      workspaceSlug: parsed.data.workspaceSlug,
-    });
-    const entitlements = workspace
-      ? await getPublicWorkspaceEntitlements(workspace.id)
+    const pollWorkspaceId = parsed.data.pollPublicId
+      ? await getMeetingPollWorkspaceId(parsed.data.pollPublicId)
+      : null;
+    const workspace = pollWorkspaceId
+      ? null
+      : await resolvePublicWorkspace({
+          hostname: new URL(returnUrl).hostname,
+          workspaceSlug: parsed.data.workspaceSlug,
+        });
+    const entitlements = pollWorkspaceId || workspace
+      ? await getPublicWorkspaceEntitlements(pollWorkspaceId ?? workspace!.id)
       : null;
     if (!entitlements?.inviteeCalendarOverlay) {
       return c.json({ error: "feature_not_available" }, 403);
