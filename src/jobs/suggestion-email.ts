@@ -11,6 +11,17 @@ export async function sendSuggestionEmail(suggestionId: string): Promise<void> {
     start: Temporal.Instant.from(slot.start),
     end: Temporal.Instant.from(slot.end),
   }));
+  const base = process.env.PUBLIC_URL?.replace(/\/$/, "");
+  const configuredLogo = ctx.eventType.logoUrl;
+  const logoPath =
+    configuredLogo ??
+    (ctx.eventType.theme === "tourscale" ? "/brand/tourscale-logo-color.svg" : null);
+  const brandLogoUrl =
+    logoPath?.startsWith("http://") || logoPath?.startsWith("https://")
+      ? logoPath
+      : logoPath && base
+        ? `${base}${logoPath.startsWith("/") ? "" : "/"}${logoPath}`
+        : null;
   for (const host of ctx.hosts) {
     await sendInviteMail({
       to: host.email,
@@ -23,6 +34,8 @@ export async function sendSuggestionEmail(suggestionId: string): Promise<void> {
         },
         host: { name: host.name, timezone: host.timezone },
         proposedSlots: slots,
+        theme: ctx.eventType.theme,
+        brandLogoUrl,
         ...(ctx.message !== undefined && { message: ctx.message }),
       }),
     });

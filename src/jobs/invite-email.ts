@@ -50,6 +50,14 @@ function buildLinks(bookingId: string, rescheduleToken: string, cancelToken: str
   };
 }
 
+function emailLogoUrl(ctx: InviteContext): string | null {
+  const configured = ctx.eventTypeLogoUrl;
+  if (configured?.startsWith("https://") || configured?.startsWith("http://")) return configured;
+  const path = configured ?? (ctx.eventTypeTheme === "tourscale" ? "/brand/tourscale-logo-color.svg" : null);
+  const base = process.env.PUBLIC_URL?.replace(/\/$/, "");
+  return path && base ? `${base}${path.startsWith("/") ? "" : "/"}${path}` : null;
+}
+
 export async function sendInvite(bookingId: string, kind: InviteKind): Promise<void> {
   if (!isMailerConfigured()) {
     console.log(`[jobs] invite ${kind} for ${bookingId} skipped: SMTP not configured`);
@@ -263,6 +271,8 @@ export function buildMail(
     links: kind === "cancelled" ? null : buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken),
     icsAttached: includeIcs,
     notes: booking.inviteeNotes,
+    theme: ctx.eventTypeTheme,
+    brandLogoUrl: emailLogoUrl(ctx),
   });
 
   const ics = includeIcs

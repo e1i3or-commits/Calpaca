@@ -20,6 +20,8 @@ export interface SuggestionEventType {
   readonly id: string;
   readonly slug: string;
   readonly title: string;
+  readonly theme?: string;
+  readonly logoUrl?: string | null;
 }
 
 export interface TimeSuggestionInput {
@@ -46,7 +48,13 @@ export async function getSuggestionEventTypeBySlug(
   executor: Db = getDb(),
 ): Promise<SuggestionEventType | null> {
   const [row] = await executor
-    .select({ id: eventTypes.id, slug: eventTypes.slug, title: eventTypes.title })
+    .select({
+      id: eventTypes.id,
+      slug: eventTypes.slug,
+      title: eventTypes.title,
+      theme: eventTypes.theme,
+      logoUrl: eventTypes.logoUrl,
+    })
     .from(eventTypes)
     .where(eq(eventTypes.slug, slug));
   return row ?? null;
@@ -82,6 +90,8 @@ export async function getTimeSuggestionContext(
       eventTypeId: eventTypes.id,
       eventTypeSlug: eventTypes.slug,
       eventTypeTitle: eventTypes.title,
+      eventTypeTheme: eventTypes.theme,
+      eventTypeLogoUrl: eventTypes.logoUrl,
       inviteeEmail: timeSuggestions.inviteeEmail,
       inviteeName: timeSuggestions.inviteeName,
       inviteeTimezone: timeSuggestions.inviteeTimezone,
@@ -110,6 +120,8 @@ export async function getTimeSuggestionContext(
       id: row.eventTypeId,
       slug: row.eventTypeSlug,
       title: row.eventTypeTitle,
+      theme: row.eventTypeTheme,
+      logoUrl: row.eventTypeLogoUrl,
     },
     inviteeEmail: row.inviteeEmail,
     inviteeName: row.inviteeName,

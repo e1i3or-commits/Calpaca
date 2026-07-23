@@ -267,6 +267,8 @@ export interface InviteContext {
   readonly booking: BookingRow;
   readonly eventTypeTitle: string;
   readonly eventTypeSlug: string;
+  readonly eventTypeTheme?: string;
+  readonly eventTypeLogoUrl?: string | null;
   readonly hosts: readonly InviteHost[];
   /** Number of reschedules so far — the ICS SEQUENCE for iTIP updates. */
   readonly rescheduleCount: number;
@@ -283,7 +285,12 @@ export async function getInviteContext(
   if (!booking) return null;
 
   const [eventType] = await executor
-    .select({ title: eventTypes.title, slug: eventTypes.slug })
+    .select({
+      title: eventTypes.title,
+      slug: eventTypes.slug,
+      theme: eventTypes.theme,
+      logoUrl: eventTypes.logoUrl,
+    })
     .from(eventTypes)
     .where(eq(eventTypes.id, booking.eventTypeId));
   if (!eventType) return null;
@@ -310,6 +317,8 @@ export async function getInviteContext(
     booking,
     eventTypeTitle: eventType.title,
     eventTypeSlug: eventType.slug,
+    eventTypeTheme: eventType.theme,
+    eventTypeLogoUrl: eventType.logoUrl,
     hosts,
     rescheduleCount: rescheduled.length,
   };

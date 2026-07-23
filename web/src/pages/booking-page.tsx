@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowLeft, Check, Clock, Globe, Phone, UserPlus, Video, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Clock, Globe, Plus, Phone, Trash2, UserPlus, Video, X } from "lucide-react";
 import {
   ApiError,
   confirmBooking,
   createHold,
   getEventTypeMeta,
+  suggestTimes,
   type BookingConfirmation,
   type EventTypeMeta,
   type EventTypeProfile,
@@ -12,7 +13,15 @@ import {
   type SlotDto,
 } from "@/lib/api";
 import { useBookingLayout, useTheme } from "@/lib/theme";
-import { allTimezones, browserTimezone, formatDayTime, formatTime } from "@/lib/time";
+import {
+  allTimezones,
+  browserTimezone,
+  currentLocalDateTime,
+  formatDayTime,
+  formatTime,
+  isFutureInstant,
+  localSuggestionWindow,
+} from "@/lib/time";
 import { SlotPicker } from "@/components/slot-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +32,9 @@ import { Textarea } from "@/components/ui/textarea";
 type Step =
   | { name: "pick" }
   | { name: "details"; slot: SlotDto; hosts?: string[]; optionalHosts?: string[] }
-  | { name: "confirmed"; slot: SlotDto; confirmation: BookingConfirmation };
+  | { name: "confirmed"; slot: SlotDto; confirmation: BookingConfirmation }
+  | { name: "suggest" }
+  | { name: "suggested"; email: string };
 
 const ERROR_MESSAGES: Record<string, string> = {
   event_type_not_found: "This booking link doesn't exist.",
@@ -31,6 +42,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   slot_taken: "That time was just taken. Pick another one.",
   expired: "The hold on that time expired. Pick it again.",
   hosts_not_selectable: "That host selection is no longer available. Refresh and choose again.",
+  invalid_request: "Check the form and try again.",
+  invalid_slots: "Choose future times and try again.",
+  rate_limited: "Too many suggestions were sent. Please wait a minute and try again.",
 };
 
 export function errorMessage(e: unknown): string {
@@ -88,6 +102,19 @@ export function BookingPage({
 
   if (step.name === "confirmed") {
     return <Confirmation slot={step.slot} confirmation={step.confirmation} timezone={timezone} layout={layout} />;
+  }
+  if (step.name === "suggested") {
+    const recipient =
+      meta?.profile?.teamName ??
+      meta?.profile?.hosts.map((host) => host.name).join(", ") ??
+      "The host";
+    return (
+      <SuggestionConfirmation
+        email={step.email}
+        recipient={recipient}
+        layout={layout}
+      />
+    );
   }
 
   return (
@@ -160,7 +187,27 @@ export function BookingPage({
                   Choose at least one person to see available times.
                 </p>
               )}
+              <button
+                type="button"
+                className="self-center text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                onClick={() => {
+                  setError(null);
+                  setStep({ name: "suggest" });
+                }}
+              >
+                None of these work? Suggest a time.
+              </button>
             </div>
+          )}
+
+          {step.name === "suggest" && (
+            <SuggestionStep
+              slug={slug}
+              timezone={timezone}
+              durationMinutes={meta?.durationMinutes ?? 30}
+              onBack={() => setStep({ name: "pick" })}
+              onSent={(email) => setStep({ name: "suggested", email })}
+            />
           )}
 
           {step.name === "details" && (
@@ -530,6 +577,198 @@ function DetailsStep({
           {submitting ? "Booking…" : "Confirm booking"}
         </Button>
       </form>
+    </div>
+  );
+}
+
+type ProposedWindow = { date: string; time: string };
+
+function SuggestionStep({
+  slug,
+  timezone,
+  durationMinutes,
+  onBack,
+  onSent,
+}: {
+  slug: string;
+  timezone: string;
+  durationMinutes: number;
+  onBack: () => void;
+  onSent: (email: string) => void;
+}) {
+  const bounds = currentLocalDateTime(timezone);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [windows, setWindows] = useState<ProposedWindow[]>([{ date: "", time: "" }]);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  function updateWindow(index: number, patch: Partial<ProposedWindow>) {
+    setWindows((current) =>
+      current.map((window, i) => (i === index ? { ...window, ...patch } : window)),
+    );
+  }
+
+  async function submit() {
+    setError(null);
+    let proposedSlots: { start: string; end: string }[];
+    try {
+      proposedSlots = await Promise.all(windows.map((window) =>
+        localSuggestionWindow(window.date, window.time, timezone, durationMinutes),
+      ));
+      const future = await Promise.all(
+        proposedSlots.map((slot) => isFutureInstant(slot.start)),
+      );
+      if (future.some((valid) => !valid)) {
+        setError("Choose times in the future.");
+        return;
+      }
+    } catch {
+      setError("Choose valid local dates and times.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await suggestTimes({
+        eventTypeSlug: slug,
+        invitee: { name, email, timezone },
+        proposedSlots,
+        ...(message.trim() ? { message: message.trim() } : {}),
+      });
+      onSent(email);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <button
+        type="button"
+        className="flex items-center gap-1 self-start text-sm text-muted-foreground hover:text-foreground"
+        onClick={onBack}
+      >
+        <ArrowLeft className="h-3.5 w-3.5" /> Back to available times
+      </button>
+      <div>
+        <h2 className="text-lg font-semibold">Suggest a different time</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Share up to three windows in {timezone}. Each window is {durationMinutes} minutes.
+        </p>
+      </div>
+      {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="suggest-name">Name</Label>
+            <Input id="suggest-name" required value={name} onChange={(event) => setName(event.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="suggest-email">Email</Label>
+            <Input id="suggest-email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+          </div>
+        </div>
+        <fieldset className="flex min-w-0 flex-col gap-3">
+          <legend className="mb-1 text-sm font-medium">Proposed windows</legend>
+          {windows.map((window, index) => (
+            <div key={index} className="grid min-w-0 grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.75fr)_auto]">
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <Label htmlFor={`suggest-date-${index}`}>Date {index + 1}</Label>
+                <Input
+                  id={`suggest-date-${index}`}
+                  type="date"
+                  required
+                  min={bounds.date}
+                  value={window.date}
+                  onChange={(event) => updateWindow(index, { date: event.target.value })}
+                />
+              </div>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <Label htmlFor={`suggest-time-${index}`}>Start</Label>
+                <Input
+                  id={`suggest-time-${index}`}
+                  type="time"
+                  required
+                  min={window.date === bounds.date ? bounds.time : undefined}
+                  value={window.time}
+                  onChange={(event) => updateWindow(index, { time: event.target.value })}
+                />
+              </div>
+              {windows.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 w-9 p-0"
+                  aria-label={`Remove window ${index + 1}`}
+                  onClick={() => setWindows((current) => current.filter((_, i) => i !== index))}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          ))}
+          {windows.length < 3 && (
+            <button
+              type="button"
+              className="flex items-center gap-1 self-start text-sm text-muted-foreground hover:text-foreground"
+              onClick={() => setWindows((current) => [...current, { date: "", time: "" }])}
+            >
+              <Plus className="h-3.5 w-3.5" /> Add another window
+            </button>
+          )}
+        </fieldset>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="suggest-message">
+            Message <span className="font-normal text-muted-foreground">(optional)</span>
+          </Label>
+          <Textarea
+            id="suggest-message"
+            maxLength={1000}
+            placeholder="Add any context that might help."
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+          />
+        </div>
+        <Button type="submit" disabled={submitting || !name.trim() || !email.trim()}>
+          {submitting ? "Sending…" : "Send suggested times"}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+function SuggestionConfirmation({
+  email,
+  recipient,
+  layout,
+}: {
+  email: string;
+  recipient: string;
+  layout: "focus" | "split" | "compact";
+}) {
+  return (
+    <div className="booking-shell mx-auto px-4 py-10" data-booking-layout={layout}>
+      <Card className="booking-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Check className="h-5 w-5 text-primary" /> Sent
+          </CardTitle>
+          <CardDescription>
+            {recipient} will get back to you at {email}.
+          </CardDescription>
+        </CardHeader>
+      </Card>
     </div>
   );
 }

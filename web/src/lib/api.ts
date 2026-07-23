@@ -144,6 +144,19 @@ export function confirmBooking(args: {
   return request("/bookings", { method: "POST", body: JSON.stringify(args) });
 }
 
+export function suggestTimes(args: {
+  eventTypeSlug: string;
+  invitee: { email: string; name: string; timezone: string };
+  proposedSlots: { start: string; end: string }[];
+  message?: string;
+}): Promise<{ suggestionId: string }> {
+  const { eventTypeSlug, ...body } = args;
+  return request(`/event-types/${encodeURIComponent(eventTypeSlug)}/suggestions`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export type RescheduleContext = {
   bookingId: string;
   eventTypeSlug: string;
