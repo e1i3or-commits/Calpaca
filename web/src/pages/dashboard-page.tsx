@@ -3779,7 +3779,7 @@ function EventTypeForm({
             onChange={(e) => set("logoUrl", e.target.value || null)}
           />
           <FieldError field="logoUrl" />
-          <p className="text-xs text-muted-foreground">Optional. TourScale uses its private brand logo automatically.</p>
+          <p className="text-xs text-muted-foreground">Optional. Displayed on the public booking page and booking emails.</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-team">Team</Label>
