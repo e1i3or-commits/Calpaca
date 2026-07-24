@@ -5,6 +5,14 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-07-23
+
+### Added
+
+- An organizer availability troubleshooter with per-host, privacy-safe
+  explanations for scheduling-policy, working-hours, time-off, buffer, and
+  calendar-conflict blockers.
+
 ## [0.16.0] - 2026-07-23
 
 ### Added

@@ -156,7 +156,7 @@ features matter.
 | Locations | Shipped | In-person, phone, custom URL, Google Meet; per-host override |
 | Multiple selectable durations | Shipped | Buffers, caps, holds, scoring, and rescheduling follow the selected duration |
 | One-off offers and single-use links | Shipped | Curated slots, recipient restriction, revoke/expire/booked state |
-| Availability troubleshooter | M | Explain why a time is unavailable without exposing private events |
+| Availability troubleshooter | Shipped | Per-host policy, schedule, time-off, buffer, and private conflict explanations |
 | Email verification and abuse controls | S–M | Optional OTP for public bookings; retain rate limiting |
 
 P1 exit: a solo professional can reproduce the normal Calendly/Cal.com

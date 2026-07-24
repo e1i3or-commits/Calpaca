@@ -24,6 +24,7 @@ import {
   Plus,
   Route,
   ShieldCheck,
+  SearchCheck,
   Sun,
   Trash2,
   UserPlus,
@@ -87,6 +88,7 @@ import {
   signOut,
   setMeetingPollOpenState,
   suggestMeetingPollTimes,
+  troubleshootAvailability,
   updateEventType,
   updateBookingPage,
   updateManagedUser,
@@ -104,6 +106,7 @@ import {
   type AdminBooking,
   type AdminBookingDetail,
   type AnalyticsReport,
+  type AvailabilityDiagnostic,
   type ApiTokenRecord,
   type AppRole,
   type AssignmentExplanation,
@@ -153,6 +156,7 @@ const TABS = [
   { key: "team", label: "People & teams", icon: Users, group: "setup" },
   { key: "calendars", label: "Calendars", icon: Calendar, group: "setup" },
   { key: "one-off", label: "One-off offers", icon: Link2, group: "setup" },
+  { key: "troubleshooter", label: "Troubleshooter", icon: SearchCheck, group: "setup" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -296,6 +300,7 @@ export function DashboardPage() {
               {tab === "team" && <TeamTab users={users} />}
               {tab === "calendars" && <CalendarsTab />}
               {tab === "one-off" && <OneOffOffersTab />}
+              {tab === "troubleshooter" && <AvailabilityTroubleshooterTab />}
             </>
           )}
         </div>
@@ -385,6 +390,7 @@ const PAGE_COPY: Record<TabKey, { title: string; description: string }> = {
   team: { title: "People & teams", description: "Hosts, membership, and shared scheduling." },
   calendars: { title: "Calendars", description: "Where Calpaca checks conflicts and writes events." },
   "one-off": { title: "One-off offers", description: "Send a private, single-use choice of exact times." },
+  troubleshooter: { title: "Availability troubleshooter", description: "Understand why a specific time can or cannot be booked." },
 };
 
 function PageHeading({ tab, onNavigate }: { tab: TabKey; onNavigate: (tab: TabKey) => void }) {
@@ -1291,6 +1297,133 @@ function SignupSheetsTab() {
 function localInputValue(date: Date): string {
   const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return shifted.toISOString().slice(0, 16);
+}
+
+const DIAGNOSTIC_COPY: Record<AvailabilityDiagnostic["hosts"][number]["reason"], string> = {
+  available: "Available",
+  schedule_missing: "No availability schedule is connected",
+  outside_working_hours: "Outside recurring working hours",
+  time_off: "Blocked by a date override or time off",
+  calendar_conflict: "Conflicts with a busy calendar event or booking",
+  minimum_notice: "Inside the minimum-notice window",
+  rolling_window: "Outside the booking window",
+  buffer_outside_hours: "Required buffer extends outside working hours",
+  forwarded_available: "Available through configured teammate coverage",
+};
+
+function AvailabilityTroubleshooterTab() {
+  const [eventTypes, setEventTypes] = useState<AdminEventType[]>([]);
+  const [eventTypeId, setEventTypeId] = useState("");
+  const [duration, setDuration] = useState(30);
+  const [start, setStart] = useState(localInputValue(new Date(Date.now() + 86_400_000)));
+  const [result, setResult] = useState<AvailabilityDiagnostic | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listEventTypes().then(({ eventTypes: items }) => {
+      setEventTypes(items);
+      if (items[0]) {
+        setEventTypeId(items[0].id);
+        setDuration(items[0].durationMinutes);
+      }
+    }).catch((e) => setError(errorText(e)));
+  }, []);
+
+  const selected = eventTypes.find((eventType) => eventType.id === eventTypeId);
+  const inspect = async () => {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await troubleshootAvailability({
+        eventTypeId,
+        start: new Date(start).toISOString(),
+        durationMinutes: duration,
+      }));
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+      <Card>
+        <CardHeader>
+          <CardTitle>Inspect a time</CardTitle>
+          <CardDescription>Calendar details stay private; only the blocking category is shown.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="diagnostic-event">Event type</Label>
+            <select
+              id="diagnostic-event"
+              className="h-10 rounded-lg border border-input bg-background px-3 text-sm"
+              value={eventTypeId}
+              onChange={(event) => {
+                setEventTypeId(event.target.value);
+                const next = eventTypes.find((item) => item.id === event.target.value);
+                if (next) setDuration(next.durationMinutes);
+                setResult(null);
+              }}
+            >
+              {eventTypes.map((eventType) => <option key={eventType.id} value={eventType.id}>{eventType.title}</option>)}
+            </select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="diagnostic-start">Proposed start</Label>
+            <Input id="diagnostic-start" type="datetime-local" step={900} value={start} onChange={(event) => setStart(event.target.value)} />
+            <p className="text-xs text-muted-foreground">Interpreted in your current device timezone.</p>
+          </div>
+          <div>
+            <Label>Duration</Label>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(selected?.selectableDurations?.length ? selected.selectableDurations : [selected?.durationMinutes ?? 30]).map((minutes) => (
+                <Button key={minutes} type="button" size="sm" variant={duration === minutes ? "default" : "outline"} onClick={() => setDuration(minutes)}>
+                  {minutes} min
+                </Button>
+              ))}
+            </div>
+          </div>
+          <Button disabled={loading || !eventTypeId || !start} onClick={() => void inspect()}>
+            <SearchCheck className="h-4 w-4" /> {loading ? "Checking…" : "Check availability"}
+          </Button>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{result ? (result.available ? "This time can be booked" : "This time cannot be booked") : "Diagnostic result"}</CardTitle>
+          <CardDescription>
+            {result
+              ? `${new Date(result.start).toLocaleString()}–${new Date(result.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+              : "Choose an event type and time to inspect every configured host."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {result && (
+            <div className="space-y-3">
+              {result.hosts.map((host) => (
+                <div key={host.userId} className="flex items-start justify-between gap-4 rounded-xl border border-border p-4">
+                  <div>
+                    <p className="font-medium">{host.name}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{DIAGNOSTIC_COPY[host.reason]}</p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${host.available ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive"}`}>
+                    {host.available ? "Available" : "Blocked"}
+                  </span>
+                </div>
+              ))}
+              {result.hosts.length === 0 && <p className="text-sm text-muted-foreground">This event type has no configured hosts.</p>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function OneOffOffersTab() {

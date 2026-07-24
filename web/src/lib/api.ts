@@ -1020,6 +1020,39 @@ export function getOneOffOffer(publicId: string): Promise<PublicOneOffOffer> {
   return request(`/offers/${encodeURIComponent(publicId)}`);
 }
 
+export type AvailabilityDiagnostic = {
+  available: boolean;
+  start: string;
+  end: string;
+  hosts: {
+    userId: string;
+    name: string;
+    role: "member" | "required" | "optional";
+    available: boolean;
+    reason:
+      | "available"
+      | "schedule_missing"
+      | "outside_working_hours"
+      | "time_off"
+      | "calendar_conflict"
+      | "minimum_notice"
+      | "rolling_window"
+      | "buffer_outside_hours"
+      | "forwarded_available";
+  }[];
+};
+
+export function troubleshootAvailability(input: {
+  eventTypeId: string;
+  start: string;
+  durationMinutes: number;
+}): Promise<AvailabilityDiagnostic> {
+  return request("/api/me/availability-troubleshooter", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 // ---- organizer bookings ----
 
 export type AdminBooking = {
