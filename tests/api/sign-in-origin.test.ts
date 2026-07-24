@@ -16,8 +16,8 @@ describe("organizer sign-in origin", () => {
     process.env.CALPACA_DEPLOYMENT_MODE = "hosted";
     process.env.BETTER_AUTH_URL = "https://app.calpaca.io";
 
-    const response = await app.request("https://cal.tourscale.com/sign-in?invitation=token", {
-      headers: { host: "cal.tourscale.com" },
+    const response = await app.request("https://calendar.client.example/sign-in?invitation=token", {
+      headers: { host: "calendar.client.example" },
     });
 
     expect(response.status).toBe(302);

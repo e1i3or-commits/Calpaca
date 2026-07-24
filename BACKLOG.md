@@ -18,7 +18,7 @@ slot generation, scoring, group availability with quorum fallback, weighted
 round robin, event-log booking lifecycle, transactional holds, availability
 and booking endpoints with signed tokens.
 
-## Phase 2: Surfaces — SHIPPED (live at cal.tourscale.com, 809cb3b)
+## Phase 2: Surfaces — SHIPPED
 
 - Google OAuth via BetterAuth; calendar connection flow
 - Google sync: watch channels + renewal, busy cache, full-resync path;
@@ -72,7 +72,7 @@ and booking endpoints with signed tokens.
   page/slot-view tracking — no impression events exist.
 - Theming system: document the token file, extract remaining hardcoded
   styles into it, ship two additional bundled themes as proof.
-- Deployment generalization: move TourScale-specific deployment config
+- Deployment generalization: move operator-specific deployment config
   (domains, Infisical paths, compose production values) out of the product
   tree; generic docker-compose.example.yml + .env.example; README
   quickstart targeting "first booking page in under a minute."

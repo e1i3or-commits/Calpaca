@@ -25,9 +25,9 @@ describe("trustedAuthOrigins", () => {
     process.env.BETTER_AUTH_URL = "https://app.calpaca.io";
     const verified = await trustedAuthOrigins(
       new Request("https://app.calpaca.io/api/auth/sign-in/social", {
-        headers: { origin: "https://cal.tourscale.com" },
+        headers: { origin: "https://calendar.client.example" },
       }),
-      async (hostname) => hostname === "cal.tourscale.com" ? "workspace-id" : null,
+      async (hostname) => hostname === "calendar.client.example" ? "workspace-id" : null,
     );
     const unknown = await trustedAuthOrigins(
       new Request("https://app.calpaca.io/api/auth/sign-in/social", {
@@ -36,16 +36,16 @@ describe("trustedAuthOrigins", () => {
       async () => null,
     );
 
-    expect(verified).toContain("https://cal.tourscale.com");
+    expect(verified).toContain("https://calendar.client.example");
     expect(unknown).not.toContain("https://attacker.example");
   });
 
   test("does not trust an insecure non-local origin", async () => {
     expect(await trustedAuthOrigins(
       new Request("http://app.test/api/auth/sign-in/social", {
-        headers: { origin: "http://cal.tourscale.com" },
+        headers: { origin: "http://calendar.client.example" },
       }),
       async () => "workspace-id",
-    )).not.toContain("http://cal.tourscale.com");
+    )).not.toContain("http://calendar.client.example");
   });
 });

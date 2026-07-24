@@ -128,7 +128,7 @@ Calpaca is functionally ambitious but visually and interactionally one release b
 
 **What fails:** progressive disclosure is incomplete. Host choice, duration, meeting metadata, calendar, time grid, and suggestion features can all compete before the user understands the next required decision. Metadata load failure is swallowed, causing temporary slug-based titles and content movement. Error feedback is usually a single paragraph above the content. Small duration controls and timezone controls are easy to miss.
 
-**Desktop:** the TourScale split layout is the strongest supplied reference, but the left column can become a storage area for metadata. “Best times” competes with the calendar instead of clearly offering a shortcut. When many slots exist, the slot region becomes its own scroll area without strong boundary cues.
+**Desktop:** the split layout is the strongest supplied reference, but the left column can become a storage area for metadata. “Best times” competes with the calendar instead of clearly offering a shortcut. When many slots exist, the slot region becomes its own scroll area without strong boundary cues.
 
 **Mobile:** the 500px reference is not proof of 390 or 320 readiness. Calendar, timezone, host selection, and slot selection stack into a long path. Three-column slot grids at narrow widths risk tiny targets. The user needs a persistent summary and clear step indicator.
 
@@ -550,30 +550,14 @@ Replace this with a documented action hierarchy: primary, secondary, tertiary, d
 | File | Screen represented | Viewport | Match to current implementation | Significant differences | Recommended action |
 | --- | --- | --- | --- | --- | --- |
 | `docs/screenshots/landing.png` | Original Calpaca landing page | Desktop, 1440 × 900 | No | It shows the earlier sparse “Make time feel a little more human” page. The live marketing site is now a full launch page with pricing, features, and product preview. | Label it explicitly as historical or replace it with current live-site captures. |
-| `docs/screenshots/booking.png` | TourScale branded individual booking | Desktop, 1200 × 900 | Broadly | Split layout, profile, best times, calendar, and slots remain relevant. Current implementation supports more host, duration, location, and overlay states not represented here. | Keep as a TourScale-theme target, then add current default, multi-host, and details-step screenshots. |
-| `docs/screenshots/booking-mobile.png` | TourScale booking page stacked layout | Narrow desktop/mobile-like, 500 × 900 | Broadly | It does not prove 390 or 320 behavior. It captures only the upper selection state and cuts off the calendar flow. | Replace with true 390 × 844 and 320 × 568 captures covering selection, details, validation, and confirmation. |
+| `docs/screenshots/conversation-playbook.png` | Conversation playbook editor | Desktop, 1280px | Broadly | The implementation continues to evolve as relationship context is added. | Replace when the workflow materially changes. |
+| `docs/screenshots/poll-results-mobile.png` | Poll results | Mobile, 390px | Broadly | Captures the finalized state and responsive result hierarchy. | Keep as the mobile reference. |
 | `docs/screenshots/organizer-embed.png` | Scheduling tab and embed controls | Desktop, 1440 × 1000 | Partial | Navigation has expanded since the capture. The current event editor contains more settings and more nested panels. | Replace with current Scheduling list and dedicated editor captures after navigation restructuring. |
-
-### TourScale design package visual references
-
-| Files | Screen or asset represented | Viewport | Match to current implementation | Significant differences | Recommended action |
-| --- | --- | --- | --- | --- | --- |
-| `uploads/pasted-1781809328669-0.png` through `pasted-1781809409136-0.png` | Canva palette screenshots for Paddle Pub, Trolley Pub, Tiki Pub, and Cruisin' Tikis | Desktop references around 1040px | Not a product UI target | These document palette extraction, not scheduling interactions. They use Canva chrome and should never be treated as component references. | Reclassify under brand-source references with descriptive names. |
-| `uploads/pasted-1781809477852-0.png` and `pasted-1781809548491-0.png` | Tiki Pub palette swatches | Small desktop reference, 498 × 147 | Not applicable | Duplicate palette evidence, not interface direction. | Deduplicate and replace with a single token specification. |
-| `assets/logos/*` and `uploads/Tour Scale Logos_*` | TourScale identity assets | Asset references | Implemented selectively | Many duplicates and format variants make the source of truth unclear. | Keep one canonical SVG and documented raster exports. |
-| `assets/brands/*.jpg` and `*.png` | TourScale portfolio brands and photography | Marketing references | Not applicable to Calpaca core UI | Useful for TourScale's custom theme only. They conflict with Calpaca's general brand if reused globally. | Scope them to the non-shipping TourScale theme and its documentation. |
-| `assets/brands/hero.jpg` | TourScale brand hero image | Marketing reference | Not used in core product | It is not evidence for scheduling UI. | Retain only if used in TourScale-specific materials. |
-| `scraps/core-check.png` | Internal visual check | Reference | Not a maintained product target | “Scrap” naming provides no provenance or status. | Remove if obsolete or document what it verifies. |
-| `decks/cruisin-tikis-onboarding/assets/*` | Deck photography and logos | Presentation references | Not applicable | These belong to a presentation workflow, not application UI. | Exclude from UI source-of-truth documentation. |
-
-The `design/TourScale Design System.zip` also contains HTML component examples and tokens. It is a TourScale account reference, not a Calpaca design-system specification. Its generic FeatureCard, StatCard, Badge, IconChip, and Button examples should not drive the product's structure.
 
 ### Contradictions
 
 - The old landing screenshot promotes a minimal homepage, while the live site is a full marketing experience.
-- The booking screenshots show TourScale as if it were the product identity, while Calpaca is now the hosted public product and TourScale is a custom account theme.
 - The organizer screenshot suggests one simpler scheduling workflow, while the implementation has accumulated substantially more inline controls without a new information architecture.
-- The design zip mixes brand references, component demos, presentation assets, uploads, and scraps in one archive. It is not a dependable design source of truth.
 
 ## 6. Vibe-code indicators
 
@@ -628,7 +612,7 @@ The `design/TourScale Design System.zip` also contains HTML component examples a
 4. Replace analytics tiles with defined, comparable reports.
 5. Create mobile-specific list representations for bookings, people, teams, and sessions.
 6. Add authored titles and introductions to routing forms.
-7. Consolidate TourScale brand assets and document their scope.
+7. Keep tenant brand assets outside the public product repository.
 
 ### Optional visual refinements
 
@@ -682,7 +666,7 @@ Keep a restrained display face for marketing only if it remains highly legible. 
 
 ### Color usage
 
-Calpaca green should mark primary actions, selected states, and successful outcomes, not every decorative icon. Amber should mean attention or “if needed,” and red should mean destructive or unavailable. Neutral structure should do most of the work. TourScale colors remain a tenant theme, not the organizer system.
+Calpaca green should mark primary actions, selected states, and successful outcomes, not every decorative icon. Amber should mean attention or “if needed,” and red should mean destructive or unavailable. Neutral structure should do most of the work. Tenant colors should not alter the organizer system.
 
 ### Component density
 
@@ -748,7 +732,7 @@ The alpaca can communicate friendliness through the mark, loading walk, plain la
 | P2 | Create mobile collection patterns | Bookings, People, Teams, Sign-up sheets, Offers | Provide consistent compact rows/cards with primary metadata and disclosure, not desktop tables. | Design specification | Medium | All collections are usable without horizontal panning at 320px. |
 | P2 | Turn Home into a work queue | HomeTab and summary APIs | Replace greeting and generic metrics with today, setup problems, polls ready to finalize, and recent outcomes. | Aggregated dashboard data | Medium | Every displayed module either requires action or answers a current operational question. |
 | P2 | Contextualize the troubleshooter | Troubleshooter, Event types, Calendars, booking errors | Link into a prefilled diagnostic from relevant failure points and translate codes into cause and fix. | Query-param or route-state contract | Low | A user can launch a diagnosis from an unavailable time and reach a specific corrective action. |
-| P3 | Consolidate visual references | `docs/screenshots`, `design/TourScale Design System.zip`, `web/public` | Replace historical captures, add provenance, remove duplicate brand exports, and separate TourScale tenant references from Calpaca UI specifications. | Finalized route redesign | Low | Every screenshot has viewport, date, route, state, and status. One canonical asset exists per logo variant. |
+| P3 | Consolidate visual references | `docs/screenshots`, `web/public` | Replace historical captures, add provenance, remove duplicate brand exports, and separate tenant references from Calpaca UI specifications. | Finalized route redesign | Low | Every screenshot has viewport, date, route, state, and status. One canonical asset exists per logo variant. |
 | P3 | Add visual and accessibility regression coverage | Test configuration, screenshot fixtures | Capture 1440, 1280, 768, 390, and 320 for major routes and states. Add keyboard and automated accessibility checks. | Stable seeded UI states | Medium | CI produces true CSS-width captures and blocks regressions in overflow, focus, labels, and contrast. |
 
 ## Final judgment

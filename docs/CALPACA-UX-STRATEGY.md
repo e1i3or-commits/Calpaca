@@ -1361,7 +1361,7 @@ Do this only after the preceding interaction architecture is stable.
 | 2 | Reduce nested containers, borders, and excessive radii | Medium | Screens become easier to scan. |
 | 3 | Reserve Calpaca green for action, selection, and healthy state | Medium | Color gains operational meaning. |
 | 4 | Remove decorative sparkles, generic icon chips, and fake controls | Medium | Brand feels specific rather than generated. |
-| 5 | Separate Calpaca product design from tenant themes such as TourScale | Medium | Custom branding no longer distorts the core application. |
+| 5 | Separate Calpaca product design from tenant-specific themes | Medium | Custom branding no longer distorts the core application. |
 | 6 | Refresh screenshots and marketing proof after product workflows stabilize | Medium | Marketing represents the actual product. |
 
 ---

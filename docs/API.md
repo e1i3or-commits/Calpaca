@@ -1,11 +1,10 @@
 # API reference
 
 Calpaca publishes its OpenAPI 3.1 document at `/openapi.json` and serves a
-searchable, dependency-free reference at `/api-docs`. On the TourScale
-installation:
+searchable, dependency-free reference at `/api-docs`. On Calpaca Cloud:
 
-- [Searchable API reference](https://cal.tourscale.com/api-docs)
-- [OpenAPI JSON](https://cal.tourscale.com/openapi.json)
+- [Searchable API reference](https://app.calpaca.io/api-docs)
+- [OpenAPI JSON](https://app.calpaca.io/openapi.json)
 
 The checked-in [`openapi.json`](openapi.json) is suitable for client
 generation and offline tooling. Organizer endpoints accept the browser session

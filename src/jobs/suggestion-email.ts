@@ -13,9 +13,7 @@ export async function sendSuggestionEmail(suggestionId: string): Promise<void> {
   }));
   const base = process.env.PUBLIC_URL?.replace(/\/$/, "");
   const configuredLogo = ctx.eventType.logoUrl;
-  const logoPath =
-    configuredLogo ??
-    (ctx.eventType.theme === "tourscale" ? "/brand/tourscale-logo-color.svg" : null);
+  const logoPath = configuredLogo;
   const brandLogoUrl =
     logoPath?.startsWith("http://") || logoPath?.startsWith("https://")
       ? logoPath

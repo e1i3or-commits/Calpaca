@@ -8,7 +8,7 @@ import { eventTypeHosts, eventTypes, schedules, users } from "../src/db/schema";
 const SLUG = "intro-call";
 const db = getDb();
 
-const email = process.env.SEED_EMAIL ?? "kai@tourscale.com";
+const email = process.env.SEED_EMAIL ?? "host@example.com";
 const [user] = await db.select().from(users).where(eq(users.email, email));
 if (!user) {
   console.error(`no user with email ${email} — sign in first (SEED_EMAIL overrides)`);

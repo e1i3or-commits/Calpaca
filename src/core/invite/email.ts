@@ -48,7 +48,6 @@ const EMAIL_THEMES: Record<string, EmailTheme> = {
   solstice: { background: "#fff1e8", card: "#fffaf7", text: "#3b241d", muted: "#805f54", primary: "#d85a36", panel: "#ffe8d9", border: "#efc8b5", radius: "16px" },
   cobalt: { background: "#edf4ff", card: "#fbfdff", text: "#13213d", muted: "#526686", primary: "#2867d8", panel: "#e5efff", border: "#c3d6f4", radius: "12px" },
   paper: { background: "#eeeae2", card: "#fffdf7", text: "#292722", muted: "#6f6a60", primary: "#555046", panel: "#f5f1e8", border: "#d3ccbf", radius: "2px" },
-  tourscale: { background: "#eef3f8", card: "#ffffff", text: "#1a1a2e", muted: "#5b6880", primary: "#f86e4f", panel: "#f1f6fa", border: "#1a1a2e", radius: "14px" },
 };
 
 export function getEmailTheme(theme: string | undefined): EmailTheme {
@@ -143,7 +142,7 @@ function composeHtml(
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${palette.background}">
       <tr>
         <td align="center" style="padding:32px 16px">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:${palette.card};border:${input.theme === "tourscale" ? "2px" : "1px"} solid ${palette.border};border-radius:${palette.radius}">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:${palette.card};border:1px solid ${palette.border};border-radius:${palette.radius}">
             <tr>
               <td style="padding:32px">
                 ${logo}<div style="margin:0 0 8px;font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:${palette.primary}">${title}</div>

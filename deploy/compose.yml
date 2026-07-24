@@ -1,6 +1,6 @@
 # Production stack on the Hetzner box. Postgres is the only infrastructure
 # dependency (hard budget rule); NPM reaches the app by container name over
-# the shared tourscale-net, so no host ports are published.
+# a shared external proxy network, so no host ports are published.
 #
 # Run from /opt/scheduler:
 #   docker compose -f deploy/compose.yml --env-file .env up -d --build
@@ -27,7 +27,7 @@ services:
         condition: service_healthy
     networks:
       - default
-      - tourscale-net
+      - proxy-net
 
   db:
     image: postgres:16
@@ -49,5 +49,6 @@ volumes:
   scheduler-db-data:
 
 networks:
-  tourscale-net:
+  proxy-net:
     external: true
+    name: ${SCHEDULER_PROXY_NETWORK:-scheduler-proxy}

@@ -11,7 +11,7 @@ export const themeOptions = [
   { value: "cobalt", label: "Cobalt" },
   { value: "paper", label: "Paper" },
 ] as const;
-const allThemeNames = [...themeOptions.map((theme) => theme.value), "tourscale"];
+const allThemeNames: readonly string[] = themeOptions.map((theme) => theme.value);
 
 /** Applies a bundled theme by setting [data-theme] on <html>; the token
  * blocks in themes.css do the rest. Unknown names fall back to default. */

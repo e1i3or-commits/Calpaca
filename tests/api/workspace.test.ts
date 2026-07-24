@@ -23,7 +23,7 @@ function deps(overrides: Partial<WorkspaceDeps> = {}): WorkspaceDeps {
     },
     getContext: async () => ({
       id: WORKSPACE_ID,
-      name: "TourScale",
+      name: "Example Agency",
       slug: "default",
       plan: "self_hosted",
       role: "owner",
@@ -83,7 +83,7 @@ describe("workspace routes", () => {
       workspace: { name: string; entitlements: { customDomains: boolean } };
       deploymentMode: string;
     };
-    expect(body.workspace.name).toBe("TourScale");
+    expect(body.workspace.name).toBe("Example Agency");
     expect(body.workspace.entitlements.customDomains).toBe(true);
     expect(body.deploymentMode).toBe("self_hosted");
   });
@@ -94,17 +94,17 @@ describe("workspace routes", () => {
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ hostname: "cal.tourscale.com" }),
+        body: JSON.stringify({ hostname: "calendar.client.example" }),
       },
     );
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({
       domain: {
-        hostname: "cal.tourscale.com",
+        hostname: "calendar.client.example",
         status: "pending",
         dnsRecord: {
           type: "TXT",
-          name: "_calpaca.cal.tourscale.com",
+          name: "_calpaca.calendar.client.example",
           value: "verify",
         },
       },

@@ -53,7 +53,7 @@ function buildLinks(bookingId: string, rescheduleToken: string, cancelToken: str
 function emailLogoUrl(ctx: InviteContext): string | null {
   const configured = ctx.eventTypeLogoUrl;
   if (configured?.startsWith("https://") || configured?.startsWith("http://")) return configured;
-  const path = configured ?? (ctx.eventTypeTheme === "tourscale" ? "/brand/tourscale-logo-color.svg" : null);
+  const path = configured;
   const base = process.env.PUBLIC_URL?.replace(/\/$/, "");
   return path && base ? `${base}${path.startsWith("/") ? "" : "/"}${path}` : null;
 }

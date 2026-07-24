@@ -38,22 +38,22 @@ describe("presentation options", () => {
     const response = await createAdminRoutes(adminDeps("host@example.com"))
       .request("/api/me/theme-options");
     const body = await response.json() as {
-      themes: { value: string }[];
+      themes: { value: string; label: string }[];
+      publicThemes: string[];
       layouts: { value: string }[];
     };
     expect(response.status).toBe(200);
-    expect(body.themes.map((theme) => theme.value)).not.toContain("tourscale");
+    expect(body.themes.map((theme) => theme.value)).toEqual([
+      "default", "midnight", "sand", "juniper", "solstice", "cobalt", "paper",
+    ]);
+    expect(body.themes).toHaveLength(7);
+    expect(body.publicThemes).toEqual(body.themes.map((theme) => theme.value));
+    expect(body.themes[0]).toEqual({ value: "default", label: "Default" });
+    expect(body.themes.at(-1)).toEqual({ value: "paper", label: "Paper" });
     expect(body.layouts.map((layout) => layout.value)).toEqual(["focus", "split", "compact"]);
   });
 
-  test("TourScale accounts receive the private theme", async () => {
-    const response = await createAdminRoutes(adminDeps("host@tourscale.com"))
-      .request("/api/me/theme-options");
-    const body = await response.json() as { themes: { value: string }[] };
-    expect(body.themes.map((theme) => theme.value)).toContain("tourscale");
-  });
-
-  test("ordinary accounts cannot save the private theme directly", async () => {
+  test("rejects a theme outside the public registry", async () => {
     const response = await createAdminRoutes(adminDeps("host@example.com")).request(
       "/api/me/event-types",
       {
@@ -69,14 +69,16 @@ describe("presentation options", () => {
           mode: "solo",
           scheduleId: null,
           teamId: null,
-          theme: "tourscale",
+          theme: "private-client-theme",
           layout: "focus",
           hosts: [{ userId: USER_ID, role: "member", weight: 100 }],
         }),
       },
     );
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "theme_not_available" });
+    expect(response.status).toBe(400);
+    const body = await response.json() as { error: string; issues: unknown[] };
+    expect(body.error).toBe("invalid_body");
+    expect(body.issues.length).toBeGreaterThan(0);
   });
 
   test("public metadata carries a valid stored layout", async () => {
@@ -115,31 +117,4 @@ describe("presentation options", () => {
     });
   });
 
-  test("TourScale metadata supplies its bundled logo when none is configured", async () => {
-    const deps: AvailabilityDeps = {
-      getEventTypeBySlug: async () => ({
-        id: USER_ID,
-        slug: "tour",
-        title: "Tour",
-        theme: "tourscale",
-        mode: "solo",
-        durationMinutes: 30,
-        bufferBeforeMin: 0,
-        bufferAfterMin: 0,
-        minimumNoticeMin: 0,
-        rollingWindowDays: 14,
-        maxPerDay: null,
-        curatedSlotCount: 3,
-        publicSelectableHostIds: [],
-      }),
-      getEventTypeHosts: async () => [],
-      getSchedulesForUsers: async () => [],
-      getBusyForUsers: async () => [],
-      now: () => Temporal.Instant.from("2027-01-01T00:00:00Z"),
-    };
-    const response = await createAvailabilityRoutes(deps).request("/event-types/tour");
-    expect(await response.json()).toMatchObject({
-      logoUrl: "/brand/tourscale-logo-color.svg",
-    });
-  });
 });

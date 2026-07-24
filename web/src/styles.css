@@ -40,6 +40,36 @@ html {
   scroll-behavior: smooth;
 }
 
+.organizer-brand-step {
+  transform-origin: 50% 90%;
+  animation: organizer-brand-step 620ms ease-out both;
+}
+
+@keyframes organizer-brand-step {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  20% {
+    transform: translateY(-2px) rotate(-2deg) skewX(-2deg);
+  }
+  42% {
+    transform: translateY(0) rotate(1deg) skewX(2deg);
+  }
+  64% {
+    transform: translateY(-2px) rotate(2deg) skewX(2deg);
+  }
+  84% {
+    transform: translateY(0) rotate(-1deg) skewX(-1deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .organizer-brand-step {
+    animation: none;
+  }
+}
+
 .marketing-site {
   --radius: 1rem;
   --background: oklch(0.978 0.008 78);
@@ -150,29 +180,6 @@ html {
 [data-theme="paper"] .booking-card {
   border-width: 1px;
   box-shadow: 8px 8px 0 color-mix(in oklab, var(--foreground) 14%, transparent);
-}
-
-[data-theme="tourscale"] .booking-card {
-  border: 2.5px solid #1a1a2e;
-  border-radius: 1.25rem;
-  box-shadow: 5px 5px 0 0 #1a1a2e;
-}
-
-[data-theme="tourscale"] .booking-header {
-  position: relative;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-[data-theme="tourscale"] .booking-header [class*="text-xl"] {
-  font-family: var(--theme-font-heading);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-[data-theme="tourscale"] .booking-content button[class*="bg-primary"] {
-  border: 2.5px solid #1a1a2e;
-  border-radius: 9999px;
-  box-shadow: 3px 3px 0 0 #1a1a2e;
 }
 
 [data-organizer] {

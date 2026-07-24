@@ -283,7 +283,7 @@ export function DashboardPage({
   return (
     <div data-organizer className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <aside className={`fixed inset-y-0 left-0 z-20 hidden flex-col border-r border-border/70 bg-card/90 px-3 py-5 backdrop-blur transition-[width] md:flex ${sidebarCollapsed ? "w-16" : "w-60"}`}>
-        <Brand collapsed={sidebarCollapsed} />
+        <Brand key={tab} collapsed={sidebarCollapsed} />
         <nav className="mt-8 flex min-h-0 flex-1 flex-col overflow-y-auto" aria-label="Organizer">
           <div className="space-y-1">
             {TABS.filter((item) => item.group === "primary").map((item) => (
@@ -605,7 +605,7 @@ function Brand({
 }) {
   return (
     <div className={`flex items-center gap-2.5 ${compact ? "" : "px-2"}`}>
-      <BrandMark className="h-8 w-8" />
+      <BrandMark className="organizer-brand-step h-8 w-8" />
       {!collapsed && <span className="text-[17px] font-semibold tracking-[-0.02em]">Calpaca</span>}
     </div>
   );

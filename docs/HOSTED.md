@@ -19,8 +19,7 @@ upgrade path.
 - `calpaca.io` — product site, documentation, signup, and public booking
   namespace.
 - `app.calpaca.io` — authenticated organizer application.
-- Verified custom domains — workspace-specific booking surfaces. TourScale
-  continues to use `cal.tourscale.com`.
+- Verified custom domains — workspace-specific booking surfaces.
 
 DNS records are changed only after their deployment targets and certificate
 flow exist. Porkbun API access is operational infrastructure, not an

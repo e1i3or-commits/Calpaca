@@ -344,9 +344,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
         : {}),
       theme: resolveTheme(eventType.theme),
       ...(eventType.description ? { description: eventType.description } : {}),
-      ...((eventType.logoUrl || resolveTheme(eventType.theme) === "tourscale")
-        ? { logoUrl: eventType.logoUrl ?? "/brand/tourscale-logo-color.svg" }
-        : {}),
+      ...(eventType.logoUrl ? { logoUrl: eventType.logoUrl } : {}),
       ...(eventType.meetingFormats ? { meetingFormats: eventType.meetingFormats } : {}),
       ...(eventType.bookingQuestions ? { bookingQuestions: eventType.bookingQuestions } : {}),
       ...(eventType.emailVerificationRequired ? { emailVerificationRequired: true } : {}),
