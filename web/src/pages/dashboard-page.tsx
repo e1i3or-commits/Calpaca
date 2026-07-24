@@ -148,6 +148,7 @@ import { ProposalDetail } from "@/components/proposals-panel";
 
 const TABS = [
   { key: "home", label: "Home", icon: Home, group: "primary" },
+  { key: "engagements", label: "Engagements", icon: Users, group: "primary" },
   { key: "event-types", label: "Scheduling", icon: CalendarDays, group: "primary" },
   { key: "bookings", label: "Bookings", icon: CalendarRange, group: "primary" },
   { key: "analytics", label: "Analytics", icon: ChartNoAxesCombined, group: "primary" },
