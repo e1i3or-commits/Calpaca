@@ -19,6 +19,7 @@ import {
   confirmHold as dbConfirmHold,
   confirmReschedule as dbConfirmReschedule,
   countActiveHoldsForEventType as dbCountActiveHoldsForEventType,
+  releaseHolds as dbReleaseHolds,
   type Slot,
   type HoldRecord,
   type Invitee,
@@ -27,6 +28,7 @@ import {
   type ConfirmHoldError,
   type ConfirmedBooking,
   type RoundRobinAssignment,
+  type ConfirmHoldExpectation,
 } from "../../db/holds-repo";
 import {
   getBookingById as dbGetBookingById,
@@ -39,6 +41,7 @@ import {
   forwardingIntervals,
 } from "../../core/availability/overrides";
 import { subtract, type Interval } from "../../core/availability/intervals";
+import { generateSlots } from "../../core/availability/slots";
 import type { AssignmentCandidate, BookingRecord } from "../../core/assignment/round-robin";
 import type { BookingState, BookingStateError } from "../../core/booking/state";
 import {
@@ -102,7 +105,9 @@ export interface BookingDeps {
     meeting?: MeetingDetails,
     bookingAnswers?: BookingAnswers,
     offerPublicId?: string,
+    expectation?: ConfirmHoldExpectation,
   ) => Promise<Result<ConfirmedBooking, ConfirmHoldError>>;
+  readonly releaseHolds?: (holdIds: readonly string[]) => Promise<void>;
   readonly getOneOffOfferByPublicId?: (publicId: string) => Promise<OneOffOffer | null>;
   readonly validateEmailVerification?: (
     eventTypeId: string,
@@ -152,7 +157,7 @@ const defaultDeps: BookingDeps = {
   getCapacityAwareBusyForUsers: (userIds, window, eventTypeId, capacity) =>
     dbGetCapacityAwareBusyForUsers(userIds, window, eventTypeId, capacity),
   createHold: (eventTypeId, hostUserIds, slot, ttl) => dbCreateHold(eventTypeId, hostUserIds, slot, ttl),
-  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting, bookingAnswers, offerPublicId) =>
+  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting, bookingAnswers, offerPublicId, expectation) =>
     dbConfirmHold(
       holdIds,
       invitee,
@@ -162,7 +167,9 @@ const defaultDeps: BookingDeps = {
       meeting,
       bookingAnswers,
       offerPublicId,
+      expectation,
     ),
+  releaseHolds: (holdIds) => dbReleaseHolds(holdIds),
   getOneOffOfferByPublicId: (publicId) => dbGetOneOffOfferByPublicId(publicId),
   validateEmailVerification: (eventTypeId, email, receipt) =>
     validateBookingEmailReceipt(eventTypeId, email, receipt),
@@ -276,6 +283,9 @@ function isSlotFreeForHost(
   bufferBeforeMin: number,
   bufferAfterMin: number,
   minimumNoticeMin: number,
+  rollingWindowDays: number,
+  maxPerDay: number | undefined,
+  allowNonCanonical: boolean,
   now: Temporal.Instant,
 ): boolean {
   const noticeThreshold = now.add({ minutes: minimumNoticeMin });
@@ -292,8 +302,23 @@ function isSlotFreeForHost(
   );
   const free = subtract(open, busy);
 
-  return free.some(
-    (f) => Temporal.Instant.compare(f.start, paddedStart) <= 0 && Temporal.Instant.compare(paddedEnd, f.end) <= 0,
+  if (allowNonCanonical) {
+    return free.some((interval) =>
+      Temporal.Instant.compare(interval.start, paddedStart) <= 0
+      && Temporal.Instant.compare(paddedEnd, interval.end) <= 0
+    );
+  }
+  return generateSlots(free, {
+    durationMinutes: slot.start.until(slot.end).total({ unit: "minutes" }),
+    bufferBeforeMin,
+    bufferAfterMin,
+    minimumNoticeMin,
+    rollingWindowDays,
+    maxPerDay,
+    timezone: schedule.timezone,
+  }, now).some((candidate) =>
+    Temporal.Instant.compare(candidate.start, slot.start) === 0
+    && Temporal.Instant.compare(candidate.end, slot.end) === 0
   );
 }
 
@@ -305,6 +330,9 @@ function resolveFreeHost(
   bufferBeforeMin: number,
   bufferAfterMin: number,
   minimumNoticeMin: number,
+  rollingWindowDays: number,
+  maxPerDay: number | undefined,
+  allowNonCanonical: boolean,
   now: Temporal.Instant,
   visited = new Set<string>(),
 ): string | null {
@@ -318,6 +346,9 @@ function resolveFreeHost(
     bufferBeforeMin,
     bufferAfterMin,
     minimumNoticeMin,
+    rollingWindowDays,
+    maxPerDay,
+    allowNonCanonical,
     now,
   )) {
     return userId;
@@ -348,6 +379,9 @@ function resolveFreeHost(
       bufferBeforeMin,
       bufferAfterMin,
       minimumNoticeMin,
+      rollingWindowDays,
+      maxPerDay,
+      allowNonCanonical,
       now,
       nextVisited,
     );
@@ -522,6 +556,9 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
         eventType.bufferBeforeMin,
         eventType.bufferAfterMin,
         eventType.minimumNoticeMin,
+        eventType.rollingWindowDays ?? 14,
+        eventType.maxPerDay ?? undefined,
+        offerPublicId !== undefined,
         now,
       ),
     );
@@ -608,6 +645,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
           parsed.data.emailVerificationToken,
         ))
     ) {
+      await deps.releaseHolds?.(holdIds);
       return c.json({ error: "email_verification_required" }, 403);
     }
     const locations = eventType.locations?.length
@@ -674,6 +712,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       },
       validatedAnswers.answers,
       parsed.data.offerPublicId,
+      { eventTypeId: eventType.id },
     );
     if (!confirmed.ok) {
       return c.json({ error: confirmed.error.kind }, confirmHoldErrorStatus(confirmed.error.kind));
@@ -768,6 +807,9 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
         eventType.bufferBeforeMin,
         eventType.bufferAfterMin,
         eventType.minimumNoticeMin,
+        eventType.rollingWindowDays ?? 14,
+        eventType.maxPerDay ?? undefined,
+        false,
         now,
       ),
     );

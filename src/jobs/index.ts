@@ -13,6 +13,7 @@ import {
 } from "../db/poll-repo";
 import { expireHolds } from "../db/holds-repo";
 import { reapRateLimits } from "../db/rate-limit-repo";
+import { reapBookingEmailVerifications } from "../db/booking-email-verification-repo";
 import {
   deliverWebhook,
   fanOutBookingWebhooks,
@@ -376,6 +377,7 @@ export async function startJobs(): Promise<void> {
     const now = Temporal.Now.instant();
     const released = await expireHolds(now);
     await reapRateLimits(now.subtract({ seconds: 60 }));
+    await reapBookingEmailVerifications();
     if (released > 0) console.log(`[jobs] hold-expiry: released ${released} hold(s)`);
   });
   await b.schedule(HOLD_EXPIRY_QUEUE, "*/5 * * * *");

@@ -1,4 +1,4 @@
-import { and, count, eq, gt, inArray, lte } from "drizzle-orm";
+import { and, count, eq, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
@@ -61,6 +61,10 @@ export interface ConfirmedBooking {
   readonly hostUserIds: readonly string[];
 }
 
+export interface ConfirmHoldExpectation {
+  readonly eventTypeId: string;
+}
+
 function toDate(instant: Temporal.Instant): Date {
   return new Date(instant.epochMilliseconds);
 }
@@ -87,12 +91,43 @@ export async function createHold(
   const slotEnd = toDate(slot.end);
 
   const inserted = await executor.transaction(async (tx) => {
+      // Event-type locking protects capacity, while stable per-host advisory
+      // locks serialize claims across every event type without a lock table.
+      for (const hostUserId of [...new Set(hostUserIds)].sort()) {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${hostUserId}, 0))`);
+      }
       const [eventType] = await tx.select({
         capacity: eventTypes.capacity,
       }).from(eventTypes)
         .where(eq(eventTypes.id, eventTypeId))
         .for("update");
       if (!eventType) return null;
+      for (const hostUserId of hostUserIds) {
+        const [conflictingHold] = await tx.select({ id: holds.id }).from(holds).where(and(
+          eq(holds.hostUserId, hostUserId),
+          eq(holds.status, "active"),
+          gt(holds.expiresAt, new Date()),
+          sql`${holds.slotStart} < ${slotEnd}`,
+          sql`${holds.slotEnd} > ${slotStart}`,
+          or(
+            ne(holds.eventTypeId, eventTypeId),
+            ne(holds.slotStart, slotStart),
+            ne(holds.slotEnd, slotEnd),
+          ),
+        )).limit(1);
+        const [conflictingBooking] = await tx.select({ id: bookings.id }).from(bookings).where(and(
+          sql`${bookings.hostUserIds} ? ${hostUserId}`,
+          eq(bookings.status, "confirmed"),
+          sql`${bookings.startsAt} < ${slotEnd}`,
+          sql`${bookings.endsAt} > ${slotStart}`,
+          or(
+            ne(bookings.eventTypeId, eventTypeId),
+            ne(bookings.startsAt, slotStart),
+            ne(bookings.endsAt, slotEnd),
+          ),
+        )).limit(1);
+        if (conflictingHold || conflictingBooking) return null;
+      }
       const [activeHolds, confirmedBookings] = await Promise.all([
         tx.select({ count: count() }).from(holds).where(and(
           eq(holds.eventTypeId, eventTypeId),
@@ -143,6 +178,16 @@ export async function countActiveHoldsForEventType(
   return row?.count ?? 0;
 }
 
+export async function releaseHolds(
+  holdIds: readonly string[],
+  executor: Db = getDb(),
+): Promise<void> {
+  if (holdIds.length === 0) return;
+  await executor.update(holds)
+    .set({ status: "released" })
+    .where(and(inArray(holds.id, [...holdIds]), eq(holds.status, "active")));
+}
+
 /**
  * Round-robin assignment input for confirmHold (task 14): `candidates` is the
  * pool's weights (event_type_hosts), `history` is past bookings for load
@@ -176,6 +221,7 @@ export async function confirmHold(
   meeting?: MeetingDetails,
   bookingAnswers?: BookingAnswers,
   offerPublicId?: string,
+  expectation?: ConfirmHoldExpectation,
 ): Promise<Result<ConfirmedBooking, ConfirmHoldError>> {
   return executor.transaction(async (tx) => {
     const rows = await tx
@@ -199,6 +245,17 @@ export async function confirmHold(
 
     const [first] = rows;
     if (!first) return err({ kind: "not_found" });
+    if (
+      (expectation && first.eventTypeId !== expectation.eventTypeId)
+      || rows.some((row) =>
+        row.eventTypeId !== first.eventTypeId
+        || row.slotStart.getTime() !== first.slotStart.getTime()
+        || row.slotEnd.getTime() !== first.slotEnd.getTime()
+      )
+      || new Set(rows.map((row) => row.hostUserId)).size !== rows.length
+    ) {
+      return err({ kind: "not_found" });
+    }
 
     const startsAt = toInstant(first.slotStart);
     const endsAt = toInstant(first.slotEnd);
@@ -343,6 +400,22 @@ export async function confirmReschedule(
 
     const [first] = rows;
     if (!first) return err({ kind: "not_found" });
+    if (
+      rows.some((row) =>
+        row.eventTypeId !== first.eventTypeId
+        || row.slotStart.getTime() !== first.slotStart.getTime()
+        || row.slotEnd.getTime() !== first.slotEnd.getTime()
+      )
+      || new Set(rows.map((row) => row.hostUserId)).size !== rows.length
+    ) {
+      return err({ kind: "not_found" });
+    }
+    const [booking] = await tx.select({ eventTypeId: bookings.eventTypeId })
+      .from(bookings)
+      .where(eq(bookings.id, bookingId));
+    if (!booking || booking.eventTypeId !== first.eventTypeId) {
+      return err({ kind: "not_found" });
+    }
 
     const startsAt = toInstant(first.slotStart);
     const endsAt = toInstant(first.slotEnd);

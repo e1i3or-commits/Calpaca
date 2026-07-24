@@ -1,5 +1,5 @@
 import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
-import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
 import * as schema from "./schema";
@@ -104,9 +104,13 @@ export async function validateBookingEmailReceipt(
 export async function reapBookingEmailVerifications(
   executor: Db = getDb(),
 ): Promise<number> {
-  const rows = await executor.delete(bookingEmailVerifications).where(and(
-    lt(bookingEmailVerifications.expiresAt, new Date(Date.now() - 30 * 24 * 60 * 60_000)),
-    isNull(bookingEmailVerifications.receiptExpiresAt),
+  const now = new Date();
+  const rows = await executor.delete(bookingEmailVerifications).where(or(
+    and(
+      lt(bookingEmailVerifications.expiresAt, new Date(now.getTime() - 30 * 24 * 60 * 60_000)),
+      isNull(bookingEmailVerifications.receiptExpiresAt),
+    ),
+    lt(bookingEmailVerifications.receiptExpiresAt, now),
   )).returning({ id: bookingEmailVerifications.id });
   return rows.length;
 }

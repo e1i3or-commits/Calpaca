@@ -5,6 +5,18 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-07-23
+
+### Fixed
+
+- Serialized overlapping host claims across event types and bound hold
+  confirmation to the requested event type, time, and host set.
+- Enforced published slot policies at hold time while retaining explicit
+  one-off offer exceptions.
+- Tightened shared event-type and one-off offer management permissions.
+- Released unusable verification holds, reaped expired verification records,
+  and added missing one-off offer and availability-diagnostic API docs.
+
 ## [0.18.0] - 2026-07-23
 
 ### Added

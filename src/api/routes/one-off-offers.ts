@@ -8,7 +8,7 @@ import {
   listOneOffOffers,
   revokeOneOffOffer,
 } from "../../db/one-off-offer-repo";
-import { getEventTypeForAdmin } from "../../db/admin-repo";
+import { getEventTypeForAdmin, isAppAdmin } from "../../db/admin-repo";
 import { isAllowedDuration } from "../../core/booking/durations";
 
 const bodySchema = z.object({
@@ -23,9 +23,9 @@ const bodySchema = z.object({
   expiresAt: z.string().datetime({ offset: true }),
 });
 
-export const oneOffOfferRoutes = new Hono<AuthEnv>();
+const routes = new Hono<AuthEnv>();
 
-oneOffOfferRoutes.get("/offers/:publicId", async (c) => {
+routes.get("/offers/:publicId", async (c) => {
   const offer = await getOneOffOfferByPublicId(c.req.param("publicId"));
   return offer
     ? c.json({
@@ -43,17 +43,19 @@ oneOffOfferRoutes.get("/offers/:publicId", async (c) => {
     : c.json({ error: "offer_not_found" }, 404);
 });
 
-oneOffOfferRoutes.use("/api/me/one-off-offers", requireSession);
-oneOffOfferRoutes.use("/api/me/one-off-offers/*", requireSession);
+routes.use("/api/me/one-off-offers", requireSession);
+routes.use("/api/me/one-off-offers/*", requireSession);
 
-oneOffOfferRoutes.get("/api/me/one-off-offers", async (c) => {
-  const workspaceId = c.get("user").workspaceId;
+routes.get("/api/me/one-off-offers", async (c) => {
+  const user = c.get("user");
+  const workspaceId = user.workspaceId;
+  const admin = workspaceId ? await isAppAdmin(user.id, undefined, workspaceId) : false;
   return c.json({
-    offers: workspaceId ? await listOneOffOffers(workspaceId) : [],
+    offers: workspaceId ? await listOneOffOffers(workspaceId, admin ? undefined : user.id) : [],
   });
 });
 
-oneOffOfferRoutes.post("/api/me/one-off-offers", async (c) => {
+routes.post("/api/me/one-off-offers", async (c) => {
   const parsed = bodySchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
   const user = c.get("user");
@@ -94,10 +96,14 @@ oneOffOfferRoutes.post("/api/me/one-off-offers", async (c) => {
     : c.json({ error: "event_type_not_found" }, 404);
 });
 
-oneOffOfferRoutes.delete("/api/me/one-off-offers/:id", async (c) => {
+routes.delete("/api/me/one-off-offers/:id", async (c) => {
   const workspaceId = c.get("user").workspaceId;
+  const userId = c.get("user").id;
   if (!workspaceId) return c.json({ error: "workspace_not_found" }, 404);
-  return (await revokeOneOffOffer(workspaceId, c.req.param("id")))
+  const admin = await isAppAdmin(userId, undefined, workspaceId);
+  return (await revokeOneOffOffer(workspaceId, c.req.param("id"), admin ? undefined : userId))
     ? c.json({ ok: true })
     : c.json({ error: "offer_not_found" }, 404);
 });
+
+export const oneOffOfferRoutes = routes;

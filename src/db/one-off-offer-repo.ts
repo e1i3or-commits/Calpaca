@@ -34,6 +34,7 @@ function effectiveStatus(row: { status: string; expiresAt: Date }, now = new Dat
 
 export async function listOneOffOffers(
   workspaceId: string,
+  ownerUserId?: string,
   executor: Db = getDb(),
 ): Promise<OneOffOffer[]> {
   const rows = await executor.select({
@@ -44,7 +45,10 @@ export async function listOneOffOffers(
   }).from(oneOffOffers)
     .innerJoin(eventTypes, eq(eventTypes.id, oneOffOffers.eventTypeId))
     .innerJoin(workspaces, eq(workspaces.id, oneOffOffers.workspaceId))
-    .where(eq(oneOffOffers.workspaceId, workspaceId))
+    .where(and(
+      eq(oneOffOffers.workspaceId, workspaceId),
+      ...(ownerUserId ? [eq(oneOffOffers.ownerUserId, ownerUserId)] : []),
+    ))
     .orderBy(desc(oneOffOffers.createdAt));
   return rows.map(({ offer, eventTypeSlug, eventTypeTitle, workspaceSlug }) => ({
     ...offer,
@@ -93,6 +97,7 @@ export async function createOneOffOffer(
 export async function revokeOneOffOffer(
   workspaceId: string,
   id: string,
+  ownerUserId?: string,
   executor: Db = getDb(),
 ): Promise<boolean> {
   return (await executor.update(oneOffOffers)
@@ -100,6 +105,7 @@ export async function revokeOneOffOffer(
     .where(and(
       eq(oneOffOffers.id, id),
       eq(oneOffOffers.workspaceId, workspaceId),
+      ...(ownerUserId ? [eq(oneOffOffers.ownerUserId, ownerUserId)] : []),
       eq(oneOffOffers.status, "active"),
     ))
     .returning({ id: oneOffOffers.id })).length > 0;

@@ -430,7 +430,7 @@ export async function listEventTypesForUser(
   return rows.map((r) => toAdminEventType(r, hosts.get(r.id) ?? []));
 }
 
-/** Load one event type the user may manage (owner or member of its team). */
+/** Load one event type the user may manage (owner, team admin, or workspace admin). */
 export async function getEventTypeForAdmin(
   id: string,
   userId: string,
@@ -444,7 +444,9 @@ export async function getEventTypeForAdmin(
   );
   if (!row) return null;
   const allowed =
-    row.ownerUserId === userId || (row.teamId !== null && (await isTeamMember(row.teamId, userId, executor)));
+    row.ownerUserId === userId
+    || await isAppAdmin(userId, executor, row.workspaceId)
+    || (row.teamId !== null && (await isTeamAdmin(row.teamId, userId, executor)));
   if (!allowed) return null;
   const hosts = await hostsFor(executor, [row.id]);
   return toAdminEventType(row, hosts.get(row.id) ?? []);

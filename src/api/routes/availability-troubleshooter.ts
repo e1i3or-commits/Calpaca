@@ -17,10 +17,10 @@ const bodySchema = z.object({
   durationMinutes: z.number().int().min(5).max(480),
 });
 
-export const availabilityTroubleshooterRoutes = new Hono<AuthEnv>();
-availabilityTroubleshooterRoutes.use("/api/me/availability-troubleshooter", requireSession);
+const routes = new Hono<AuthEnv>();
+routes.use("/api/me/availability-troubleshooter", requireSession);
 
-availabilityTroubleshooterRoutes.post("/api/me/availability-troubleshooter", async (c) => {
+routes.post("/api/me/availability-troubleshooter", async (c) => {
   const parsed = bodySchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
   const user = c.get("user");
@@ -112,3 +112,5 @@ availabilityTroubleshooterRoutes.post("/api/me/availability-troubleshooter", asy
     hosts,
   });
 });
+
+export const availabilityTroubleshooterRoutes = routes;

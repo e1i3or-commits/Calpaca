@@ -141,6 +141,8 @@ export interface BookingEventTypeConfig {
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
   readonly minimumNoticeMin: number;
+  readonly rollingWindowDays?: number;
+  readonly maxPerDay?: number | null;
   readonly mode: AssignmentMode;
   readonly publicSelectableHostIds: readonly string[];
   readonly agentPolicy?: {
@@ -165,6 +167,8 @@ function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingE
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
     minimumNoticeMin: row.minimumNoticeMin,
+    rollingWindowDays: row.rollingWindowDays,
+    maxPerDay: row.maxPerDay,
     mode: row.mode,
     publicSelectableHostIds: row.publicSelectableHostIds,
     agentPolicy: row.agentPolicy,

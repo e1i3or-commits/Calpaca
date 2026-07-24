@@ -97,6 +97,29 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("holds-repo", () => {
     }
   });
 
+  test("overlapping claims across event types cannot double-book a host", async () => {
+    const { pool, db, eventType, host1 } = await setup();
+    try {
+      const [otherEventType] = await db.insert(schema.eventTypes).values({
+        slug: "other-event",
+        title: "Other event",
+        durationMinutes: 30,
+      }).returning();
+      if (!otherEventType) throw new Error("failed to insert event type");
+
+      const first = await createHold(eventType.id, [host1.id], slot, ttl, db);
+      const overlapping = await createHold(otherEventType.id, [host1.id], {
+        start: slot.start.add({ minutes: 15 }),
+        end: slot.end.add({ minutes: 15 }),
+      }, ttl, db);
+
+      expect(first.ok).toBe(true);
+      expect(overlapping).toEqual({ ok: false, error: { kind: "slot_taken" } });
+    } finally {
+      await pool.end();
+    }
+  });
+
   test("confirm after expiry fails", async () => {
     const { pool, db, eventType, host1 } = await setup();
 
@@ -152,6 +175,36 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("holds-repo", () => {
         db,
       );
       expect(secondConfirm).toEqual({ ok: false, error: { kind: "not_active" } });
+    } finally {
+      await pool.end();
+    }
+  });
+
+  test("confirmHold rejects a hold scoped to another event type", async () => {
+    const { pool, db, eventType, host1 } = await setup();
+    try {
+      const [otherEventType] = await db.insert(schema.eventTypes).values({
+        slug: "other-event",
+        title: "Other event",
+        durationMinutes: 30,
+      }).returning();
+      if (!otherEventType) throw new Error("failed to insert event type");
+      const created = await createHold(eventType.id, [host1.id], slot, ttl, db);
+      if (!created.ok) throw new Error("failed to create hold");
+
+      const confirmed = await confirmHold(
+        created.value.map((hold) => hold.id),
+        invitee,
+        db,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { eventTypeId: otherEventType.id },
+      );
+      expect(confirmed).toEqual({ ok: false, error: { kind: "not_found" } });
+      expect(await db.select().from(schema.bookings)).toHaveLength(0);
     } finally {
       await pool.end();
     }
