@@ -1,17 +1,18 @@
 # Calpaca
 
-Calpaca is a lightweight, open-source scheduling platform for people and
-agents. It combines a polished booking page with group scheduling, scored
-availability, Google Calendar sync, and an MCP server for AI-assisted booking.
+Calpaca is relationship-aware scheduling for agencies. It keeps clients,
+projects, participants, scheduling proposals, and meetings connected so every
+conversation starts with the right context.
 
-[Live demo](https://cal.tourscale.com) ·
+Use [Calpaca Cloud](https://app.calpaca.io/sign-in) for a managed workspace or
+self-host the complete Community Edition under the AGPL.
+
+[Website](https://calpaca.io) ·
 [Architecture](docs/ARCHITECTURE.md) ·
-[MCP setup](docs/MCP.md) ·
+[Product specification](docs/CALPACA-PRODUCT-SPECIFICATION.md) ·
 [API reference](docs/API.md) ·
-[Hosted service](docs/HOSTED.md) ·
-[Embeds](docs/EMBEDS.md) ·
-[Self-hosting](docs/SELF-HOSTING.md) ·
-[Roadmap](docs/FEATURE-PARITY-ROADMAP.md)
+[MCP setup](docs/MCP.md) ·
+[Cloud and self-hosting](docs/HOSTED.md)
 
 ## Releases
 
@@ -19,51 +20,36 @@ Calpaca uses Semantic Versioning. The package version is the source of truth,
 release notes live in [CHANGELOG.md](CHANGELOG.md), and releases are tagged
 `v<version>`. A running installation reports its version at `GET /version`.
 
-## Why Calpaca
+## What makes Calpaca different
 
-- **One small stack:** Bun application + PostgreSQL. No Redis, message broker,
-  or separate worker service.
-- **Correct availability:** DST-safe time handling, buffers, minimum notice,
-  focus blocks, and ranked suggestions.
-- **Teams built in:** round-robin assignment, required and optional group
-  attendees, and quorum fallback when no time works for everyone.
-- **Shared sessions:** capacity event types show remaining seats and enforce
-  the final seat transactionally.
-- **Sign-up sheets:** publish fixed sessions with seat limits, registration
-  questions, and calendar confirmations.
-- **Booking questions:** collect validated text, choice, phone, consent, and
-  hidden prefill data on each event type.
-- **Flexible locations:** offer Google Meet, phone, in-person, or custom-link
-  choices with team-host overrides.
-- **Flexible booking pages:** let invitees choose a meeting duration or browse
-  selected event types from custom themed workspace catalogues.
-- **One-off offers:** share exact times through a private link that expires
-  after its first completed booking.
-- **Adaptable organizer UI:** mobile navigation, persistent dark mode, and a
-  collapsible desktop sidebar.
-- **Date-aware availability:** recurring hours, alternate-date hours, time-off
-  ranges, and teammate forwarding.
-- **Availability diagnostics:** inspect a proposed time and identify its
-  privacy-safe scheduling blocker for every configured host.
-- **Booking abuse controls:** optionally require invitees to verify their
-  email before confirmation, with expiring codes and scoped browser trust.
-- **Agent-ready:** a stdio MCP server exposes availability, holds, booking,
-  rescheduling, and cancellation through the same public API as the web app.
-- **Reliable calendar sync:** Google Calendar busy-cache reads, watch-channel
-  renewal, native calendar writes, and email fallback when Google is
-  unavailable.
-- **Auditable bookings:** an append-only event log is the source of truth;
-  the bookings table is a projection.
+- **Engagements hold the relationship:** keep the client, project, assigned
+  team, conversation playbooks, proposals, and meeting history together.
+- **Conversations are reusable:** define purpose, participants, preparation,
+  location, availability rules, and intended outcome once, then use that
+  playbook throughout the engagement.
+- **Proposals explain the options:** present a short list of workable times
+  with reasons, evidence freshness, and a path to request an alternative.
+- **Meetings retain context:** confirmed work remains connected to its
+  engagement, participants, preparation, outcome, and follow-up.
+- **The scheduling engine is complete:** solo, round robin, collective,
+  capacity, polls, routing, one-off offers, sign-up sheets, questions,
+  selectable durations, time off, and availability diagnostics share one
+  calendar-aware foundation.
+- **Automation uses the same rules:** the public API and MCP server support
+  controlled availability, holds, booking, rescheduling, and cancellation.
+- **Operations stay auditable:** Google Calendar sync, email fallback, signed
+  webhooks, expiring holds, and an append-only booking event log protect the
+  scheduling lifecycle.
 
 ## Screenshots
 
 ![Calpaca landing page](docs/screenshots/landing.png)
 
-![TourScale-themed booking page](docs/screenshots/booking.png)
+![Create a reusable conversation playbook](docs/screenshots/conversation-playbook.png)
 
-![Organizer embed configuration](docs/screenshots/organizer-embed.png)
+![Review a confirmed meeting](docs/screenshots/meeting-detail.png)
 
-<img src="docs/screenshots/booking-mobile.png" alt="Booking page on a mobile viewport" width="360">
+<img src="docs/screenshots/poll-results-mobile.png" alt="Calendar-aware meeting poll and live results on mobile" width="390">
 
 ## Stack
 
@@ -157,16 +143,27 @@ Database-backed tests use `TEST_DATABASE_URL` and skip cleanly when it is not
 set. See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes; Calpaca's
 small infrastructure and dependency budget is a deliberate product constraint.
 
+## Deployment options
+
+- **Cloud Basic:** free for one user, with Google Calendar sync, engagements,
+  booking pages, and meeting polls.
+- **Cloud Pro:** $7 per user each month, with team scheduling and managed
+  operations.
+- **Community Edition:** free to self-host under the AGPL with the full source
+  code and community support.
+
+Cloud customers pay for automatic updates, backups, managed email delivery,
+hosted integrations, monitoring, billing, and support. The software itself is
+not paywalled. See [hosted service](docs/HOSTED.md) and
+[self-hosting](docs/SELF-HOSTING.md) for details.
+
 ## Project status
 
-The core scheduling engine, booking UI, Google integration, outbound
-notifications, routing forms, group scheduling, analytics, user management,
-and MCP read/write tools are implemented. Additional scheduling modes and
-integration work remain on the
-[feature-parity roadmap](docs/FEATURE-PARITY-ROADMAP.md).
-
-Calpaca is under active development. Review configuration and security for your
-environment before operating a public instance.
+Calpaca is ready to operate as a hosted or self-hosted scheduling product. The
+relationship layer, scheduling engine, organizer workspace, public booking
+flows, Google integration, notifications, analytics, user management, API, and
+MCP tools are implemented. New development is deliberately paused while the
+shipped product is operated and evaluated.
 
 ## License
 

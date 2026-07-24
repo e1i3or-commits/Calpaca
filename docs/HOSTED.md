@@ -2,9 +2,17 @@
 
 Calpaca supports two distribution modes:
 
-- **Hosted:** paid accounts operated by Calpaca.
-- **Self-hosted:** the complete AGPL application deployed on infrastructure
-  controlled by the operator, without a Calpaca billing dependency.
+- **Calpaca Cloud:** managed accounts operated by Calpaca. Cloud Basic is free
+  for one user. Cloud Pro is $7 per user each month for teams and premium
+  administration.
+- **Community Edition:** the complete AGPL application deployed on
+  infrastructure controlled by the operator, without a Calpaca billing
+  dependency.
+
+Cloud pricing pays for convenience: automatic updates, backups, managed email
+delivery, hosted integrations, monitoring, billing, and support. Calpaca does
+not sell software licenses or restrict the Community Edition to create an
+upgrade path.
 
 ## Domain model
 
@@ -18,16 +26,16 @@ DNS records are changed only after their deployment targets and certificate
 flow exist. Porkbun API access is operational infrastructure, not an
 application runtime dependency.
 
-## Hosted prerequisites
+## Hosted operating requirements
 
-Before public account creation, the application needs:
+The hosted service depends on:
 
-1. Workspace ownership on every tenant-scoped record and tested isolation.
+1. Workspace ownership and tested isolation for tenant-scoped records.
 2. Workspace membership and role checks at the API boundary.
-3. Plan entitlements for limits and paid capabilities.
-4. Subscription lifecycle handling with an auditable provider event log.
+3. Plan entitlements for hosted limits and paid capabilities.
+4. An auditable subscription lifecycle.
 5. Verified custom-domain mapping and automated TLS.
-6. Documented export, deletion, retention, backup, and recovery behavior.
+6. Documented export, deletion, retention, backup, and recovery procedures.
 
 The self-hosted build keeps the same scheduling features and bypasses hosted
 billing through an explicit deployment mode rather than hidden license checks.

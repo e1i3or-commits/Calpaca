@@ -55,25 +55,6 @@ html {
   color-scheme: light;
 }
 
-.marketing-dots {
-  background-image: radial-gradient(color-mix(in oklab, var(--primary) 22%, transparent) 0.8px, transparent 0.8px);
-  background-size: 22px 22px;
-  mask-image: linear-gradient(to bottom, black, transparent 82%);
-}
-
-.marketing-orbit {
-  animation: marketing-drift 18s ease-in-out infinite alternate;
-}
-
-@keyframes marketing-drift {
-  from {
-    transform: rotate(-3deg) scale(0.96);
-  }
-  to {
-    transform: rotate(7deg) scale(1.04);
-  }
-}
-
 .alpaca-walkway {
   position: relative;
   width: 8.5rem;
