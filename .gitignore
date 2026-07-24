@@ -4,3 +4,6 @@ node_modules/
 .env.local
 dist/
 .env
+AGENTS.md
+CLAUDE.md
+docs/HANDOFF.md
