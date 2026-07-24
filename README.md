@@ -45,6 +45,8 @@ release notes live in [CHANGELOG.md](CHANGELOG.md), and releases are tagged
   ranges, and teammate forwarding.
 - **Availability diagnostics:** inspect a proposed time and identify its
   privacy-safe scheduling blocker for every configured host.
+- **Booking abuse controls:** optionally require invitees to verify their
+  email before confirmation, with expiring codes and scoped browser trust.
 - **Agent-ready:** a stdio MCP server exposes availability, holds, booking,
   rescheduling, and cancellation through the same public API as the web app.
 - **Reliable calendar sync:** Google Calendar busy-cache reads, watch-channel

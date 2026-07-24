@@ -56,12 +56,19 @@ const phoneEventType: BookingEventTypeConfig = {
   slug: "phone-30",
   meetingFormats: ["phone"],
 };
+const verifiedEventType: BookingEventTypeConfig = {
+  ...soloEventType,
+  id: "et-verified",
+  slug: "verified-30",
+  emailVerificationRequired: true,
+};
 
 const eventTypesBySlug: Record<string, BookingEventTypeConfig> = {
   "solo-30": soloEventType,
   "group-60": groupEventType,
   "rr-30": roundRobinEventType,
   "phone-30": phoneEventType,
+  "verified-30": verifiedEventType,
 };
 
 const eventTypesById: Record<string, BookingEventTypeConfig> = {
@@ -69,6 +76,7 @@ const eventTypesById: Record<string, BookingEventTypeConfig> = {
   "et-group": groupEventType,
   "et-rr": roundRobinEventType,
   "et-phone": phoneEventType,
+  "et-verified": verifiedEventType,
 };
 
 const hostsByEventType: Record<string, EventTypeHostRecord[]> = {
@@ -82,6 +90,7 @@ const hostsByEventType: Record<string, EventTypeHostRecord[]> = {
     { userId: "host-y", role: "member", weight: 100 },
   ],
   "et-phone": [{ userId: "host-a", role: "member", weight: 100 }],
+  "et-verified": [{ userId: "host-a", role: "member", weight: 100 }],
 };
 
 const workingHours: HostSchedule["rules"] = [{ dow: 1, start: "09:00", end: "17:00" }];
@@ -126,6 +135,7 @@ interface DepsOverrides {
   bookingHistory?: readonly BookingRecord[];
   schedules?: Record<string, HostSchedule>;
   onCreateHold?: (hostUserIds: readonly string[]) => void;
+  validateEmailVerification?: (eventTypeId: string, email: string, receipt: string) => boolean;
 }
 
 function makeDeps(overrides: DepsOverrides = {}): BookingDeps {
@@ -183,6 +193,8 @@ function makeDeps(overrides: DepsOverrides = {}): BookingDeps {
       }),
     getBookingById: async (id) => bookingsById[id] ?? null,
     getBookingHistoryForHosts: async () => overrides.bookingHistory ?? [],
+    validateEmailVerification: async (eventTypeId, email, receipt) =>
+      overrides.validateEmailVerification?.(eventTypeId, email, receipt) ?? false,
     now: () => NOW,
   };
 }
@@ -397,6 +409,27 @@ describe("POST /bookings", () => {
       Temporal.Instant.from("2027-01-04T09:00:00Z").toZonedDateTimeISO("America/New_York").toString(),
     );
     expect(body.emailSuggestion).toBeUndefined();
+  });
+
+  test("requires a receipt scoped to the event type and invitee email", async () => {
+    const bookingsById = { "booking-1": makeBooking({ eventTypeId: "et-verified" }) };
+    const router = createBookingRoutes(makeDeps({
+      bookingsById,
+      validateEmailVerification: (eventTypeId, email, receipt) =>
+        eventTypeId === "et-verified"
+        && email === "invitee@example.com"
+        && receipt === "valid-receipt",
+    }));
+    const body = {
+      eventTypeSlug: "verified-30",
+      holdIds: ["hold-host-a"],
+      invitee: { email: "invitee@example.com", name: "Invitee", timezone: "UTC" },
+    };
+    expect((await post(router, "/bookings", body)).status).toBe(403);
+    expect((await post(router, "/bookings", {
+      ...body,
+      emailVerificationToken: "valid-receipt",
+    })).status).toBe(201);
   });
 
   test("flags a common email domain typo without blocking the booking", async () => {

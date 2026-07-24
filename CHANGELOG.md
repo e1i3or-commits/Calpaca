@@ -5,6 +5,14 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-07-23
+
+### Added
+
+- Optional per-event-type invitee email verification with single-use
+  six-digit codes, generic request responses, resend and attempt controls,
+  and event/email-scoped trusted-browser receipts.
+
 ## [0.17.0] - 2026-07-23
 
 ### Added

@@ -157,7 +157,7 @@ features matter.
 | Multiple selectable durations | Shipped | Buffers, caps, holds, scoring, and rescheduling follow the selected duration |
 | One-off offers and single-use links | Shipped | Curated slots, recipient restriction, revoke/expire/booked state |
 | Availability troubleshooter | Shipped | Per-host policy, schedule, time-off, buffer, and private conflict explanations |
-| Email verification and abuse controls | S–M | Optional OTP for public bookings; retain rate limiting |
+| Email verification and abuse controls | Shipped | Optional OTP, generic responses, resend/attempt limits, scoped browser trust |
 
 P1 exit: a solo professional can reproduce the normal Calendly/Cal.com
 booking-link workflow, including exceptions and one-off scheduling, without

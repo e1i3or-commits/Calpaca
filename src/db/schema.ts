@@ -274,6 +274,7 @@ export const eventTypes = pgTable("event_types", {
     .notNull().default(["google_meet"]),
   bookingQuestions: jsonb("booking_questions").$type<BookingQuestion[]>()
     .notNull().default([]),
+  emailVerificationRequired: boolean("email_verification_required").notNull().default(false),
   locations: jsonb("locations").$type<EventLocation[]>().notNull().default([]),
   // group booking on public links: explicit allowlist, empty = auth-only
   publicSelectableHostIds: jsonb("public_selectable_host_ids")
@@ -366,6 +367,21 @@ export const oneOffOffers = pgTable("one_off_offers", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("one_off_offer_workspace_idx").on(t.workspaceId, t.createdAt),
+]);
+
+export const bookingEmailVerifications = pgTable("booking_email_verifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventTypeId: uuid("event_type_id").notNull().references(() => eventTypes.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  codeHash: text("code_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  receiptHash: text("receipt_hash"),
+  receiptExpiresAt: timestamp("receipt_expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("booking_email_verification_event_email_idx").on(t.eventTypeId, t.email, t.createdAt),
 ]);
 
 export const bookingEvents = pgTable("booking_events", {

@@ -145,6 +145,7 @@ export type EventTypeMeta = {
   logoUrl?: string;
   meetingFormats?: ("phone" | "google_meet")[];
   bookingQuestions?: BookingQuestion[];
+  emailVerificationRequired?: boolean;
   locations?: EventLocation[];
   /** absent only from pre-profile servers */
   profile?: EventTypeProfile;
@@ -544,8 +545,30 @@ export function confirmBooking(args: {
   locationId?: string;
   bookingAnswers?: BookingAnswers;
   offerPublicId?: string;
+  emailVerificationToken?: string;
 }): Promise<BookingConfirmation> {
   return request("/bookings", { method: "POST", body: JSON.stringify(args) });
+}
+
+export function requestBookingEmailVerification(input: {
+  eventTypeSlug: string;
+  workspaceSlug?: string;
+  email: string;
+}): Promise<{ challengeId: string; message: string }> {
+  return request("/booking-email-verifications/request", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function verifyBookingEmail(input: {
+  challengeId: string;
+  code: string;
+}): Promise<{ verificationToken: string }> {
+  return request("/booking-email-verifications/verify", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function suggestTimes(args: {
@@ -827,6 +850,7 @@ export type AdminEventType = {
   logoUrl?: string | null;
   meetingFormats?: ("phone" | "google_meet")[];
   bookingQuestions?: BookingQuestion[];
+  emailVerificationRequired?: boolean;
   locations?: EventLocation[];
   hosts: (EventTypeHost & { name: string; email: string })[];
 };

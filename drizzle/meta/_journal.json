@@ -295,6 +295,13 @@
       "when": 1784844746658,
       "tag": "0041_slim_vulture",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1784854572251,
+      "tag": "0042_cute_nighthawk",
+      "breakpoints": true
     }
   ]
 }

@@ -2080,6 +2080,7 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   meetingFormats: ["google_meet"],
   locations: [{ id: "google-meet", type: "google_meet", label: "Google Meet" }],
   bookingQuestions: [],
+  emailVerificationRequired: false,
   hosts: [],
 };
 
@@ -2291,6 +2292,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                               ? { id: "phone", type: "phone" as const, label: "Phone call", phoneDirection: "organizer_calls_invitee" as const }
                               : { id: "google-meet", type: "google_meet" as const, label: "Google Meet" }),
                           bookingQuestions: et.bookingQuestions ?? [],
+                          emailVerificationRequired: et.emailVerificationRequired ?? false,
                           hosts: et.hosts.map(({ userId, role, weight }) => ({
                             userId,
                             role,
@@ -2840,6 +2842,20 @@ function EventTypeForm({
             })}
           </div>
         </div>
+        <label className="flex items-start gap-3 rounded-xl border border-border p-4 sm:col-span-2">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 accent-primary"
+            checked={form.emailVerificationRequired ?? false}
+            onChange={(event) => set("emailVerificationRequired", event.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium">Verify invitee email before booking</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              Send a six-digit code before confirmation. Verified browsers are trusted for 30 days.
+            </span>
+          </span>
+        </label>
         <div className="flex flex-col gap-3 sm:col-span-2">
           <div>
             <Label>Locations</Label>

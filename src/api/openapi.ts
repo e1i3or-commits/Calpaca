@@ -19,6 +19,8 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/availability", "Booking", "List available and recommended slots"],
   ["post", "/holds", "Booking", "Temporarily hold one or more host slots"],
   ["post", "/bookings", "Booking", "Confirm a held booking"],
+  ["post", "/booking-email-verifications/request", "Booking", "Request an invitee email verification code"],
+  ["post", "/booking-email-verifications/verify", "Booking", "Verify an invitee email code"],
   ["get", "/bookings/{id}/reschedule-context", "Booking", "Get token-authorized reschedule context"],
   ["post", "/bookings/{id}/reschedule", "Booking", "Reschedule a booking"],
   ["post", "/bookings/{id}/cancel", "Booking", "Cancel a booking"],

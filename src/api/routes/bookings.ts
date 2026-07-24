@@ -63,6 +63,7 @@ import {
   getOneOffOfferByPublicId as dbGetOneOffOfferByPublicId,
   type OneOffOffer,
 } from "../../db/one-off-offer-repo";
+import { validateBookingEmailReceipt } from "../../db/booking-email-verification-repo";
 
 /** Same "inject repo functions, not module bindings" convention as
  * src/api/routes/availability.ts (task 13), so tests can stub every
@@ -103,6 +104,11 @@ export interface BookingDeps {
     offerPublicId?: string,
   ) => Promise<Result<ConfirmedBooking, ConfirmHoldError>>;
   readonly getOneOffOfferByPublicId?: (publicId: string) => Promise<OneOffOffer | null>;
+  readonly validateEmailVerification?: (
+    eventTypeId: string,
+    email: string,
+    receipt: string,
+  ) => Promise<boolean>;
   readonly confirmReschedule: (
     bookingId: string,
     holdIds: readonly string[],
@@ -158,6 +164,8 @@ const defaultDeps: BookingDeps = {
       offerPublicId,
     ),
   getOneOffOfferByPublicId: (publicId) => dbGetOneOffOfferByPublicId(publicId),
+  validateEmailVerification: (eventTypeId, email, receipt) =>
+    validateBookingEmailReceipt(eventTypeId, email, receipt),
   confirmReschedule: (bookingId, holdIds) => dbConfirmReschedule(bookingId, holdIds),
   cancelBooking: async (bookingId, reason) => {
     const result = await appendEvent(bookingId, "cancelled", { reason });
@@ -210,6 +218,7 @@ const bookingBodySchema = z.object({
   meetingFormat: z.enum(["phone", "google_meet"]).optional(),
   locationId: z.string().min(1).max(80).optional(),
   offerPublicId: z.string().min(1).optional(),
+  emailVerificationToken: z.string().min(1).optional(),
   inviteePhone: z.string().trim().min(7).max(40).optional(),
   // present when the booking came through a routing form (/routing/evaluate)
   routingAnswers: z
@@ -588,6 +597,18 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
     if (agent && !eventType.agentPolicy?.enabled) {
       return c.json({ error: "agent_not_allowed" }, 403);
+    }
+    if (
+      eventType.emailVerificationRequired
+      && (!parsed.data.emailVerificationToken
+        || !deps.validateEmailVerification
+        || !await deps.validateEmailVerification(
+          eventType.id,
+          invitee.email,
+          parsed.data.emailVerificationToken,
+        ))
+    ) {
+      return c.json({ error: "email_verification_required" }, 403);
     }
     const locations = eventType.locations?.length
       ? eventType.locations

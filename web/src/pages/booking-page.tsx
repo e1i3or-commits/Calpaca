@@ -8,7 +8,9 @@ import {
   startInviteeCalendarConnection,
   getInviteeCalendarStatus,
   disconnectInviteeCalendar,
+  requestBookingEmailVerification,
   suggestTimes,
+  verifyBookingEmail,
   type BookingConfirmation,
   type BookingAnswers,
   type BookingQuestion,
@@ -53,6 +55,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   rate_limited: "Too many suggestions were sent. Please wait a minute and try again.",
   invalid_booking_answers: "Check the booking questions and try again.",
   offer_unavailable: "This offer was already used or is no longer available.",
+  email_verification_required: "Verify your email before booking.",
+  invalid_verification: "That code is invalid or expired.",
 };
 
 export function errorMessage(e: unknown): string {
@@ -407,6 +411,7 @@ export function BookingPage({
                   ? { id: "phone", type: "phone" as const, label: "Phone call", phoneDirection: "organizer_calls_invitee" as const }
                   : { id: "google-meet", type: "google_meet" as const, label: "Google Meet" })}
               bookingQuestions={meta?.bookingQuestions ?? []}
+              emailVerificationRequired={meta?.emailVerificationRequired ?? false}
               offerPublicId={offerPublicId}
               onBack={() => setStep({ name: "pick" })}
               onError={(e) => {
@@ -709,6 +714,7 @@ function DetailsStep({
   meetingFormats,
   locations,
   bookingQuestions,
+  emailVerificationRequired,
   offerPublicId,
   onBack,
   onError,
@@ -724,6 +730,7 @@ function DetailsStep({
   meetingFormats: ("phone" | "google_meet")[];
   locations: EventLocation[];
   bookingQuestions: BookingQuestion[];
+  emailVerificationRequired: boolean;
   offerPublicId?: string;
   onBack: () => void;
   onError: (e: unknown) => void;
@@ -746,8 +753,13 @@ function DetailsStep({
     );
   });
   const [submitting, setSubmitting] = useState(false);
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verificationToken, setVerificationToken] = useState<string | null>(null);
 
-  async function submit() {
+  const receiptKey = `calpaca:verified:${slug}:${email.trim().toLowerCase()}`;
+
+  async function completeBooking(receipt?: string) {
     setSubmitting(true);
     try {
       // hold-then-confirm: the server re-verifies availability inside the
@@ -773,11 +785,49 @@ function DetailsStep({
         ...(selectedLocation?.type === "phone" && phone.trim() ? { inviteePhone: phone.trim() } : {}),
         bookingAnswers,
         offerPublicId,
+        ...(receipt ? { emailVerificationToken: receipt } : {}),
       });
       onConfirmed(confirmation);
     } catch (e) {
+      if (e instanceof ApiError && e.code === "email_verification_required") {
+        localStorage.removeItem(receiptKey);
+        setVerificationToken(null);
+      }
       onError(e);
     } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submit() {
+    if (!emailVerificationRequired) return completeBooking();
+    const receipt = verificationToken ?? localStorage.getItem(receiptKey);
+    if (receipt) return completeBooking(receipt);
+    setSubmitting(true);
+    try {
+      const challenge = await requestBookingEmailVerification({
+        eventTypeSlug: slug,
+        workspaceSlug,
+        email,
+      });
+      setChallengeId(challenge.challengeId);
+    } catch (e) {
+      onError(e);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function verifyCode() {
+    if (!challengeId) return;
+    setSubmitting(true);
+    try {
+      const verified = await verifyBookingEmail({ challengeId, code: verificationCode });
+      localStorage.setItem(receiptKey, verified.verificationToken);
+      setVerificationToken(verified.verificationToken);
+      await completeBooking(verified.verificationToken);
+    } catch (e) {
+      onError(e);
       setSubmitting(false);
     }
   }
@@ -883,13 +933,35 @@ function DetailsStep({
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
-        <Button type="submit" disabled={submitting || !name || !email || !selectedLocation || (
+        {challengeId ? (
+          <div className="grid gap-3 rounded-xl border border-border p-4">
+            <div>
+              <p className="text-sm font-medium">Check your email</p>
+              <p className="text-xs text-muted-foreground">Enter the six-digit code. It expires in 10 minutes.</p>
+            </div>
+            <Input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={verificationCode}
+              onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+            />
+            <Button type="button" disabled={submitting || verificationCode.length !== 6} onClick={() => void verifyCode()}>
+              {submitting ? "Verifying…" : "Verify and book"}
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => {
+              setChallengeId(null);
+              setVerificationCode("");
+            }}>Use another email</Button>
+          </div>
+        ) : <Button type="submit" disabled={submitting || !name || !email || !selectedLocation || (
           selectedLocation.type === "phone"
           && (selectedLocation.phoneDirection ?? "organizer_calls_invitee") === "organizer_calls_invitee"
           && !phone.trim()
         )}>
-          {submitting ? "Booking…" : "Confirm booking"}
-        </Button>
+          {submitting ? (emailVerificationRequired ? "Sending code…" : "Booking…") : "Confirm booking"}
+        </Button>}
       </form>
     </div>
   );

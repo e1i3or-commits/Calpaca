@@ -20,6 +20,7 @@ import { signupSheetRoutes } from "./routes/signup-sheets";
 import { CALPACA_VERSION } from "../version";
 import { oneOffOfferRoutes } from "./routes/one-off-offers";
 import { availabilityTroubleshooterRoutes } from "./routes/availability-troubleshooter";
+import { bookingEmailVerificationRoutes } from "./routes/booking-email-verification";
 
 export const app = new Hono();
 
@@ -65,3 +66,4 @@ app.route("/", pollRoutes);
 app.route("/", signupSheetRoutes);
 app.route("/", oneOffOfferRoutes);
 app.route("/", availabilityTroubleshooterRoutes);
+app.route("/", bookingEmailVerificationRoutes);
