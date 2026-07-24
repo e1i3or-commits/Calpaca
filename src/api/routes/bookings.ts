@@ -66,6 +66,9 @@ import {
   getOneOffOfferByPublicId as dbGetOneOffOfferByPublicId,
   type OneOffOffer,
 } from "../../db/one-off-offer-repo";
+import {
+  getPublicProposal as dbGetPublicProposal,
+} from "../../db/proposal-repo";
 import { validateBookingEmailReceipt } from "../../db/booking-email-verification-repo";
 
 /** Same "inject repo functions, not module bindings" convention as
@@ -106,9 +109,11 @@ export interface BookingDeps {
     bookingAnswers?: BookingAnswers,
     offerPublicId?: string,
     expectation?: ConfirmHoldExpectation,
+    proposalPublicId?: string,
   ) => Promise<Result<ConfirmedBooking, ConfirmHoldError>>;
   readonly releaseHolds?: (holdIds: readonly string[]) => Promise<void>;
   readonly getOneOffOfferByPublicId?: (publicId: string) => Promise<OneOffOffer | null>;
+  readonly getPublicProposal?: typeof dbGetPublicProposal;
   readonly validateEmailVerification?: (
     eventTypeId: string,
     email: string,
@@ -157,7 +162,7 @@ const defaultDeps: BookingDeps = {
   getCapacityAwareBusyForUsers: (userIds, window, eventTypeId, capacity) =>
     dbGetCapacityAwareBusyForUsers(userIds, window, eventTypeId, capacity),
   createHold: (eventTypeId, hostUserIds, slot, ttl) => dbCreateHold(eventTypeId, hostUserIds, slot, ttl),
-  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting, bookingAnswers, offerPublicId, expectation) =>
+  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting, bookingAnswers, offerPublicId, expectation, proposalPublicId) =>
     dbConfirmHold(
       holdIds,
       invitee,
@@ -168,9 +173,11 @@ const defaultDeps: BookingDeps = {
       bookingAnswers,
       offerPublicId,
       expectation,
+      proposalPublicId,
     ),
   releaseHolds: (holdIds) => dbReleaseHolds(holdIds),
   getOneOffOfferByPublicId: (publicId) => dbGetOneOffOfferByPublicId(publicId),
+  getPublicProposal: (publicId) => dbGetPublicProposal(publicId),
   validateEmailVerification: (eventTypeId, email, receipt) =>
     validateBookingEmailReceipt(eventTypeId, email, receipt),
   confirmReschedule: (bookingId, holdIds) => dbConfirmReschedule(bookingId, holdIds),
@@ -204,6 +211,7 @@ const holdBodySchema = z.object({
   hosts: z.array(z.string().min(1)).optional(),
   optionalHosts: z.array(z.string().min(1)).optional(),
   offerPublicId: z.string().min(1).optional(),
+  proposalPublicId: z.string().min(1).optional(),
   agent: z.literal(true).optional(),
 });
 
@@ -225,6 +233,7 @@ const bookingBodySchema = z.object({
   meetingFormat: z.enum(["phone", "google_meet"]).optional(),
   locationId: z.string().min(1).max(80).optional(),
   offerPublicId: z.string().min(1).optional(),
+  proposalPublicId: z.string().min(1).optional(),
   emailVerificationToken: z.string().min(1).optional(),
   inviteePhone: z.string().trim().min(7).max(40).optional(),
   // present when the booking came through a routing form (/routing/evaluate)
@@ -455,6 +464,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       optionalHosts: requestedOptionalHosts,
       agent,
       offerPublicId,
+      proposalPublicId,
     } = parsed.data;
 
     const slot = parseSlot(start, end);
@@ -483,6 +493,23 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
         );
       if (!allowed) return c.json({ error: "offer_unavailable" }, 409);
     }
+    const proposal = proposalPublicId && deps.getPublicProposal
+      ? await deps.getPublicProposal(proposalPublicId)
+      : null;
+    const proposalOption = proposal?.options.find((candidate) =>
+      Temporal.Instant.compare(Temporal.Instant.from(candidate.start), slot.start) === 0
+      && Temporal.Instant.compare(Temporal.Instant.from(candidate.end), slot.end) === 0
+    );
+    if (
+      proposalPublicId
+      && (
+        !proposal
+        || proposal.status !== "awaiting_client"
+        || proposal.expiresAt <= new Date()
+        || proposal.eventTypeId !== eventType.id
+        || !proposalOption
+      )
+    ) return c.json({ error: "proposal_unavailable" }, 409);
 
     const now = deps.now();
     const activeHoldCeiling = positiveIntegerEnv("ACTIVE_HOLDS_PER_EVENT_TYPE", 50);
@@ -505,7 +532,13 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     const allHosts = await deps.getEventTypeHosts(eventType.id);
 
     let targetHostIds: string[];
-    if (eventType.mode === "group") {
+    if (proposalOption) {
+      const configured = new Set(allHosts.map((host) => host.userId));
+      if (!proposalOption.hostUserIds.every((hostId) => configured.has(hostId))) {
+        return c.json({ error: "proposal_unavailable" }, 409);
+      }
+      targetHostIds = [...new Set(proposalOption.hostUserIds)];
+    } else if (eventType.mode === "group") {
       const required = allHosts.filter((h) => h.role === "required").map((h) => h.userId);
       const selected = requestedHosts ?? required;
       const disallowed = requestedHosts
@@ -713,6 +746,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       validatedAnswers.answers,
       parsed.data.offerPublicId,
       { eventTypeId: eventType.id },
+      parsed.data.proposalPublicId,
     );
     if (!confirmed.ok) {
       return c.json({ error: confirmed.error.kind }, confirmHoldErrorStatus(confirmed.error.kind));

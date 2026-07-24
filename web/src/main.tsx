@@ -20,6 +20,7 @@ import { SignupSheetPage } from "@/pages/signup-sheet-page";
 import { PublicBookingPage } from "@/pages/public-booking-page";
 import { OneOffOfferPage } from "@/pages/one-off-offer-page";
 import { MarketingPage } from "@/pages/marketing-page";
+import { ProposalPage } from "@/pages/proposal-page";
 import type { RoutingAnswers } from "@/lib/api";
 import { BrandMark } from "@/components/brand-mark";
 import { initializeAppearance } from "@/lib/appearance";
@@ -283,6 +284,14 @@ const oneOffOfferRoute = createRoute({
   },
 });
 
+const proposalRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/proposal/$publicId",
+  component: function ProposalRoute() {
+    return <ProposalPage publicId={proposalRoute.useParams().publicId} />;
+  },
+});
+
 const signupSheetRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/signup/$publicId",
@@ -387,6 +396,48 @@ const appEditConversationRoute = createRoute({
         initialEngagement={params.engagementId}
         initialEngagementSection="conversations"
         initialPlaybook={params.playbookId}
+      />
+    );
+  },
+});
+
+const appEngagementProposalsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/engagements/$engagementId/proposals",
+  component: function AppEngagementProposalsRoute() {
+    return (
+      <DashboardPage
+        initialView="engagements"
+        initialEngagement={appEngagementProposalsRoute.useParams().engagementId}
+        initialEngagementSection="proposals"
+      />
+    );
+  },
+});
+
+const appNewProposalRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/engagements/$engagementId/proposals/new",
+  component: function AppNewProposalRoute() {
+    return (
+      <DashboardPage
+        initialView="engagements"
+        initialEngagement={appNewProposalRoute.useParams().engagementId}
+        initialEngagementSection="proposals"
+        initialNewProposal
+      />
+    );
+  },
+});
+
+const appProposalDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/proposals/$proposalId",
+  component: function AppProposalDetailRoute() {
+    return (
+      <DashboardPage
+        initialView="engagements"
+        initialProposalId={appProposalDetailRoute.useParams().proposalId}
       />
     );
   },
@@ -549,6 +600,7 @@ const router = createRouter({
     signInRoute,
     pollRoute,
     oneOffOfferRoute,
+    proposalRoute,
     signupSheetRoute,
     signupCancelRoute,
     dashboardRoute,
@@ -560,6 +612,9 @@ const router = createRouter({
     appEngagementConversationsRoute,
     appNewConversationRoute,
     appEditConversationRoute,
+    appEngagementProposalsRoute,
+    appNewProposalRoute,
+    appProposalDetailRoute,
     appMeetingsRoute,
     appMeetingDetailRoute,
     appInsightsRoute,

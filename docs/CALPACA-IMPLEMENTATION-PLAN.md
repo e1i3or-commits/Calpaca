@@ -607,6 +607,18 @@ Complexity estimates assume one experienced engineer familiar with the codebase.
 - **Before screenshot:** direct booking and one-off offer
 - **After screenshot:** proposal detail and public proposal per 3.10 and 3.11
 - **Ticket:** Terminate in existing hold and booking lifecycle.
+- **Status:** Implemented
+- **Evidence:** Generated migrations `0045_magenta_young_avengers.sql`,
+  `0046_early_ser_duncan.sql`, and `0047_medical_karen_page.sql`; pure
+  lifecycle tests; tenant-scoped API and
+  database adapter tests; organizer Proposal list, creation, review, approval,
+  send, copy, and withdrawal routes; opaque public Proposal review,
+  alternative request, expiry, and terminal states; queued email delivery.
+  Acceptance locks the Proposal and chosen option inside the existing
+  hold-confirm transaction, then records the resulting booking atomically.
+  An append-only Proposal activity stream records the decisions shown on the
+  review screen.
+  Existing one-off offers and direct booking remain unchanged.
 
 #### E-05: Preparation, Outcome, and follow-up
 

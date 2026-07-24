@@ -543,6 +543,7 @@ export function createHold(args: {
   hosts?: string[];
   optionalHosts?: string[];
   offerPublicId?: string;
+  proposalPublicId?: string;
 }): Promise<HoldResponse> {
   return request("/holds", { method: "POST", body: JSON.stringify(args) });
 }
@@ -559,6 +560,7 @@ export function confirmBooking(args: {
   locationId?: string;
   bookingAnswers?: BookingAnswers;
   offerPublicId?: string;
+  proposalPublicId?: string;
   emailVerificationToken?: string;
 }): Promise<BookingConfirmation> {
   return request("/bookings", { method: "POST", body: JSON.stringify(args) });
@@ -1056,6 +1058,132 @@ export type PublicOneOffOffer = Omit<
 
 export function getOneOffOffer(publicId: string): Promise<PublicOneOffOffer> {
   return request(`/offers/${encodeURIComponent(publicId)}`);
+}
+
+export type ProposalStatus =
+  | "draft"
+  | "awaiting_internal_confirmation"
+  | "ready"
+  | "awaiting_client"
+  | "accepted"
+  | "expired"
+  | "withdrawn";
+
+export type ProposalOption = {
+  id: string;
+  start: string;
+  end: string;
+  hostUserIds: string[];
+  recommendation: NonNullable<SlotDto["recommendation"]>;
+};
+
+export type Proposal = {
+  id: string;
+  publicId: string;
+  engagementId: string;
+  eventTypeId: string;
+  title: string;
+  message: string | null;
+  recipientName: string;
+  recipientEmail: string;
+  options: ProposalOption[];
+  status: ProposalStatus;
+  expiresAt: string;
+  sentAt: string | null;
+  acceptedOptionId: string | null;
+  alternativeRequest: string | null;
+  bookingId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProposalInput = {
+  eventTypeId: string;
+  title: string;
+  message: string | null;
+  recipientName: string;
+  recipientEmail: string;
+  expiresAt: string;
+  options: ProposalOption[];
+};
+
+export type PublicProposal = {
+  publicId: string;
+  status: ProposalStatus;
+  title: string;
+  message: string | null;
+  recipientName: string;
+  engagementName: string;
+  clientName: string;
+  conversationTitle: string;
+  purpose: string | null;
+  preparationItems: { label: string; required: boolean }[];
+  workspaceName: string;
+  workspaceSlug: string;
+  eventTypeSlug: string;
+  options: ProposalOption[];
+  participants: { id: string; name: string; role: string }[];
+  expiresAt: string;
+  acceptedOptionId: string | null;
+  bookingId: string | null;
+};
+
+export function listEngagementProposals(engagementId: string): Promise<{
+  proposals: Proposal[];
+  canManage: boolean;
+}> {
+  return request(`/api/me/engagements/${engagementId}/proposals`);
+}
+
+export function createProposal(
+  engagementId: string,
+  input: ProposalInput,
+): Promise<{ proposal: Proposal }> {
+  return request(`/api/me/engagements/${engagementId}/proposals`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getProposal(proposalId: string): Promise<{
+  proposal: Proposal;
+  engagement: { id: string; name: string; clientName: string };
+  conversation: {
+    title: string;
+    purpose: string | null;
+    preparationItems: { label: string; required: boolean }[];
+  } | null;
+  activity: {
+    id: string;
+    kind: string;
+    actorType: string;
+    detail: Record<string, unknown>;
+    createdAt: string;
+  }[];
+  canManage: boolean;
+}> {
+  return request(`/api/me/proposals/${proposalId}`);
+}
+
+export function transitionProposal(
+  proposalId: string,
+  action: "ready" | "draft" | "approve" | "send" | "withdraw",
+): Promise<{ proposal: Proposal }> {
+  return request(`/api/me/proposals/${proposalId}/${action}`, { method: "POST" });
+}
+
+export function getPublicProposal(publicId: string): Promise<PublicProposal> {
+  return request(`/api/public/proposals/${encodeURIComponent(publicId)}`);
+}
+
+export function requestProposalAlternative(
+  publicId: string,
+  requestText: string,
+): Promise<{ ok: true }> {
+  return request(`/api/public/proposals/${encodeURIComponent(publicId)}/request-alternative`, {
+    method: "POST",
+    body: JSON.stringify({ request: requestText }),
+  });
 }
 
 export type AvailabilityDiagnostic = {

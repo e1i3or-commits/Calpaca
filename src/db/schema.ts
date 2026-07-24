@@ -4,6 +4,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { BookingAnswers, BookingQuestion } from "../core/booking/questions";
 import type { BookingLocation, EventLocation } from "../core/booking/locations";
+import type { RecommendationProvenance } from "../core/availability/provenance";
 import { sql } from "drizzle-orm";
 
 export const bookingEventKind = pgEnum("booking_event_kind", [
@@ -44,6 +45,10 @@ export const engagementType = pgEnum("engagement_type", [
 ]);
 export const playbookStatus = pgEnum("playbook_status", [
   "draft", "ready", "retired",
+]);
+export const proposalStatus = pgEnum("proposal_status", [
+  "draft", "awaiting_internal_confirmation", "ready", "awaiting_client",
+  "accepted", "expired", "withdrawn",
 ]);
 
 // Doubles as BetterAuth's user model (drizzleAdapter usePlural maps user ->
@@ -442,6 +447,54 @@ export const oneOffOffers = pgTable("one_off_offers", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index("one_off_offer_workspace_idx").on(t.workspaceId, t.createdAt),
+]);
+
+export type ProposalOption = {
+  id: string;
+  start: string;
+  end: string;
+  hostUserIds: string[];
+  recommendation: RecommendationProvenance;
+};
+
+export const proposals = pgTable("proposals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  publicId: text("public_id").notNull().unique(),
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  engagementId: uuid("engagement_id").notNull()
+    .references(() => engagements.id, { onDelete: "cascade" }),
+  eventTypeId: uuid("event_type_id").notNull()
+    .references(() => eventTypes.id, { onDelete: "cascade" }),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
+  title: text("title").notNull(),
+  message: text("message"),
+  recipientName: text("recipient_name").notNull(),
+  recipientEmail: text("recipient_email").notNull(),
+  options: jsonb("options").$type<ProposalOption[]>().notNull(),
+  status: proposalStatus("status").notNull().default("draft"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  acceptedOptionId: text("accepted_option_id"),
+  alternativeRequest: text("alternative_request"),
+  bookingId: uuid("booking_id").references(() => bookings.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("proposal_workspace_idx").on(t.workspaceId, t.createdAt),
+  index("proposal_engagement_idx").on(t.engagementId, t.createdAt),
+]);
+
+export const proposalEvents = pgTable("proposal_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  proposalId: uuid("proposal_id").notNull()
+    .references(() => proposals.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  actorType: text("actor_type").notNull(),
+  detail: jsonb("detail").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("proposal_event_timeline_idx").on(t.proposalId, t.createdAt),
 ]);
 
 export const bookingEmailVerifications = pgTable("booking_email_verifications", {

@@ -26,6 +26,7 @@ import { sendSuggestionEmail } from "./suggestion-email";
 import { sendPollFinalization } from "./poll-finalization-email";
 import { sendPollInviteOrReminder } from "./poll-reminder-email";
 import { sendSignupConfirmation } from "./signup-confirmation-email";
+import { sendProposalEmail } from "./proposal-email";
 import {
   getConnection,
   listConnectionsNeedingChannel,
@@ -65,6 +66,7 @@ const POLL_FINALIZATION_EMAIL_QUEUE = "poll-finalization-email";
 const POLL_INVITE_EMAIL_QUEUE = "poll-invite-email";
 const POLL_REMINDER_SWEEP_QUEUE = "poll-reminder-sweep";
 const SIGNUP_CONFIRMATION_QUEUE = "signup-confirmation-email";
+const PROPOSAL_EMAIL_QUEUE = "proposal-email";
 const WEBHOOK_FANOUT_QUEUE = "webhook-fanout";
 const WEBHOOK_DELIVERY_QUEUE = "webhook-delivery";
 const REMINDER_SWEEP_QUEUE = "reminder-sweep";
@@ -133,6 +135,18 @@ export async function enqueueSuggestionEmail(suggestionId: string): Promise<void
     });
   } catch (e) {
     console.error(`[jobs] enqueue suggestion email for ${suggestionId} failed:`, e);
+  }
+}
+
+export async function enqueueProposalEmail(publicId: string): Promise<void> {
+  try {
+    await getBoss().send(PROPOSAL_EMAIL_QUEUE, { publicId }, {
+      retryLimit: 5,
+      retryDelay: 60,
+      retryBackoff: true,
+    });
+  } catch (error) {
+    console.error(`[jobs] enqueue proposal email for ${publicId} failed:`, error);
   }
 }
 
@@ -270,6 +284,7 @@ export async function startJobs(): Promise<void> {
   await b.createQueue(POLL_FINALIZATION_EMAIL_QUEUE);
   await b.createQueue(POLL_INVITE_EMAIL_QUEUE);
   await b.createQueue(SIGNUP_CONFIRMATION_QUEUE);
+  await b.createQueue(PROPOSAL_EMAIL_QUEUE);
 
   await b.work<{ connectionId: string; forceFull?: boolean }>(SYNC_QUEUE, async ([job]) => {
     if (job) await runSync(job.data.connectionId, job.data.forceFull ?? false);
@@ -297,6 +312,9 @@ export async function startJobs(): Promise<void> {
   );
   await b.work<{ registrationIds: string[] }>(SIGNUP_CONFIRMATION_QUEUE, async ([job]) => {
     if (job) await sendSignupConfirmation(job.data.registrationIds);
+  });
+  await b.work<{ publicId: string }>(PROPOSAL_EMAIL_QUEUE, async ([job]) => {
+    if (job) await sendProposalEmail(job.data.publicId);
   });
 
   await b.createQueue(WEBHOOK_FANOUT_QUEUE);

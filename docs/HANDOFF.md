@@ -88,12 +88,15 @@ Each completed ticket has browser evidence under
 
 No commit, push, or deployment was performed during this migration session.
 
-E-01 through E-03 are now implemented. E-01 adds the Client and Engagement schema,
+E-01 through E-04 are now implemented. E-01 adds the Client and Engagement schema,
 tenant-scoped API, draft-preserving creation flow, list, and overview. E-02
 adds Conversation metadata over event types, readiness enforcement, reusable
 workspace playbooks, and Engagement-scoped Conversation list and editor
 routes. Event types remain the availability and booking source of truth.
 E-03 adds deterministic explanations and calendar-evidence confidence to
 recommended booking times without changing eligibility or ranking. Existing
-links and booking behavior are unchanged. The remaining plan consists of E-04
+links and booking behavior are unchanged. E-04 adds Engagement-scoped
+Proposals with internal confirmation, explained options, queued client
+delivery, public alternative requests, and atomic conversion through the
+existing hold and booking transaction. The remaining plan consists of E-05
 through E-08.

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."proposal_status" ADD VALUE 'awaiting_internal_confirmation' BEFORE 'ready';

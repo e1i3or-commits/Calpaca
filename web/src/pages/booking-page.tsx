@@ -70,6 +70,7 @@ export function BookingPage({
   routingAnswers,
   offeredSlots,
   offerPublicId,
+  proposalPublicId,
   offerTitle,
   offerMessage,
   recipientRestricted = false,
@@ -78,8 +79,13 @@ export function BookingPage({
   workspaceSlug?: string;
   /** present when the invitee arrived via a routing form (/r/<form>) */
   routingAnswers?: RoutingAnswers;
-  offeredSlots?: { start: string; end: string }[];
+  offeredSlots?: {
+    start: string;
+    end: string;
+    recommendation?: SlotDto["recommendation"];
+  }[];
   offerPublicId?: string;
+  proposalPublicId?: string;
   offerTitle?: string;
   offerMessage?: string | null;
   recipientRestricted?: boolean;
@@ -319,7 +325,7 @@ export function BookingPage({
               {offeredSlots ? (
                 <div className="grid gap-2">
                   <p className="text-sm font-medium">Choose one of these offered times</p>
-                  {offeredSlots.map((slot) => (
+                  {offeredSlots.map((slot, index) => (
                     <Button
                       key={slot.start}
                       type="button"
@@ -335,7 +341,17 @@ export function BookingPage({
                         },
                       })}
                     >
-                      {formatDayTime(slot.start, timezone)} – {formatTime(slot.end, timezone)}
+                      <span>
+                        <span className="block">
+                          {index === 0 ? "Recommended: " : ""}
+                          {formatDayTime(slot.start, timezone)} – {formatTime(slot.end, timezone)}
+                        </span>
+                        {slot.recommendation?.reasons[0] && (
+                          <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                            {slot.recommendation.reasons[0].label}
+                          </span>
+                        )}
+                      </span>
                     </Button>
                   ))}
                 </div>
@@ -414,6 +430,7 @@ export function BookingPage({
               bookingQuestions={meta?.bookingQuestions ?? []}
               emailVerificationRequired={meta?.emailVerificationRequired ?? false}
               offerPublicId={offerPublicId}
+              proposalPublicId={proposalPublicId}
               onBack={() => setStep({ name: "pick" })}
               onError={(e) => {
                 setError(errorMessage(e));
@@ -717,6 +734,7 @@ function DetailsStep({
   bookingQuestions,
   emailVerificationRequired,
   offerPublicId,
+  proposalPublicId,
   onBack,
   onError,
   onConfirmed,
@@ -733,6 +751,7 @@ function DetailsStep({
   bookingQuestions: BookingQuestion[];
   emailVerificationRequired: boolean;
   offerPublicId?: string;
+  proposalPublicId?: string;
   onBack: () => void;
   onError: (e: unknown) => void;
   onConfirmed: (confirmation: BookingConfirmation) => void;
@@ -773,6 +792,7 @@ function DetailsStep({
         hosts,
         optionalHosts,
         offerPublicId,
+        proposalPublicId,
       });
       const confirmation = await confirmBooking({
         eventTypeSlug: slug,
@@ -786,6 +806,7 @@ function DetailsStep({
         ...(selectedLocation?.type === "phone" && phone.trim() ? { inviteePhone: phone.trim() } : {}),
         bookingAnswers,
         offerPublicId,
+        proposalPublicId,
         ...(receipt ? { emailVerificationToken: receipt } : {}),
       });
       onConfirmed(confirmation);

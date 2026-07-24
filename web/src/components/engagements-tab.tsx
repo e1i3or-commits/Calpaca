@@ -20,6 +20,10 @@ import {
   type EngagementStatus,
   type EngagementSummary,
 } from "@/lib/api";
+import {
+  NewProposal,
+  ProposalList,
+} from "@/components/proposals-panel";
 
 type Mode = "list" | "new" | string;
 const DRAFT_KEY = "calpaca:engagement-draft";
@@ -350,11 +354,13 @@ function DetailView({
   id,
   section = "overview",
   playbookId,
+  newProposal = false,
   users,
 }: {
   id: string;
-  section?: "overview" | "conversations";
+  section?: "overview" | "conversations" | "proposals";
   playbookId?: "new" | string;
+  newProposal?: boolean;
   users: DirectoryUser[];
 }) {
   const [item, setItem] = useState<EngagementDetail | null>(null);
@@ -375,8 +381,10 @@ function DetailView({
       <nav aria-label="Engagement" className="flex gap-5 overflow-x-auto border-b border-border">
         <button className={`min-h-11 whitespace-nowrap text-sm ${section === "overview" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}`)}>Overview</button>
         <button className={`min-h-11 whitespace-nowrap text-sm ${section === "conversations" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}/conversations`)}>Conversations</button>
+        <button className={`min-h-11 whitespace-nowrap text-sm ${section === "proposals" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}/proposals`)}>Proposals</button>
       </nav>
       {section === "conversations" && (playbookId ? <PlaybookEditor engagement={item} playbookId={playbookId} users={users} /> : <ConversationList engagement={item} />)}
+      {section === "proposals" && (newProposal ? <NewProposal engagement={item} /> : <ProposalList engagement={item} />)}
       {section === "overview" && <>
       <div className="grid gap-8 py-6 md:grid-cols-2">
         <div><h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next</h3><p className="mt-2 font-medium">{item.eventTypes.length ? "Schedule a client conversation" : "Create the first conversation playbook"}</p><p className="mt-1 text-sm text-muted-foreground">Keep scheduling attached to this client context.</p></div>
@@ -394,13 +402,15 @@ export function EngagementsTab({
   mode = "list",
   section,
   playbookId,
+  newProposal,
 }: {
   users: DirectoryUser[];
   mode?: Mode;
-  section?: "overview" | "conversations";
+  section?: "overview" | "conversations" | "proposals";
   playbookId?: "new" | string;
+  newProposal?: boolean;
 }) {
   if (mode === "new") return <NewView users={users} />;
-  if (mode !== "list") return <DetailView id={mode} section={section} playbookId={playbookId} users={users} />;
+  if (mode !== "list") return <DetailView id={mode} section={section} playbookId={playbookId} newProposal={newProposal} users={users} />;
   return <ListView />;
 }

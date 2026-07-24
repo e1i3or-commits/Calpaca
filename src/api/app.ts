@@ -23,6 +23,7 @@ import { availabilityTroubleshooterRoutes } from "./routes/availability-troubles
 import { bookingEmailVerificationRoutes } from "./routes/booking-email-verification";
 import { engagementRoutes } from "./routes/engagements";
 import { conversationRoutes } from "./routes/conversations";
+import { proposalRoutes } from "./routes/proposals";
 
 export const app = new Hono();
 
@@ -77,3 +78,4 @@ app.route("/", availabilityTroubleshooterRoutes);
 app.route("/", bookingEmailVerificationRoutes);
 app.route("/", engagementRoutes);
 app.route("/", conversationRoutes);
+app.route("/", proposalRoutes);

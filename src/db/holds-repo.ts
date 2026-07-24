@@ -2,7 +2,7 @@ import { and, count, eq, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
-import { bookings, eventTypes, holds, oneOffOffers } from "./schema";
+import { bookings, eventTypes, holds, oneOffOffers, proposals } from "./schema";
 import * as schema from "./schema";
 import { ok, err, type Result } from "../lib/result";
 import { generateToken } from "../lib/id";
@@ -54,7 +54,8 @@ export type ConfirmHoldError =
   | { readonly kind: "not_found" }
   | { readonly kind: "expired" }
   | { readonly kind: "not_active" }
-  | { readonly kind: "offer_unavailable" };
+  | { readonly kind: "offer_unavailable" }
+  | { readonly kind: "proposal_unavailable" };
 
 export interface ConfirmedBooking {
   readonly bookingId: string;
@@ -222,6 +223,7 @@ export async function confirmHold(
   bookingAnswers?: BookingAnswers,
   offerPublicId?: string,
   expectation?: ConfirmHoldExpectation,
+  proposalPublicId?: string,
 ): Promise<Result<ConfirmedBooking, ConfirmHoldError>> {
   return executor.transaction(async (tx) => {
     const rows = await tx
@@ -279,6 +281,32 @@ export async function confirmHold(
         || !matchesSlot
       ) return err({ kind: "offer_unavailable" });
       offerId = offer.id;
+    }
+    let proposalId: string | undefined;
+    let proposalOptionId: string | undefined;
+    if (proposalPublicId) {
+      const [proposal] = await tx.select()
+        .from(proposals)
+        .where(eq(proposals.publicId, proposalPublicId))
+        .for("update");
+      const option = proposal?.options.find((candidate) =>
+        Temporal.Instant.compare(Temporal.Instant.from(candidate.start), startsAt) === 0
+        && Temporal.Instant.compare(Temporal.Instant.from(candidate.end), endsAt) === 0
+        && candidate.hostUserIds.length === rows.length
+        && candidate.hostUserIds.every((hostId) =>
+          rows.some((row) => row.hostUserId === hostId)
+        )
+      );
+      if (
+        !proposal
+        || proposal.status !== "awaiting_client"
+        || proposal.expiresAt <= new Date()
+        || proposal.eventTypeId !== first.eventTypeId
+        || proposal.recipientEmail.toLowerCase() !== invitee.email.toLowerCase()
+        || !option
+      ) return err({ kind: "proposal_unavailable" });
+      proposalId = proposal.id;
+      proposalOptionId = option.id;
     }
     const [eventType] = await tx
       .select({ workspaceId: eventTypes.workspaceId })
@@ -360,6 +388,22 @@ export async function confirmHold(
       await tx.update(oneOffOffers)
         .set({ status: "booked", bookingId: booking.id })
         .where(eq(oneOffOffers.id, offerId));
+    }
+    if (proposalId && proposalOptionId) {
+      await tx.update(proposals)
+        .set({
+          status: "accepted",
+          acceptedOptionId: proposalOptionId,
+          bookingId: booking.id,
+          updatedAt: new Date(),
+        })
+        .where(eq(proposals.id, proposalId));
+      await tx.insert(schema.proposalEvents).values({
+        proposalId,
+        kind: "accepted",
+        actorType: "client",
+        detail: { optionId: proposalOptionId, bookingId: booking.id },
+      });
     }
 
     return ok({ bookingId: booking.id, hostUserIds });

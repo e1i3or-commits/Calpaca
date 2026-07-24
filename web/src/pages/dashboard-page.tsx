@@ -144,6 +144,7 @@ import { PeoplePicker } from "@/components/people-picker";
 import { TimezoneSelect } from "@/pages/booking-page";
 import { BrandMark } from "@/components/brand-mark";
 import { EngagementsTab } from "@/components/engagements-tab";
+import { ProposalDetail } from "@/components/proposals-panel";
 
 const TABS = [
   { key: "home", label: "Home", icon: Home, group: "primary" },
@@ -211,13 +212,17 @@ export function DashboardPage({
   initialEngagement,
   initialEngagementSection,
   initialPlaybook,
+  initialNewProposal,
+  initialProposalId,
 }: {
   initialView?: DashboardView;
   initialMeetingId?: string;
   initialEventTypeEditor?: "new" | string;
   initialEngagement?: "list" | "new" | string;
-  initialEngagementSection?: "overview" | "conversations";
+  initialEngagementSection?: "overview" | "conversations" | "proposals";
   initialPlaybook?: "new" | string;
+  initialNewProposal?: boolean;
+  initialProposalId?: string;
   initialDiagnostic?: {
     eventTypeId?: string;
     start?: string;
@@ -368,12 +373,15 @@ export function DashboardPage({
             <>
               {tab === "home" && <HomeTab onNavigate={navigateToView} />}
               {tab === "engagements" && (
-                <EngagementsTab
-                  users={users}
-                  mode={initialEngagement}
-                  section={initialEngagementSection}
-                  playbookId={initialPlaybook}
-                />
+                initialProposalId
+                  ? <ProposalDetail proposalId={initialProposalId} />
+                  : <EngagementsTab
+                      users={users}
+                      mode={initialEngagement}
+                      section={initialEngagementSection}
+                      playbookId={initialPlaybook}
+                      newProposal={initialNewProposal}
+                    />
               )}
               {tab === "event-types" && (
                 <EventTypesTab

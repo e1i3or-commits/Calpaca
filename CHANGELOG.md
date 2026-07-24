@@ -26,6 +26,18 @@ tracked with annotated Git tags named `v<version>`.
   confirmed, delayed, or unavailable, with the evidence time when known.
 - Hosted plans are now named Cloud Basic and Cloud Pro to distinguish the
   managed service from the self-hosted Community Edition.
+- Engagements now support durable scheduling proposals. Organizers can turn a
+  Ready conversation into two or more explained options, review client-facing
+  and internal context separately, require internal confirmation when
+  participant evidence is incomplete, send an opaque client link, and
+  withdraw an unanswered proposal.
+- Clients can choose a proposed time in their own timezone or request other
+  options. Acceptance uses the existing transactional hold and booking path,
+  so a lost slot does not create a partial meeting and a proposal can be
+  accepted only once.
+- Sent proposals are delivered through the managed email queue and preserve
+  their Engagement, Conversation, recipient, expiry, response, and resulting
+  booking.
 - Clarified that continuing with Google signs existing users in and creates a
   Calpaca account for new users.
 - Replaced the misleading mobile setup-menu action with an accurately labeled
@@ -80,6 +92,9 @@ tracked with annotated Git tags named `v<version>`.
   states, and save results expose explicit names and status semantics.
 - Recommendation explanations use named expandable controls, descriptive
   confidence text, and reason types that do not rely on color alone.
+- Proposal forms use associated labels, announced errors and loading states,
+  native email validation, keyboard-reachable lifecycle actions, and explicit
+  status text.
 - Public booking, cancellation, rescheduling, routing, poll, sign-up sheet,
   suggestion, sign-in, and organizer errors are now announced to assistive
   technology.
@@ -115,6 +130,8 @@ tracked with annotated Git tags named `v<version>`.
   full-height mobile sheet.
 - Recommended times keep the booking action prominent on narrow screens while
   placing supporting evidence in an expandable explanation.
+- Proposal lists, review summaries, option comparisons, client responses, and
+  terminal states stack into a single readable column on narrow screens.
 - The organizer header shortcut now uses an availability icon and accessible
   label that accurately describe its destination.
 - Poll response controls retain accessible names when their visible labels are
@@ -147,6 +164,7 @@ tracked with annotated Git tags named `v<version>`.
   release.
 - No repository screenshots changed for recommendation provenance. Pricing
   references now render Cloud Basic and Cloud Pro in the application.
+- No repository screenshots changed for the additive Proposal release.
 
 ### Migration notes
 
@@ -158,6 +176,10 @@ tracked with annotated Git tags named `v<version>`.
   current links, hosts, availability, and booking settings.
 - Recommendation provenance is additive and requires no migration. Clients
   that do not render the new availability response field continue to work.
+- Apply generated migrations `0045_magenta_young_avengers.sql`,
+  `0046_early_ser_duncan.sql`, and `0047_medical_karen_page.sql` in order.
+  Existing bookings, one-off offers, event types, and public links are
+  unchanged.
 
 ## [0.19.0] - 2026-07-23
 
