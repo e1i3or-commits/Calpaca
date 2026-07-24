@@ -68,7 +68,7 @@ export function SignupSheetPage({
                 }
               }}>Cancel registration</Button>
             )}
-            {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+            {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
           </CardContent>
         </Card>
       </div>
@@ -84,11 +84,14 @@ export function SignupSheetPage({
           <CardDescription>{sheet?.description ?? "Choose the sessions you want to attend."}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          {error && <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
           {sheet?.status === "closed" && !complete && (
-            <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-              Enrollment is currently closed.
-            </p>
+            <div className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+              <p>Enrollment is currently closed. Contact the organizer if you still need a place.</p>
+              <a href="/" className="mt-2 inline-flex min-h-11 items-center font-medium text-foreground underline underline-offset-4">
+                Browse other scheduling options
+              </a>
+            </div>
           )}
           {complete ? (
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-5">
@@ -127,13 +130,13 @@ export function SignupSheetPage({
                 })}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div><Label htmlFor="signup-name">Name</Label><Input id="signup-name" className="mt-1" value={name} onChange={(event) => setName(event.target.value)} /></div>
-                <div><Label htmlFor="signup-email">Email</Label><Input id="signup-email" type="email" className="mt-1" value={email} onChange={(event) => setEmail(event.target.value)} /></div>
+                <div><Label htmlFor="signup-name">Name</Label><Input id="signup-name" required className="mt-1" value={name} onChange={(event) => setName(event.target.value)} /></div>
+                <div><Label htmlFor="signup-email">Email</Label><Input id="signup-email" required type="email" className="mt-1" value={email} onChange={(event) => setEmail(event.target.value)} /></div>
               </div>
               {sheet?.questions.map((question) => (
                 <div key={question.id}>
                   <Label htmlFor={`signup-${question.id}`}>{question.label}{question.required ? " *" : ""}</Label>
-                  <Input id={`signup-${question.id}`} className="mt-1" value={answers[question.id] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))} />
+                  <Input id={`signup-${question.id}`} required={question.required} className="mt-1" value={answers[question.id] ?? ""} onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))} />
                 </div>
               ))}
               <Button disabled={busy || sheet?.status !== "open" || selected.length === 0 || !name.trim() || !email.trim()} onClick={async () => {

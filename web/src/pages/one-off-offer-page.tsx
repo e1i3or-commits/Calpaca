@@ -22,8 +22,11 @@ export function OneOffOfferPage({ publicId }: { publicId: string }) {
           <CalendarX2 className="mb-3 h-8 w-8 text-muted-foreground" />
           <CardTitle>This offer is no longer available</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          It may have been booked, revoked, or expired. Ask the organizer for a new link.
+        <CardContent className="space-y-4 text-sm text-muted-foreground">
+          <p>It may have been booked, revoked, or expired. Ask the organizer for a new link.</p>
+          <a href="/" className="inline-flex min-h-11 items-center font-medium text-foreground underline underline-offset-4">
+            Return to Calpaca
+          </a>
         </CardContent>
       </Card>
     );

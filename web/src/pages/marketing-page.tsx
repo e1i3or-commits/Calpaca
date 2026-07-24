@@ -10,7 +10,6 @@ import {
   GitFork,
   Globe2,
   Menu,
-  MousePointer2,
   Route,
   ShieldCheck,
   Sparkles,
@@ -58,17 +57,32 @@ const features = [
 
 const plans = [
   {
-    label: "Hosted",
-    title: "Start scheduling",
-    description: "A managed Calpaca workspace for individuals and small teams.",
-    points: ["Google Calendar sync", "Booking pages and polls", "No server maintenance"],
-    action: "Create your workspace",
+    label: "Hosted Basic",
+    title: "Free",
+    price: "$0",
+    priceNote: "forever",
+    description: "Everything an individual needs to share availability and book meetings.",
+    points: ["One user", "Google Calendar sync", "Booking pages and meeting polls"],
+    action: "Start for free",
+    href: appUrl,
+    featured: false,
+  },
+  {
+    label: "Hosted Pro",
+    title: "For teams",
+    price: "$7",
+    priceNote: "per user / month",
+    description: "Team scheduling and premium controls for growing organizations.",
+    points: ["Teams and shared booking pages", "Round robin and group scheduling", "Premium administration features"],
+    action: "Start with Pro",
     href: appUrl,
     featured: true,
   },
   {
     label: "Open source",
     title: "Run it yourself",
+    price: "Free",
+    priceNote: "AGPL v3",
     description: "The complete AGPL-licensed platform on infrastructure you control.",
     points: ["Bun + PostgreSQL", "Docker Compose deployment", "Public API and MCP server"],
     action: "View on GitHub",
@@ -164,9 +178,6 @@ function BookingPreview() {
         <span className="h-2 w-2 rounded-full bg-emerald-500" />
         Calendars in sync
       </div>
-      <div className="absolute -right-2 -top-6 grid h-14 w-14 rotate-6 place-items-center rounded-2xl bg-[#edb55f] text-[#473116] shadow-lg sm:-right-7">
-        <MousePointer2 className="h-6 w-6" />
-      </div>
     </div>
   );
 }
@@ -230,7 +241,7 @@ export function MarketingPage() {
             aria-label={menuOpen ? "Close navigation" : "Open navigation"}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
-            className="grid h-10 w-10 place-items-center rounded-full border border-border md:hidden"
+            className="grid h-11 w-11 place-items-center rounded-full border border-border md:hidden"
           >
             {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
@@ -376,16 +387,20 @@ export function MarketingPage() {
         </section>
 
         <section id="plans" className="scroll-mt-20 border-y border-border bg-card/50 px-5 py-24 sm:px-8 sm:py-32">
-          <div className="mx-auto max-w-5xl">
+          <div className="mx-auto max-w-7xl">
             <div className="text-center">
               <p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Choose your path</p>
-              <h2 className="mt-4 text-4xl font-semibold tracking-[-.055em] sm:text-6xl">Hosted for ease.<br />Open source for control.</h2>
+              <h2 className="mt-4 text-4xl font-semibold tracking-[-.055em] sm:text-6xl">Free to begin.<br />Simple when you grow.</h2>
             </div>
-            <div className="mt-14 grid gap-5 md:grid-cols-2">
+            <div className="mt-14 grid gap-5 md:grid-cols-3">
               {plans.map((plan) => (
                 <article key={plan.label} className={`rounded-[1.75rem] border p-7 sm:p-9 ${plan.featured ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card"}`}>
                   <p className={`text-xs font-semibold uppercase tracking-[.16em] ${plan.featured ? "text-primary-foreground/65" : "text-primary"}`}>{plan.label}</p>
                   <h3 className="mt-3 text-3xl font-semibold tracking-[-.045em]">{plan.title}</h3>
+                  <div className="mt-5 flex items-end gap-2">
+                    <span className="text-4xl font-semibold tracking-[-.05em]">{plan.price}</span>
+                    <span className={`pb-1 text-xs ${plan.featured ? "text-primary-foreground/65" : "text-muted-foreground"}`}>{plan.priceNote}</span>
+                  </div>
                   <p className={`mt-4 min-h-14 text-sm leading-6 ${plan.featured ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{plan.description}</p>
                   <ul className="mt-8 space-y-3">
                     {plan.points.map((point) => <li key={point} className="flex items-center gap-2.5 text-sm"><Check className="h-4 w-4" />{point}</li>)}
@@ -396,7 +411,7 @@ export function MarketingPage() {
                 </article>
               ))}
             </div>
-            <p className="mt-6 text-center text-xs text-muted-foreground">Paid team plans are coming as the hosted platform grows. Self-hosting stays available under the AGPL.</p>
+            <p className="mt-6 text-center text-xs text-muted-foreground">Basic has no team features. Pro is $7 per active user each month. Self-hosting stays available under the AGPL.</p>
           </div>
         </section>
 

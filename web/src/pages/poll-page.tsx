@@ -205,7 +205,7 @@ export function PollPage({ publicId }: { publicId: string }) {
           <CardDescription>{poll?.description ?? "Choose every time that could work for you."}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {error && <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
           {poll?.status === "finalized" && (
             <p className="rounded-lg bg-primary/10 p-4 text-sm font-medium text-primary">
               This poll is finalized
@@ -276,6 +276,8 @@ export function PollPage({ publicId }: { publicId: string }) {
                                 <button
                                   key={choice.value}
                                   type="button"
+                                  aria-pressed={votes[option.id] === choice.value}
+                                  aria-label={choice.label}
                                   disabled={!poll.votingOpen || (saved && !poll.allowResponseEditing)}
                                   className={`flex items-center justify-center gap-1 rounded-lg border px-2 py-2 text-xs font-medium ${
                                     votes[option.id] === choice.value
@@ -327,7 +329,40 @@ export function PollPage({ publicId }: { publicId: string }) {
                   <span className="text-sm text-muted-foreground">{poll.participantCount} response{poll.participantCount === 1 ? "" : "s"}</span>
                 </div>
                 {poll.resultsRevealed && poll.participantCount > 0 ? (
-                  <div className="overflow-x-auto rounded-xl border border-border">
+                  <>
+                  <div className="space-y-3 sm:hidden">
+                    {sortedOptions.map((option) => (
+                      <article key={option.id} className={`rounded-xl border p-4 ${option.rank === 1 ? "border-primary" : "border-border"}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-medium text-muted-foreground">Rank {option.rank}</p>
+                            <h3 className="mt-1 text-sm font-semibold">{shortDateLabel(option.start, poll.timezone)} · {timeLabel(option.start, option.end, poll.timezone)}</h3>
+                          </div>
+                          {option.rank === 1 && <span className="text-xs font-medium text-primary">Best match</span>}
+                        </div>
+                        <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
+                          <div><dt className="text-xs text-muted-foreground">Available</dt><dd className="mt-0.5 font-semibold">{option.yes}</dd></div>
+                          <div><dt className="text-xs text-muted-foreground">If needed</dt><dd className="mt-0.5 font-semibold">{option.ifNeeded}</dd></div>
+                          <div><dt className="text-xs text-muted-foreground">Unavailable</dt><dd className="mt-0.5 font-semibold">{option.no}</dd></div>
+                        </dl>
+                        <details className="mt-3 border-t border-border pt-3">
+                          <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">Participant details</summary>
+                          <ul className="mt-2 divide-y divide-border">
+                            {(poll.responses ?? []).map((response, responseIndex) => {
+                              const choice = response.votes.find((vote) => vote.optionId === option.id)?.choice;
+                              return (
+                                <li key={`${response.name}-${responseIndex}`} className="flex items-center justify-between gap-3 py-2 text-sm">
+                                  <span className="min-w-0 truncate">{response.name}</span>
+                                  <span className={resultChoiceClass(choice)}>{choices.find((item) => item.value === choice)?.label ?? "No response"}</span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </details>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="hidden overflow-x-auto rounded-xl border border-border sm:block">
                     <table className="w-full min-w-[38rem] text-sm">
                       <thead className="bg-muted/40">
                         <tr>
@@ -382,6 +417,7 @@ export function PollPage({ publicId }: { publicId: string }) {
                       </tbody>
                     </table>
                   </div>
+                  </>
                 ) : (
                   <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
                     {poll.participantCount === 0

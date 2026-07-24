@@ -20,6 +20,9 @@
       "name": "System"
     },
     {
+      "name": "Authentication"
+    },
+    {
       "name": "Booking"
     },
     {
@@ -152,6 +155,41 @@
           "System"
         ],
         "summary": "Download the OpenAPI document",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/auth/error": {
+      "get": {
+        "operationId": "getApiAuthError",
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Return an authentication failure to sign-in",
         "parameters": [],
         "responses": {
           "200": {

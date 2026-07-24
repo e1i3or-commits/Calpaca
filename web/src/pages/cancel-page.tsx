@@ -52,7 +52,12 @@ export function CancelPage({ bookingId, token }: { bookingId: string; token: str
           <CardDescription>This can't be undone. You would need to book a new time.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <a href="/" className="inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4">
+              Return to Calpaca
+            </a>
+          )}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="reason">Reason (optional)</Label>
             <Input id="reason" value={reason} onChange={(e) => setReason(e.target.value)} />

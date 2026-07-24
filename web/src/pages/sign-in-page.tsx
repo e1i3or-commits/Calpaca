@@ -1,25 +1,43 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, CalendarCheck2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import { signInWithGoogle } from "@/lib/api";
+import { ApiError, signInWithGoogle } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BrandMark } from "@/components/brand-mark";
+import { signInErrorMessage } from "@/lib/sign-in-error";
 
 // Replaces the temporary /dev/sign-in HTML page: the sign-in POST must
 // originate in the browser so the OAuth state cookie is set where the
 // callback will be validated.
 export function SignInPage() {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return signInErrorMessage(params.get("error"));
+  });
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("error") && !url.searchParams.has("error_description")) return;
+    url.searchParams.delete("error");
+    url.searchParams.delete("error_description");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   async function go() {
     setBusy(true);
     setError(null);
     try {
       window.location.href = await signInWithGoogle("/dashboard");
-    } catch {
-      setError("Could not start sign-in. Is the API running?");
+    } catch (cause) {
+      setError(
+        cause instanceof ApiError
+          ? cause.status === 429
+            ? "Too many sign-in attempts. Wait a minute and try again."
+            : "Calpaca couldn't start sign-in. Try again in a moment."
+          : "We couldn't reach Calpaca. Check your connection and try again.",
+      );
       setBusy(false);
     }
   }
@@ -41,18 +59,18 @@ export function SignInPage() {
             <span className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary">
               <CalendarCheck2 className="h-5 w-5" />
             </span>
-            <CardTitle className="text-2xl tracking-[-0.035em]">Welcome back</CardTitle>
+            <CardTitle className="text-2xl tracking-[-0.035em]">Sign in or create an account</CardTitle>
             <CardDescription className="max-w-sm leading-6">
-              Sign in to manage booking links, availability, meetings, and your connected calendars.
+              Continue with Google to manage scheduling and connect your calendar.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {error && <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
-            <Button className="h-11 rounded-xl" onClick={() => void go()} disabled={busy}>
+            {error && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+            <Button className="h-11 rounded-xl" onClick={() => void go()} disabled={busy} aria-busy={busy}>
               {busy ? "Redirecting…" : "Continue with Google"}
             </Button>
             <p className="text-center text-xs leading-5 text-muted-foreground">
-              Google is used for secure sign-in and calendar connection.
+              If you are new, this creates your Calpaca account. Google is used for secure sign-in and calendar connection.
             </p>
           </CardContent>
         </Card>

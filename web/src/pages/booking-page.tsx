@@ -217,7 +217,7 @@ export function BookingPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="booking-content">
-          {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
 
           {step.name === "pick" && (
             <div className="flex flex-col gap-6">
@@ -241,6 +241,7 @@ export function BookingPage({
                       <Button
                         key={minutes}
                         type="button"
+                        aria-pressed={durationMinutes === minutes}
                         size="sm"
                         variant={durationMinutes === minutes ? "default" : "outline"}
                         onClick={() => {
@@ -1049,7 +1050,7 @@ function SuggestionStep({
           Share up to three windows in {timezone}. Each window is {durationMinutes} minutes.
         </p>
       </div>
-      {error && <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
       <form
         className="flex flex-col gap-4"
         onSubmit={(event) => {
@@ -1098,7 +1099,7 @@ function SuggestionStep({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-9 w-9 p-0"
+                  className="h-11 w-11 p-0 lg:h-9 lg:w-9"
                   aria-label={`Remove window ${index + 1}`}
                   onClick={() => setWindows((current) => current.filter((_, i) => i !== index))}
                 >

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   Calendar,
   CalendarDays,
@@ -16,8 +16,8 @@ import {
   ListChecks,
   Link2,
   LogOut,
-  Menu,
   Moon,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
@@ -27,6 +27,7 @@ import {
   SearchCheck,
   Sun,
   Trash2,
+  X,
   UserPlus,
   UserRound,
   Users,
@@ -147,19 +148,41 @@ const TABS = [
   { key: "home", label: "Home", icon: Home, group: "primary" },
   { key: "event-types", label: "Scheduling", icon: CalendarDays, group: "primary" },
   { key: "bookings", label: "Bookings", icon: CalendarRange, group: "primary" },
-  { key: "polls", label: "Polls", icon: ListChecks, group: "primary" },
-  { key: "signup-sheets", label: "Sign-up sheets", icon: CalendarCheck, group: "primary" },
   { key: "analytics", label: "Analytics", icon: ChartNoAxesCombined, group: "primary" },
-  { key: "profile", label: "Profile & API", icon: UserRound, group: "setup" },
+  { key: "polls", label: "Polls", icon: ListChecks, group: "tools" },
+  { key: "signup-sheets", label: "Sign-up sheets", icon: CalendarCheck, group: "tools" },
+  { key: "routing", label: "Routing", icon: Route, group: "tools" },
+  { key: "one-off", label: "One-off offers", icon: Link2, group: "tools" },
+  { key: "workspace-general", label: "Workspace general", icon: ShieldCheck, group: "setup" },
   { key: "schedules", label: "Availability", icon: Clock3, group: "setup" },
-  { key: "routing", label: "Routing", icon: Route, group: "setup" },
   { key: "team", label: "People & teams", icon: Users, group: "setup" },
   { key: "calendars", label: "Calendars", icon: Calendar, group: "setup" },
-  { key: "one-off", label: "One-off offers", icon: Link2, group: "setup" },
+  { key: "api", label: "API access", icon: KeyRound, group: "setup" },
   { key: "troubleshooter", label: "Troubleshooter", icon: SearchCheck, group: "setup" },
+  { key: "profile", label: "Account profile", icon: UserRound, group: "account" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
+export type DashboardView = TabKey | "engagements";
+
+export const DASHBOARD_VIEW_PATHS: Record<DashboardView, string> = {
+  home: "/app/home",
+  engagements: "/app/engagements",
+  "event-types": "/app/workspace/conversation-playbooks",
+  bookings: "/app/meetings",
+  polls: "/app/tools/polls",
+  "signup-sheets": "/app/tools/signup-sheets",
+  analytics: "/app/insights",
+  profile: "/app/account/profile",
+  "workspace-general": "/app/workspace/general",
+  api: "/app/workspace/api",
+  schedules: "/app/workspace/availability",
+  routing: "/app/tools/routing",
+  team: "/app/workspace/people",
+  calendars: "/app/workspace/calendars",
+  "one-off": "/app/tools?view=one-off-offers",
+  troubleshooter: "/app/workspace/availability?view=troubleshooter",
+};
 
 const ERROR_TEXT: Record<string, string> = {
   slug_taken: "That slug is already taken.",
@@ -179,14 +202,54 @@ function errorText(e: unknown): string {
   return "Could not reach the server.";
 }
 
-export function DashboardPage() {
-  const [tab, setTab] = useState<TabKey>("home");
+export function DashboardPage({
+  initialView = "home",
+  initialMeetingId,
+  initialEventTypeEditor,
+  initialDiagnostic,
+}: {
+  initialView?: DashboardView;
+  initialMeetingId?: string;
+  initialEventTypeEditor?: "new" | string;
+  initialDiagnostic?: {
+    eventTypeId?: string;
+    start?: string;
+    durationMinutes?: number;
+  };
+}) {
+  const [tab, setTab] = useState<DashboardView>(initialView);
   const [users, setUsers] = useState<DirectoryUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("calpaca:sidebar-collapsed") === "true",
   );
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
   const { appearance, toggleAppearance } = useAppearance();
+
+  useEffect(() => setTab(initialView), [initialView]);
+
+  const navigateToView = useCallback((view: DashboardView) => {
+    const destination = DASHBOARD_VIEW_PATHS[view];
+    if (`${window.location.pathname}${window.location.search}` === destination) {
+      setTab(view);
+      return;
+    }
+    window.history.pushState({}, "", destination);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, []);
+  const navigateToEventTypeEditor = useCallback((eventTypeId: "new" | string) => {
+    const destination = eventTypeId === "new"
+      ? "/app/workspace/conversation-playbooks/new"
+      : `/app/workspace/conversation-playbooks/${encodeURIComponent(eventTypeId)}/edit`;
+    window.history.pushState({}, "", destination);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, []);
+  const closeMore = useCallback(() => setMoreOpen(false), []);
+  const navigateFromMore = useCallback((view: DashboardView) => {
+    setMoreOpen(false);
+    navigateToView(view);
+  }, [navigateToView]);
 
   useEffect(() => {
     localStorage.setItem("calpaca:sidebar-collapsed", String(sidebarCollapsed));
@@ -205,27 +268,43 @@ export function DashboardPage() {
   }, []);
 
   return (
-    <div data-organizer className="min-h-screen bg-background text-foreground">
+    <div data-organizer className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <aside className={`fixed inset-y-0 left-0 z-20 hidden flex-col border-r border-border/70 bg-card/90 px-3 py-5 backdrop-blur transition-[width] md:flex ${sidebarCollapsed ? "w-16" : "w-60"}`}>
         <Brand collapsed={sidebarCollapsed} />
-        <nav className="mt-8 flex flex-1 flex-col" aria-label="Organizer">
+        <nav className="mt-8 flex min-h-0 flex-1 flex-col overflow-y-auto" aria-label="Organizer">
           <div className="space-y-1">
             {TABS.filter((item) => item.group === "primary").map((item) => (
-              <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => setTab(item.key)} />
+              <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => navigateToView(item.key)} />
             ))}
           </div>
           <p className={`mb-2 mt-8 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground ${sidebarCollapsed ? "sr-only" : ""}`}>
-            Setup
+            Tools
+          </p>
+          <div className="space-y-1">
+            {TABS.filter((item) => item.group === "tools").map((item) => (
+              <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => navigateToView(item.key)} />
+            ))}
+          </div>
+          <p className={`mb-2 mt-8 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground ${sidebarCollapsed ? "sr-only" : ""}`}>
+            Workspace
           </p>
           <div className="space-y-1">
             {TABS.filter((item) => item.group === "setup").map((item) => (
-              <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => setTab(item.key)} />
+              <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => navigateToView(item.key)} />
+            ))}
+          </div>
+          <p className={`mb-2 mt-8 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground ${sidebarCollapsed ? "sr-only" : ""}`}>
+            Account
+          </p>
+          <div className="space-y-1">
+            {TABS.filter((item) => item.group === "account").map((item) => (
+              <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => navigateToView(item.key)} />
             ))}
           </div>
           <div className="mt-auto border-t border-border/70 pt-3">
             <button
               type="button"
-              className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground ${sidebarCollapsed ? "justify-center" : ""}`}
+              className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground lg:h-10 ${sidebarCollapsed ? "justify-center" : ""}`}
               aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}
               title={`Use ${appearance === "dark" ? "light" : "dark"} mode`}
               onClick={toggleAppearance}
@@ -235,7 +314,7 @@ export function DashboardPage() {
             </button>
             <button
               type="button"
-              className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground ${sidebarCollapsed ? "justify-center" : ""}`}
+              className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground lg:h-10 ${sidebarCollapsed ? "justify-center" : ""}`}
               aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
@@ -245,7 +324,7 @@ export function DashboardPage() {
             </button>
             <button
               type="button"
-              className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground ${sidebarCollapsed ? "justify-center" : ""}`}
+              className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground lg:h-10 ${sidebarCollapsed ? "justify-center" : ""}`}
               aria-label="Sign out"
               title={sidebarCollapsed ? "Sign out" : undefined}
               onClick={() => void signOut().then(() => (window.location.href = "/sign-in"))}
@@ -264,58 +343,59 @@ export function DashboardPage() {
         <div className="flex items-center gap-1">
           <button
             type="button"
-            className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
+            className="grid h-11 w-11 place-items-center rounded-lg text-muted-foreground hover:bg-muted lg:h-10 lg:w-10"
             aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}
             onClick={toggleAppearance}
           >
             {appearance === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </button>
-          <button
-            type="button"
-            className="grid h-10 w-10 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
-            aria-label="Open setup"
-            onClick={() => setTab("schedules")}
-          >
-            <Menu className="h-5 w-5" />
           </button>
         </div>
       </header>
 
       <main className={`px-4 pb-24 pt-7 transition-[margin] md:px-8 md:pb-10 md:pt-10 ${sidebarCollapsed ? "md:ml-16" : "md:ml-60"}`}>
         <div className="mx-auto max-w-5xl">
-          <PageHeading tab={tab} onNavigate={setTab} />
-          {error && <p className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
+          <PageHeading tab={tab} />
+          {error && <p role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
           {!error && !users && <DashboardSkeleton />}
           {users && (
             <>
-              {tab === "home" && <HomeTab onNavigate={setTab} />}
-              {tab === "event-types" && <EventTypesTab users={users} />}
-              {tab === "bookings" && <BookingsTab users={users} />}
+              {tab === "home" && <HomeTab onNavigate={navigateToView} />}
+              {tab === "engagements" && <EngagementsPlaceholder />}
+              {tab === "event-types" && (
+                <EventTypesTab
+                  users={users}
+                  initialEditor={initialEventTypeEditor}
+                  onEdit={navigateToEventTypeEditor}
+                  onCloseEditor={() => navigateToView("event-types")}
+                />
+              )}
+              {tab === "bookings" && <BookingsTab users={users} initialSelected={initialMeetingId} />}
               {tab === "polls" && <PollsTab />}
               {tab === "signup-sheets" && <SignupSheetsTab />}
               {tab === "analytics" && <AnalyticsTab />}
-              {tab === "profile" && <ProfileTab />}
+              {tab === "profile" && <ProfileTab section="profile" />}
+              {tab === "workspace-general" && <WorkspaceCard />}
+              {tab === "api" && <ProfileTab section="api" />}
               {tab === "schedules" && <SchedulesTab />}
               {tab === "routing" && <RoutingTab users={users} />}
               {tab === "team" && <TeamTab users={users} />}
               {tab === "calendars" && <CalendarsTab />}
               {tab === "one-off" && <OneOffOffersTab />}
-              {tab === "troubleshooter" && <AvailabilityTroubleshooterTab />}
+              {tab === "troubleshooter" && (
+                <AvailabilityTroubleshooterTab initialDiagnostic={initialDiagnostic} />
+              )}
             </>
           )}
         </div>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-border/70 bg-card/95 px-1 pb-[max(.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden" aria-label="Primary">
-        {[
-          TABS[0],
-          TABS[1],
-          TABS[2],
-          TABS[3],
-          TABS[4],
-          TABS[5],
-        ].map((item) => {
-          const active = item.key === tab;
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border/70 bg-card/95 px-1 pb-[max(.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur md:hidden" aria-label="Primary">
+        {([
+          { key: "home", label: "Home", icon: Home },
+          { key: "engagements", label: "Engagements", icon: Users },
+          { key: "bookings", label: "Meetings", icon: CalendarRange },
+        ] as const).map((item) => {
+          const active = item.key === tab && !moreOpen;
           return (
             <button
               key={item.key}
@@ -323,14 +403,172 @@ export function DashboardPage() {
               className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-medium ${
                 active ? "text-primary" : "text-muted-foreground"
               }`}
-              onClick={() => setTab(item.key)}
+              aria-current={active ? "page" : undefined}
+              onClick={() => navigateToView(item.key)}
             >
               <item.icon className="h-5 w-5" />
-              {item.key === "signup-sheets" ? "Sign-ups" : item.label}
+              {item.label}
             </button>
           );
         })}
+        <button
+          ref={moreButtonRef}
+          type="button"
+          className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-medium ${
+            moreOpen || !["home", "engagements", "bookings"].includes(tab) ? "text-primary" : "text-muted-foreground"
+          }`}
+          aria-expanded={moreOpen}
+          aria-haspopup="dialog"
+          onClick={() => setMoreOpen(true)}
+        >
+          <MoreHorizontal className="h-5 w-5" />
+          More
+        </button>
       </nav>
+      <MobileMoreSheet
+        open={moreOpen}
+        returnFocusRef={moreButtonRef}
+        activeView={tab}
+        onClose={closeMore}
+        onNavigate={navigateFromMore}
+      />
+    </div>
+  );
+}
+
+const MOBILE_MORE_GROUPS: Array<{
+  label: string;
+  items: Array<{ view: DashboardView; label: string }>;
+}> = [
+  { label: "Scheduling", items: [{ view: "event-types", label: "Scheduling" }] },
+  { label: "Insights", items: [{ view: "analytics", label: "Analytics" }] },
+  {
+    label: "Tools",
+    items: [
+      { view: "polls", label: "Meeting polls" },
+      { view: "signup-sheets", label: "Sign-up sheets" },
+      { view: "routing", label: "Routing forms" },
+      { view: "one-off", label: "One-off offers" },
+    ],
+  },
+  {
+    label: "Workspace",
+    items: [
+      { view: "workspace-general", label: "General" },
+      { view: "schedules", label: "Availability" },
+      { view: "team", label: "People & teams" },
+      { view: "calendars", label: "Calendars" },
+      { view: "api", label: "API access" },
+      { view: "troubleshooter", label: "Availability troubleshooter" },
+    ],
+  },
+  { label: "Account", items: [{ view: "profile", label: "Profile" }] },
+];
+
+function MobileMoreSheet({
+  open,
+  activeView,
+  returnFocusRef,
+  onClose,
+  onNavigate,
+}: {
+  open: boolean;
+  activeView: DashboardView;
+  returnFocusRef: RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+  onNavigate: (view: DashboardView) => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]):not([tabindex="-1"]), a[href], [tabindex]:not([tabindex="-1"])',
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      returnFocusRef.current?.focus();
+    };
+  }, [onClose, open, returnFocusRef]);
+
+  if (!open) return null;
+  return (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="mobile-more-title"
+      className="fixed inset-0 z-40 flex items-end bg-foreground/25 md:hidden"
+    >
+      <button type="button" tabIndex={-1} className="absolute inset-0" aria-label="Close navigation" onClick={onClose} />
+      <section className="relative z-10 max-h-[88vh] w-full overflow-y-auto rounded-t-2xl bg-background px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 id="mobile-more-title" className="text-lg font-semibold">More</h2>
+            <p className="text-xs text-muted-foreground">Scheduling tools and workspace settings</p>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            className="grid h-11 w-11 place-items-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Close navigation"
+            onClick={onClose}
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <Button className="mt-5 w-full" onClick={() => onNavigate("event-types")}>
+          <Plus className="h-4 w-4" /> Create booking link
+        </Button>
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          {MOBILE_MORE_GROUPS.map((group) => (
+            <section key={group.label}>
+              <h3 className="px-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{group.label}</h3>
+              <div className="mt-1 grid">
+                {group.items.map((item) => (
+                  <button
+                    key={item.view}
+                    type="button"
+                    className={`min-h-11 rounded-lg px-3 text-left text-sm ${
+                      activeView === item.view ? "bg-primary/10 font-medium text-primary" : "hover:bg-muted"
+                    }`}
+                    aria-current={activeView === item.view ? "page" : undefined}
+                    onClick={() => onNavigate(item.view)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -364,7 +602,7 @@ function NavButton({
   return (
     <button
       type="button"
-      className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm transition ${collapsed ? "justify-center" : ""} ${
+      className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm transition lg:h-10 ${collapsed ? "justify-center" : ""} ${
         active ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
       }`}
       aria-label={item.label}
@@ -377,14 +615,17 @@ function NavButton({
   );
 }
 
-const PAGE_COPY: Record<TabKey, { title: string; description: string }> = {
+const PAGE_COPY: Record<DashboardView, { title: string; description: string }> = {
   home: { title: "Good day", description: "A focused view of what needs your attention." },
+  engagements: { title: "Engagements", description: "Client work and the conversations that move it forward." },
   "event-types": { title: "Scheduling", description: "Booking links and the people behind them." },
   bookings: { title: "Bookings", description: "Upcoming conversations and recent history." },
   polls: { title: "Meeting polls", description: "Find the time that works best for a group." },
   "signup-sheets": { title: "Sign-up sheets", description: "Let people enroll in fixed sessions." },
   analytics: { title: "Analytics", description: "A clear view of volume, outcomes, and team balance." },
-  profile: { title: "Profile & API", description: "Your public identity and personal integration tokens." },
+  profile: { title: "Account profile", description: "Your personal identity on public booking pages." },
+  "workspace-general": { title: "Workspace general", description: "Workspace identity, plan, deployment, and booking domains." },
+  api: { title: "API access", description: "Personal tokens for trusted integrations and automations." },
   schedules: { title: "Availability", description: "The recurring hours your booking links can offer." },
   routing: { title: "Routing", description: "Send each invitee to the right conversation." },
   team: { title: "People & teams", description: "Hosts, membership, and shared scheduling." },
@@ -393,27 +634,24 @@ const PAGE_COPY: Record<TabKey, { title: string; description: string }> = {
   troubleshooter: { title: "Availability troubleshooter", description: "Understand why a specific time can or cannot be booked." },
 };
 
-function PageHeading({ tab, onNavigate }: { tab: TabKey; onNavigate: (tab: TabKey) => void }) {
+function PageHeading({ tab }: { tab: DashboardView }) {
   const copy = PAGE_COPY[tab];
   return (
     <header className="mb-7">
       <h1 className="text-[28px] font-semibold tracking-[-0.035em] sm:text-[32px]">{copy.title}</h1>
       <p className="mt-1 text-sm text-muted-foreground">{copy.description}</p>
-      {TABS.find((item) => item.key === tab)?.group === "setup" && (
-        <div className="mt-5 flex gap-1 overflow-x-auto pb-1 md:hidden">
-          {TABS.filter((item) => item.group === "setup").map((item) => (
-            <button
-              type="button"
-              key={item.key}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs ${item.key === tab ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
-              onClick={() => onNavigate(item.key)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
     </header>
+  );
+}
+
+function EngagementsPlaceholder() {
+  return (
+    <div className="rounded-xl border border-dashed border-border p-6">
+      <h2 className="font-medium">Engagements are coming next</h2>
+      <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+        Existing scheduling workflows remain available while relationship-aware client work is introduced.
+      </p>
+    </div>
   );
 }
 
@@ -421,6 +659,32 @@ function DashboardSkeleton() {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {[0, 1, 2, 3].map((item) => <div key={item} className="h-32 animate-pulse rounded-xl bg-muted" />)}
+    </div>
+  );
+}
+
+function InlineLoading({ label }: { label: string }) {
+  return (
+    <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+      {label}
+    </p>
+  );
+}
+
+function ActionableEmptyState({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-dashed border-border p-6">
+      <p className="font-medium">{title}</p>
+      <p className="mt-1 max-w-xl text-sm text-muted-foreground">{description}</p>
+      <div className="mt-4">{action}</div>
     </div>
   );
 }
@@ -648,7 +912,7 @@ function AnalyticsTab() {
         </a>
       </section>
 
-      {error && <p className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
       {!report && !error && <DashboardSkeleton />}
       {report && (
         <>
@@ -747,10 +1011,16 @@ function AnalyticsTab() {
   );
 }
 
-function BookingsTab({ users }: { users: DirectoryUser[] }) {
+function BookingsTab({
+  users,
+  initialSelected,
+}: {
+  users: DirectoryUser[];
+  initialSelected?: string;
+}) {
   const [filter, setFilter] = useState<"upcoming" | "past">("upcoming");
   const [bookings, setBookings] = useState<AdminBooking[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialSelected ?? null);
   const [error, setError] = useState<string | null>(null);
   const timezone = viewerTimezone();
 
@@ -761,8 +1031,45 @@ function BookingsTab({ users }: { users: DirectoryUser[] }) {
       .then((response) => setBookings(response.bookings))
       .catch((cause: unknown) => setError(errorText(cause)));
   }, [filter, timezone]);
+  const closeBookingDetails = useCallback(() => {
+    if (window.history.state?.calpacaMeetingFromList) {
+      if (selected) sessionStorage.setItem("calpaca:return-focus-booking", selected);
+      window.history.back();
+      return;
+    }
+    window.history.replaceState(window.history.state, "", "/app/meetings");
+    setSelected(null);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, [selected]);
+  const openBookingDetails = useCallback((bookingId: string) => {
+    window.history.pushState(
+      { ...window.history.state, calpacaMeetingFromList: true },
+      "",
+      `/app/meetings/${encodeURIComponent(bookingId)}`,
+    );
+    setSelected(bookingId);
+  }, []);
 
   useEffect(() => reload(), [reload]);
+  useEffect(() => setSelected(initialSelected ?? null), [initialSelected]);
+  useEffect(() => {
+    const syncSelectedFromLocation = () => {
+      const match = window.location.pathname.match(/^\/app\/meetings\/([^/]+)$/);
+      if (!match && selected) sessionStorage.setItem("calpaca:return-focus-booking", selected);
+      setSelected(match ? decodeURIComponent(match[1]!) : null);
+    };
+    window.addEventListener("popstate", syncSelectedFromLocation);
+    return () => window.removeEventListener("popstate", syncSelectedFromLocation);
+  }, [selected]);
+  useEffect(() => {
+    if (!bookings) return;
+    const bookingId = sessionStorage.getItem("calpaca:return-focus-booking");
+    if (!bookingId) return;
+    const trigger = document.querySelector<HTMLButtonElement>(`button[data-booking-id="${CSS.escape(bookingId)}"]`);
+    if (!trigger) return;
+    sessionStorage.removeItem("calpaca:return-focus-booking");
+    requestAnimationFrame(() => trigger.focus());
+  }, [bookings]);
 
   return (
     <>
@@ -789,7 +1096,7 @@ function BookingsTab({ users }: { users: DirectoryUser[] }) {
         </div>
       </div>
 
-      {error && <p className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
       {!error && bookings === null && <DashboardSkeleton />}
       {bookings?.length === 0 && (
         <div className="rounded-xl border border-dashed border-border p-10 text-center">
@@ -821,8 +1128,9 @@ function BookingsTab({ users }: { users: DirectoryUser[] }) {
                 )}
                 <button
                   type="button"
+                  data-booking-id={booking.id}
                   className="grid w-full grid-cols-[4.5rem_1fr_auto] items-center gap-3 border-b border-border/60 px-4 py-4 text-left last:border-0 transition hover:bg-muted/40 sm:grid-cols-[6rem_1fr_auto] sm:px-5"
-                  onClick={() => setSelected(booking.id)}
+                  onClick={() => openBookingDetails(booking.id)}
                 >
                   <span className="text-sm font-semibold tabular-nums">{formatBookingTime(booking.start.utc)}</span>
                   <span className="min-w-0">
@@ -842,7 +1150,7 @@ function BookingsTab({ users }: { users: DirectoryUser[] }) {
           bookingId={selected}
           timezone={timezone}
           users={users}
-          onClose={() => setSelected(null)}
+          onClose={closeBookingDetails}
           onChanged={reload}
         />
       )}
@@ -882,6 +1190,8 @@ function BookingDetailPanel({
   const [booking, setBooking] = useState<AdminBookingDetail | null>(null);
   const [assignment, setAssignment] = useState<AssignmentExplanation | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     void getAdminBooking(bookingId, timezone)
@@ -893,6 +1203,50 @@ function BookingDetailPanel({
         if (!(cause instanceof ApiError && cause.status === 404)) setError(errorText(cause));
       });
   }, [bookingId, timezone]);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]):not([tabindex="-1"]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => !element.hasAttribute("hidden"));
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+  }, [onClose]);
 
   const names = new Map(users.map((user) => [user.id, user.name]));
   const markNoShow = async () => {
@@ -907,14 +1261,22 @@ function BookingDetailPanel({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-foreground/20 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="Booking details">
-      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close booking details" onClick={onClose} />
+    <div
+      ref={dialogRef}
+      className="fixed inset-0 z-40 flex justify-end bg-foreground/20 backdrop-blur-[2px]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="booking-details-title"
+      tabIndex={-1}
+    >
+      <button type="button" tabIndex={-1} className="absolute inset-0 cursor-default" aria-label="Close booking details" onClick={onClose} />
       <section className="relative z-10 h-full w-full overflow-y-auto bg-background p-5 shadow-2xl sm:max-w-xl sm:border-l sm:border-border sm:p-7">
+        <h2 id="booking-details-title" className="sr-only">Booking details</h2>
         <div className="mb-6 flex items-center justify-between">
-          <button type="button" className="text-sm font-medium text-muted-foreground hover:text-foreground" onClick={onClose}>← Back</button>
+          <button ref={closeButtonRef} type="button" className="min-h-11 rounded-md px-1 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:min-h-0" onClick={onClose}>← Back</button>
           {booking && <BookingStatus booking={booking} />}
         </div>
-        {error && <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
         {!booking && !error && <DashboardSkeleton />}
         {booking && (
           <div className="space-y-7">
@@ -1039,6 +1401,24 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
   );
 }
 
+function CopyFeedbackLabel({
+  copied,
+  idle,
+}: {
+  copied: boolean;
+  idle: string;
+}) {
+  return (
+    <>
+      <span aria-hidden="true" className="grid">
+        <span className={`col-start-1 row-start-1 ${copied ? "invisible" : ""}`}>{idle}</span>
+        <span className={`col-start-1 row-start-1 ${copied ? "" : "invisible"}`}>Copied</span>
+      </span>
+      <span className="sr-only" aria-live="polite">{copied ? "Copied" : idle}</span>
+    </>
+  );
+}
+
 function SignupSheetsTab() {
   const [sheets, setSheets] = useState<SignupSheet[] | null>(null);
   const [creating, setCreating] = useState(false);
@@ -1050,6 +1430,7 @@ function SignupSheetsTab() {
   ]);
   const [questions, setQuestions] = useState([{ label: "", required: false }]);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
   const reload = useCallback(() => {
     void listSignupSheets().then((result) => setSheets(result.sheets))
       .catch((cause: unknown) => setError(errorText(cause)));
@@ -1130,7 +1511,7 @@ function SignupSheetsTab() {
           <Plus className="h-4 w-4" /> New sign-up sheet
         </Button>
       </div>
-      {error && <p className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
       {creating && (
         <Card>
           <CardHeader><CardTitle>Create a sign-up sheet</CardTitle><CardDescription>Add fixed sessions people can enroll in.</CardDescription></CardHeader>
@@ -1186,7 +1567,17 @@ function SignupSheetsTab() {
                 <Button variant="outline" size="sm" onClick={() => {
                   window.location.href = `/api/me/signup-sheets/${encodeURIComponent(sheet.id)}/registrations.csv`;
                 }}><Download className="h-4 w-4" /> Export CSV</Button>
-                <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/signup/${sheet.publicId}`)}><Copy className="h-4 w-4" /> Copy link</Button>
+                <Button variant="outline" size="sm" onClick={() => {
+                  void navigator.clipboard.writeText(`${window.location.origin}/signup/${sheet.publicId}`)
+                    .then(() => {
+                      setCopied(sheet.id);
+                      setTimeout(() => setCopied(null), 1500);
+                    })
+                    .catch(() => setError("Could not copy the sign-up link. Try again."));
+                }}>
+                  <Copy className="h-4 w-4" />
+                  <CopyFeedbackLabel copied={copied === sheet.id} idle="Copy link" />
+                </Button>
               </div>
             </div>
           </CardHeader>
@@ -1311,11 +1702,27 @@ const DIAGNOSTIC_COPY: Record<AvailabilityDiagnostic["hosts"][number]["reason"],
   forwarded_available: "Available through configured teammate coverage",
 };
 
-function AvailabilityTroubleshooterTab() {
+function diagnosticStartValue(start: string | undefined): string {
+  if (!start) return localInputValue(new Date(Date.now() + 86_400_000));
+  const parsed = new Date(start);
+  return Number.isNaN(parsed.getTime())
+    ? localInputValue(new Date(Date.now() + 86_400_000))
+    : localInputValue(parsed);
+}
+
+function AvailabilityTroubleshooterTab({
+  initialDiagnostic,
+}: {
+  initialDiagnostic?: {
+    eventTypeId?: string;
+    start?: string;
+    durationMinutes?: number;
+  };
+}) {
   const [eventTypes, setEventTypes] = useState<AdminEventType[]>([]);
-  const [eventTypeId, setEventTypeId] = useState("");
-  const [duration, setDuration] = useState(30);
-  const [start, setStart] = useState(localInputValue(new Date(Date.now() + 86_400_000)));
+  const [eventTypeId, setEventTypeId] = useState(initialDiagnostic?.eventTypeId ?? "");
+  const [duration, setDuration] = useState(initialDiagnostic?.durationMinutes ?? 30);
+  const [start, setStart] = useState(diagnosticStartValue(initialDiagnostic?.start));
   const [result, setResult] = useState<AvailabilityDiagnostic | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1323,12 +1730,21 @@ function AvailabilityTroubleshooterTab() {
   useEffect(() => {
     listEventTypes().then(({ eventTypes: items }) => {
       setEventTypes(items);
-      if (items[0]) {
-        setEventTypeId(items[0].id);
-        setDuration(items[0].durationMinutes);
+      const requested = initialDiagnostic?.eventTypeId
+        ? items.find((item) => item.id === initialDiagnostic.eventTypeId)
+        : undefined;
+      if (initialDiagnostic?.eventTypeId && !requested) {
+        setEventTypeId("");
+        setError("That event type is no longer available. Choose another event type.");
+        return;
+      }
+      const preferred = requested ?? items[0];
+      if (preferred) {
+        setEventTypeId(preferred.id);
+        if (!initialDiagnostic?.durationMinutes) setDuration(preferred.durationMinutes);
       }
     }).catch((e) => setError(errorText(e)));
-  }, []);
+  }, [initialDiagnostic?.durationMinutes, initialDiagnostic?.eventTypeId]);
 
   const selected = eventTypes.find((eventType) => eventType.id === eventTypeId);
   const inspect = async () => {
@@ -1369,6 +1785,7 @@ function AvailabilityTroubleshooterTab() {
                 setResult(null);
               }}
             >
+              {!eventTypeId && <option value="">Choose an event type</option>}
               {eventTypes.map((eventType) => <option key={eventType.id} value={eventType.id}>{eventType.title}</option>)}
             </select>
           </div>
@@ -1390,7 +1807,7 @@ function AvailabilityTroubleshooterTab() {
           <Button disabled={loading || !eventTypeId || !start} onClick={() => void inspect()}>
             <SearchCheck className="h-4 w-4" /> {loading ? "Checking…" : "Check availability"}
           </Button>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>
 
@@ -1495,7 +1912,7 @@ function OneOffOffersTab() {
           <Plus className="h-4 w-4" /> New offer
         </Button>
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {creating && (
         <Card>
           <CardHeader>
@@ -1536,7 +1953,7 @@ function OneOffOffersTab() {
               {starts.map((start, index) => (
                 <div key={index} className="flex gap-2">
                   <Input type="datetime-local" step={900} value={start} onChange={(event) => setStarts((items) => items.map((item, i) => i === index ? event.target.value : item))} />
-                  {starts.length > 1 && <Button type="button" size="sm" className="h-10 w-10 px-0" variant="ghost" aria-label="Remove time" onClick={() => setStarts((items) => items.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button>}
+                  {starts.length > 1 && <Button type="button" size="sm" className="h-11 w-11 px-0 lg:h-10 lg:w-10" variant="ghost" aria-label="Remove time" onClick={() => setStarts((items) => items.filter((_, i) => i !== index))}><Trash2 className="h-4 w-4" /></Button>}
                 </div>
               ))}
               <Button type="button" variant="outline" className="justify-self-start" onClick={() => setStarts((items) => [...items, localInputValue(new Date(Date.now() + (items.length + 1) * 86_400_000))])}>
@@ -1571,16 +1988,23 @@ function OneOffOffersTab() {
                 void navigator.clipboard.writeText(url).then(() => {
                   setCopied(offer.id);
                   setTimeout(() => setCopied(null), 1500);
-                });
+                }).catch(() => setError("Could not copy the offer link. Try again."));
               }}>
-                <Copy className="h-4 w-4" /> {copied === offer.id ? "Copied" : "Copy link"}
+                <Copy className="h-4 w-4" />
+                <CopyFeedbackLabel copied={copied === offer.id} idle="Copy link" />
               </Button>
               {offer.status === "active" && <Button variant="ghost" size="sm" onClick={() => void revokeOneOffOffer(offer.id).then(reload).catch((e) => setError(errorText(e)))}>Revoke</Button>}
             </div>
           </CardContent>
         </Card>
       ))}
-      {!creating && offers.length === 0 && <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No one-off offers yet.</p>}
+      {!creating && offers.length === 0 && (
+        <ActionableEmptyState
+          title="No single-use offers yet"
+          description="Reserve a private set of times for one recipient. The link stops working after the first booking."
+          action={<Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Create an offer</Button>}
+        />
+      )}
     </div>
   );
 }
@@ -1611,6 +2035,7 @@ function PollsTab() {
   const [reminder1Hour, setReminder1Hour] = useState(false);
   const [inviteDrafts, setInviteDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     setPolls(null);
@@ -1768,7 +2193,7 @@ function PollsTab() {
           <Plus className="h-4 w-4" /> New poll
         </Button>
       </div>
-      {error && <p className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
       {creating && (
         <Card className="rounded-xl">
           <CardHeader><CardTitle>Create a meeting poll</CardTitle><CardDescription>Add two or more candidate times.</CardDescription></CardHeader>
@@ -1890,11 +2315,11 @@ function PollsTab() {
       )}
       {polls === null && <DashboardSkeleton />}
       {polls?.length === 0 && !creating && (
-        <div className="rounded-xl border border-dashed border-border p-10 text-center">
-          <ListChecks className="mx-auto h-6 w-6 text-muted-foreground" />
-          <p className="mt-3 font-medium">No meeting polls yet</p>
-          <p className="mt-1 text-sm text-muted-foreground">Create one when a booking link cannot settle the time.</p>
-        </div>
+        <ActionableEmptyState
+          title="No meeting polls yet"
+          description="Collect availability from a group when a booking link cannot settle the time."
+          action={<Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Create a poll</Button>}
+        />
       )}
       {polls?.map((poll) => (
         <Card key={poll.id} className="rounded-xl">
@@ -1913,7 +2338,17 @@ function PollsTab() {
                     {poll.votingOpen ? "Close voting" : "Reopen"}
                   </Button>
                 )}
-                <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(`${window.location.origin}/poll/${poll.publicId}`)}><Copy className="h-4 w-4" /> Copy link</Button>
+                <Button variant="outline" size="sm" onClick={() => {
+                  void navigator.clipboard.writeText(`${window.location.origin}/poll/${poll.publicId}`)
+                    .then(() => {
+                      setCopied(poll.id);
+                      setTimeout(() => setCopied(null), 1500);
+                    })
+                    .catch(() => setError("Could not copy the poll link. Try again."));
+                }}>
+                  <Copy className="h-4 w-4" />
+                  <CopyFeedbackLabel copied={copied === poll.id} idle="Copy link" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1939,10 +2374,26 @@ function PollsTab() {
                   <p className="text-xs text-muted-foreground">{option.yes} yes · {option.ifNeeded} if needed · {option.no} no</p>
                 </div>
                 {poll.votingOpen && <Button size="sm" variant={option.rank === 1 ? "default" : "outline"} onClick={() => void finalize(poll, option.id)}>Finalize</Button>}
+                {poll.responses && poll.responses.length > 0 && (
+                  <details className="basis-full border-t border-border pt-3 sm:hidden">
+                    <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">Participant details</summary>
+                    <ul className="mt-2 divide-y divide-border">
+                      {poll.responses.map((response) => {
+                        const choice = response.votes.find((vote) => vote.optionId === option.id)?.choice ?? "no";
+                        return (
+                          <li key={response.email} className="flex items-center justify-between gap-3 py-2 text-sm">
+                            <span className="min-w-0 truncate">{response.name}</span>
+                            <span className="capitalize text-muted-foreground">{choice.replace("_", " ")}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
+                )}
               </div>
             ))}
             {poll.responses && poll.responses.length > 0 && (
-              <div className="mt-4 overflow-x-auto border-t border-border pt-4">
+              <div className="mt-4 hidden overflow-x-auto border-t border-border pt-4 sm:block">
                 <table className="w-full min-w-[36rem] text-left text-xs">
                   <thead><tr><th className="pb-2 pr-4 font-medium">Participant</th>{poll.options.map((option) => <th key={option.id} className="px-2 pb-2 text-center font-medium">#{option.rank}</th>)}{poll.status === "finalized" && <th className="pb-2 pl-2 text-right font-medium">Delivery</th>}</tr></thead>
                   <tbody>
@@ -2091,7 +2542,54 @@ function slugify(title: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function EventTypesTab({ users }: { users: DirectoryUser[] }) {
+function eventTypeToInput(eventType: AdminEventType): EventTypeInput {
+  return {
+    slug: eventType.slug,
+    title: eventType.title,
+    description: eventType.description ?? null,
+    durationMinutes: eventType.durationMinutes,
+    selectableDurations: eventType.selectableDurations?.length
+      ? eventType.selectableDurations
+      : [eventType.durationMinutes],
+    capacity: eventType.capacity,
+    bufferBeforeMin: eventType.bufferBeforeMin,
+    bufferAfterMin: eventType.bufferAfterMin,
+    minimumNoticeMin: eventType.minimumNoticeMin,
+    rollingWindowDays: eventType.rollingWindowDays,
+    mode: eventType.mode,
+    scheduleId: eventType.scheduleId,
+    teamId: eventType.teamId,
+    theme: eventType.theme,
+    layout: eventType.layout ?? "focus",
+    logoUrl: eventType.logoUrl ?? null,
+    meetingFormats: eventType.meetingFormats ?? ["google_meet"],
+    locations: eventType.locations?.length
+      ? eventType.locations
+      : (eventType.meetingFormats ?? ["google_meet"]).map((format) => format === "phone"
+        ? {
+            id: "phone",
+            type: "phone" as const,
+            label: "Phone call",
+            phoneDirection: "organizer_calls_invitee" as const,
+          }
+        : { id: "google-meet", type: "google_meet" as const, label: "Google Meet" }),
+    bookingQuestions: eventType.bookingQuestions ?? [],
+    emailVerificationRequired: eventType.emailVerificationRequired ?? false,
+    hosts: eventType.hosts.map(({ userId, role, weight }) => ({ userId, role, weight })),
+  };
+}
+
+function EventTypesTab({
+  users,
+  initialEditor,
+  onEdit,
+  onCloseEditor,
+}: {
+  users: DirectoryUser[];
+  initialEditor?: "new" | string;
+  onEdit: (eventTypeId: "new" | string) => void;
+  onCloseEditor: () => void;
+}) {
   const [eventTypes, setEventTypes] = useState<AdminEventType[] | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -2101,7 +2599,11 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     { value: "split", label: "Split" },
     { value: "compact", label: "Compact" },
   ]);
-  const [editing, setEditing] = useState<{ id: string | null; form: EventTypeInput } | null>(null);
+  const [editing, setEditing] = useState<{ id: string | null; form: EventTypeInput } | null>(
+    initialEditor === "new" ? { id: null, form: DEFAULT_EVENT_TYPE } : null,
+  );
+  const loadedEditorRef = useRef<string | null>(initialEditor === "new" ? "new" : null);
+  const [editorNotFound, setEditorNotFound] = useState(false);
   const [embed, setEmbed] = useState<{ slug: string; mode: "inline" | "popup" } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationIssues, setValidationIssues] = useState<Array<{
@@ -2138,6 +2640,32 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     }).catch(() => undefined);
   }, [reload]);
 
+  useEffect(() => {
+    if (!initialEditor) {
+      loadedEditorRef.current = null;
+      setEditorNotFound(false);
+      setEditing(null);
+      return;
+    }
+    if (loadedEditorRef.current === initialEditor) return;
+    if (initialEditor === "new") {
+      loadedEditorRef.current = initialEditor;
+      setEditorNotFound(false);
+      setEditing({ id: null, form: DEFAULT_EVENT_TYPE });
+      return;
+    }
+    if (!eventTypes) return;
+    const eventType = eventTypes.find((candidate) => candidate.id === initialEditor);
+    loadedEditorRef.current = initialEditor;
+    if (!eventType) {
+      setEditing(null);
+      setEditorNotFound(true);
+      return;
+    }
+    setEditorNotFound(false);
+    setEditing({ id: eventType.id, form: eventTypeToInput(eventType) });
+  }, [eventTypes, initialEditor]);
+
   const save = async () => {
     if (!editing) return;
     setError(null);
@@ -2145,8 +2673,8 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     try {
       if (editing.id) await updateEventType(editing.id, editing.form);
       else await createEventType(editing.form);
-      setEditing(null);
       reload();
+      onCloseEditor();
     } catch (e) {
       setError(errorText(e));
       if (e instanceof ApiError && e.code === "invalid_body" && e.issues) {
@@ -2175,7 +2703,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     void navigator.clipboard.writeText(url).then(() => {
       setCopied(slug);
       setTimeout(() => setCopied(null), 1500);
-    });
+    }).catch(() => setError("Could not copy the booking link. Try again."));
   };
 
   const copyBookingPage = () => {
@@ -2185,7 +2713,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     void navigator.clipboard.writeText(url).then(() => {
       setCopied("booking-page");
       setTimeout(() => setCopied(null), 1500);
-    });
+    }).catch(() => setError("Could not copy the booking page link. Try again."));
   };
 
   const embedSnippet = (slug: string, mode: "inline" | "popup") => {
@@ -2202,7 +2730,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
     void navigator.clipboard.writeText(embedSnippet(slug, mode)).then(() => {
       setCopied(`embed-${slug}-${mode}`);
       setTimeout(() => setCopied(null), 1500);
-    });
+    }).catch(() => setError("Could not copy the embed code. Try again."));
   };
 
   return (
@@ -2212,20 +2740,20 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
           <CardTitle className="text-xl">Event types</CardTitle>
           <CardDescription>What invitees can book, and with whom.</CardDescription>
         </div>
-        {!editing && (
+        {!initialEditor && (
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={copyBookingPage}>
               <Copy className="mr-1 h-4 w-4" />
-              {copied === "booking-page" ? "Copied" : "Booking page"}
+              <CopyFeedbackLabel copied={copied === "booking-page"} idle="Booking page" />
             </Button>
-            <Button size="sm" onClick={() => setEditing({ id: null, form: DEFAULT_EVENT_TYPE })}>
+            <Button size="sm" onClick={() => onEdit("new")}>
               <Plus className="mr-1 h-4 w-4" /> New
             </Button>
           </div>
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {validationIssues.length > 0 && (
           <div className="rounded-xl border border-destructive/25 bg-destructive/8 p-4" role="alert">
             <p className="text-sm font-medium text-destructive">Please fix the following:</p>
@@ -2266,9 +2794,19 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
             </ul>
           </div>
         )}
-        {editing ? (
+        {editorNotFound ? (
+          <ActionableEmptyState
+            title="Event type not found"
+            description="It may have been deleted, or the link may be incorrect."
+            action={<Button size="sm" onClick={onCloseEditor}>Return to event types</Button>}
+          />
+        ) : initialEditor && !editing ? (
+          <InlineLoading label="Loading event type…" />
+        ) : editing ? (
           <EventTypeForm
+            eventTypeId={editing.id}
             form={editing.form}
+            validationIssues={validationIssues}
             users={users}
             schedules={schedules}
             teams={teams}
@@ -2278,13 +2816,17 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
               setValidationIssues([]);
               setEditing({ ...editing, form });
             }}
-            onCancel={() => setEditing(null)}
+            onCancel={onCloseEditor}
             onSave={() => void save()}
           />
         ) : !eventTypes ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <InlineLoading label="Loading event types…" />
         ) : eventTypes.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No event types yet.</p>
+          <ActionableEmptyState
+            title="No event types yet"
+            description="Create a bookable meeting with its own duration, hosts, availability, and location."
+            action={<Button size="sm" onClick={() => onEdit("new")}><Plus className="h-4 w-4" /> Create an event type</Button>}
+          />
         ) : (
           <ul className="flex flex-col gap-2">
             {eventTypes.map((et) => (
@@ -2303,7 +2845,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                 <span className="flex shrink-0 items-center gap-1">
                   <Button variant="ghost" size="sm" onClick={() => copyLink(et.slug)}>
                     <Copy className="mr-1 h-3.5 w-3.5" />
-                    {copied === et.slug ? "Copied" : "Link"}
+                    <CopyFeedbackLabel copied={copied === et.slug} idle="Link" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -2317,44 +2859,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                     variant="ghost"
                     size="sm"
                     aria-label={`Edit ${et.title}`}
-                    onClick={() =>
-                      setEditing({
-                        id: et.id,
-                        form: {
-                          slug: et.slug,
-                          title: et.title,
-                          description: et.description ?? null,
-                          durationMinutes: et.durationMinutes,
-                          selectableDurations: et.selectableDurations?.length
-                            ? et.selectableDurations
-                            : [et.durationMinutes],
-                          capacity: et.capacity,
-                          bufferBeforeMin: et.bufferBeforeMin,
-                          bufferAfterMin: et.bufferAfterMin,
-                          minimumNoticeMin: et.minimumNoticeMin,
-                          rollingWindowDays: et.rollingWindowDays,
-                          mode: et.mode,
-                          scheduleId: et.scheduleId,
-                          teamId: et.teamId,
-                          theme: et.theme,
-                          layout: et.layout ?? "focus",
-                          logoUrl: et.logoUrl ?? null,
-                          meetingFormats: et.meetingFormats ?? ["google_meet"],
-                          locations: et.locations?.length
-                            ? et.locations
-                            : (et.meetingFormats ?? ["google_meet"]).map((format) => format === "phone"
-                              ? { id: "phone", type: "phone" as const, label: "Phone call", phoneDirection: "organizer_calls_invitee" as const }
-                              : { id: "google-meet", type: "google_meet" as const, label: "Google Meet" }),
-                          bookingQuestions: et.bookingQuestions ?? [],
-                          emailVerificationRequired: et.emailVerificationRequired ?? false,
-                          hosts: et.hosts.map(({ userId, role, weight }) => ({
-                            userId,
-                            role,
-                            weight,
-                          })),
-                        },
-                      })
-                    }
+                    onClick={() => onEdit(et.id)}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
@@ -2397,7 +2902,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
                     <div className="mt-3 flex justify-end">
                       <Button size="sm" variant="outline" onClick={() => copyEmbed(et.slug, embed.mode)}>
                         <Copy className="mr-1.5 h-3.5 w-3.5" />
-                        {copied === `embed-${et.slug}-${embed.mode}` ? "Copied" : "Copy code"}
+                        <CopyFeedbackLabel copied={copied === `embed-${et.slug}-${embed.mode}`} idle="Copy code" />
                       </Button>
                     </div>
                   </div>
@@ -2406,7 +2911,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
             ))}
           </ul>
         )}
-        {eventTypes && (
+        {eventTypes && !editing && !initialEditor && (
           <BookingPagesManager
             eventTypes={eventTypes}
             bookingBase={bookingBase}
@@ -2426,6 +2931,58 @@ const DEFAULT_BOOKING_PAGE: BookingPageInput = {
   logoUrl: null,
   eventTypeIds: [],
 };
+
+type EventTypeSection = "hosts" | "availability" | "location" | "invitee" | "appearance" | "sharing";
+
+const EVENT_TYPE_SECTION_FOR_FIELD: Partial<Record<keyof EventTypeInput, EventTypeSection>> = {
+  hosts: "hosts",
+  bufferBeforeMin: "availability",
+  bufferAfterMin: "availability",
+  minimumNoticeMin: "availability",
+  rollingWindowDays: "availability",
+  scheduleId: "availability",
+  locations: "location",
+  meetingFormats: "location",
+  bookingQuestions: "invitee",
+  emailVerificationRequired: "invitee",
+  theme: "appearance",
+  layout: "appearance",
+  logoUrl: "sharing",
+  teamId: "sharing",
+};
+
+function EventTypeDisclosure({
+  section,
+  title,
+  description,
+  open,
+  onToggle,
+  children,
+}: {
+  section: EventTypeSection;
+  title: string;
+  description: string;
+  open: boolean;
+  onToggle: (section: EventTypeSection, open: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <details
+      className="rounded-lg border border-border sm:col-span-2"
+      open={open}
+      onToggle={(event) => onToggle(section, event.currentTarget.open)}
+    >
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+        <span>
+          <span className="block text-sm font-medium">{title}</span>
+          <span className="mt-0.5 block text-xs font-normal text-muted-foreground">{description}</span>
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+      </summary>
+      <div className="border-t border-border p-4">{children}</div>
+    </details>
+  );
+}
 
 function BookingPagesManager({
   eventTypes,
@@ -2482,7 +3039,7 @@ function BookingPagesManager({
           </Button>
         )}
       </div>
-      {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
       {editing ? (
         <form
           className="mt-4 grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-2"
@@ -2597,9 +3154,10 @@ function BookingPagesManager({
                 void navigator.clipboard.writeText(pageUrl(page.slug)).then(() => {
                   setCopied(page.id);
                   setTimeout(() => setCopied(null), 1500);
-                });
+                }).catch(() => setError("Could not copy the booking page link. Try again."));
               }}>
-                <Copy className="mr-1 h-3.5 w-3.5" /> {copied === page.id ? "Copied" : "Link"}
+                <Copy className="mr-1 h-3.5 w-3.5" />
+                <CopyFeedbackLabel copied={copied === page.id} idle="Link" />
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setEditing({
                 id: page.id,
@@ -2621,7 +3179,15 @@ function BookingPagesManager({
               </Button>
             </li>
           ))}
-          {!pages.length && <li className="text-sm text-muted-foreground">No custom pages yet.</li>}
+          {!pages.length && (
+            <li>
+              <ActionableEmptyState
+                title="No custom booking pages yet"
+                description="Combine selected event types into one public page for a client, service, or campaign."
+                action={<Button type="button" size="sm" variant="outline" onClick={() => setEditing({ id: null, form: DEFAULT_BOOKING_PAGE })}><Plus className="h-4 w-4" /> Create a booking page</Button>}
+              />
+            </li>
+          )}
         </ul>
       )}
     </section>
@@ -2629,7 +3195,9 @@ function BookingPagesManager({
 }
 
 function EventTypeForm({
+  eventTypeId,
   form,
+  validationIssues,
   users,
   schedules,
   teams,
@@ -2639,7 +3207,9 @@ function EventTypeForm({
   onCancel,
   onSave,
 }: {
+  eventTypeId: string | null;
   form: EventTypeInput;
+  validationIssues: Array<{ path: Array<string | number>; message: string }>;
   users: DirectoryUser[];
   schedules: Schedule[];
   teams: Team[];
@@ -2649,8 +3219,50 @@ function EventTypeForm({
   onCancel: () => void;
   onSave: () => void;
 }) {
+  const [openSections, setOpenSections] = useState<Set<EventTypeSection>>(
+    () => new Set(["hosts"]),
+  );
   const set = <K extends keyof EventTypeInput>(key: K, value: EventTypeInput[K]) =>
     onChange({ ...form, [key]: value });
+  const fieldError = (field: keyof EventTypeInput) =>
+    validationIssues.find((issue) => issue.path[0] === field)?.message;
+  const invalidProps = (field: keyof EventTypeInput) => {
+    const message = fieldError(field);
+    return message
+      ? { "aria-invalid": true as const, "aria-describedby": `et-${field}-error` }
+      : {};
+  };
+  const FieldError = ({ field }: { field: keyof EventTypeInput }) => {
+    const message = fieldError(field);
+    return message
+      ? <p id={`et-${field}-error`} className="text-xs text-destructive">{message}</p>
+      : null;
+  };
+  const invalidSections = new Set(
+    validationIssues
+      .map((issue) => EVENT_TYPE_SECTION_FOR_FIELD[issue.path[0] as keyof EventTypeInput])
+      .filter((section): section is EventTypeSection => section !== undefined),
+  );
+  const toggleSection = (section: EventTypeSection, open: boolean) => {
+    if (!open && invalidSections.has(section)) {
+      setOpenSections((current) => new Set(current));
+      return;
+    }
+    setOpenSections((current) => {
+      const next = new Set(current);
+      if (open) next.add(section);
+      else next.delete(section);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const invalidSections = validationIssues
+      .map((issue) => EVENT_TYPE_SECTION_FOR_FIELD[issue.path[0] as keyof EventTypeInput])
+      .filter((section): section is EventTypeSection => section !== undefined);
+    if (invalidSections.length === 0) return;
+    setOpenSections((current) => new Set([...current, ...invalidSections]));
+  }, [validationIssues]);
 
   const requiredHosts = form.hosts.filter((h) => h.role !== "optional").map((h) => h.userId);
   const optionalHosts = form.hosts.filter((h) => h.role === "optional").map((h) => h.userId);
@@ -2677,11 +3289,16 @@ function EventTypeForm({
         onSave();
       }}
     >
+      <div>
+        <h3 className="text-sm font-medium">Basics</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">What people book and how long it takes.</p>
+      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-title">Title</Label>
           <Input
             id="et-title"
+            {...invalidProps("title")}
             value={form.title}
             onChange={(e) => {
               const title = e.target.value;
@@ -2689,30 +3306,36 @@ function EventTypeForm({
               onChange({ ...form, title, slug: slugWasDerived ? slugify(title) : form.slug });
             }}
           />
+          <FieldError field="title" />
         </div>
         <div className="flex flex-col gap-1.5 sm:col-span-2">
           <Label htmlFor="et-description">Meeting description</Label>
           <Textarea
             id="et-description"
+            {...invalidProps("description")}
             maxLength={2000}
             value={form.description ?? ""}
             placeholder="Tell invitees what to expect and how to prepare."
             onChange={(e) => set("description", e.target.value || null)}
           />
+          <FieldError field="description" />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-slug">Slug</Label>
           <Input
             id="et-slug"
+            {...invalidProps("slug")}
             value={form.slug}
             onChange={(e) => set("slug", e.target.value)}
             placeholder="intro-call"
           />
+          <FieldError field="slug" />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-duration">Duration (min)</Label>
           <Input
             id="et-duration"
+            {...invalidProps("durationMinutes")}
             type="number"
             min={5}
             max={480}
@@ -2728,6 +3351,7 @@ function EventTypeForm({
               });
             }}
           />
+          <FieldError field="durationMinutes" />
         </div>
         <div className="flex flex-col gap-1.5 sm:col-span-2">
           <Label>Invitee duration choices</Label>
@@ -2763,6 +3387,7 @@ function EventTypeForm({
           <Label htmlFor="et-capacity">Seats per time</Label>
           <Input
             id="et-capacity"
+            {...invalidProps("capacity")}
             type="number"
             min={1}
             max={500}
@@ -2776,6 +3401,7 @@ function EventTypeForm({
               });
             }}
           />
+          <FieldError field="capacity" />
           <p className="text-xs text-muted-foreground">
             Use more than one for a shared session. Capacity sessions use solo mode.
           </p>
@@ -2784,7 +3410,8 @@ function EventTypeForm({
           <Label htmlFor="et-mode">Mode</Label>
           <select
             id="et-mode"
-            className="flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+            {...invalidProps("mode")}
+            className={`flex h-9 w-full rounded-md border bg-card px-3 py-1 text-sm shadow-sm ${fieldError("mode") ? "border-destructive" : "border-border"}`}
             value={form.mode}
             onChange={(e) => {
               const mode = e.target.value as EventTypeInput["mode"];
@@ -2799,56 +3426,74 @@ function EventTypeForm({
             <option value="round_robin">Round robin</option>
             <option value="group">Group (all hosts)</option>
           </select>
+          <FieldError field="mode" />
         </div>
+        <EventTypeDisclosure
+          section="availability"
+          title="Availability"
+          description="Schedules, booking limits, notice, and buffers."
+          open={openSections.has("availability")}
+          onToggle={toggleSection}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-buffer-before">Buffer before (min)</Label>
           <Input
             id="et-buffer-before"
+            {...invalidProps("bufferBeforeMin")}
             type="number"
             min={0}
             max={240}
             value={form.bufferBeforeMin}
             onChange={(e) => set("bufferBeforeMin", Number(e.target.value))}
           />
+          <FieldError field="bufferBeforeMin" />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-buffer-after">Buffer after (min)</Label>
           <Input
             id="et-buffer-after"
+            {...invalidProps("bufferAfterMin")}
             type="number"
             min={0}
             max={240}
             value={form.bufferAfterMin}
             onChange={(e) => set("bufferAfterMin", Number(e.target.value))}
           />
+          <FieldError field="bufferAfterMin" />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-notice">Minimum notice (min)</Label>
           <Input
             id="et-notice"
+            {...invalidProps("minimumNoticeMin")}
             type="number"
             min={0}
             max={10080}
             value={form.minimumNoticeMin}
             onChange={(e) => set("minimumNoticeMin", Number(e.target.value))}
           />
+          <FieldError field="minimumNoticeMin" />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-window">Booking window (days)</Label>
           <Input
             id="et-window"
+            {...invalidProps("rollingWindowDays")}
             type="number"
             min={1}
             max={90}
             value={form.rollingWindowDays}
             onChange={(e) => set("rollingWindowDays", Number(e.target.value))}
           />
+          <FieldError field="rollingWindowDays" />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-schedule">Schedule</Label>
           <select
             id="et-schedule"
-            className="flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+            {...invalidProps("scheduleId")}
+            className={`flex h-9 w-full rounded-md border bg-card px-3 py-1 text-sm shadow-sm ${fieldError("scheduleId") ? "border-destructive" : "border-border"}`}
             value={form.scheduleId ?? ""}
             onChange={(e) => set("scheduleId", e.target.value === "" ? null : e.target.value)}
           >
@@ -2859,12 +3504,40 @@ function EventTypeForm({
               </option>
             ))}
           </select>
+          <FieldError field="scheduleId" />
         </div>
+        {eventTypeId && (
+          <div className="sm:col-span-2">
+            <a
+              href={`/app/workspace/availability?view=troubleshooter&eventTypeId=${encodeURIComponent(eventTypeId)}&durationMinutes=${form.durationMinutes}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:min-h-8"
+            >
+              <SearchCheck className="h-4 w-4" />
+              Inspect a time for this event type
+            </a>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Opens the availability troubleshooter in a new tab, so this draft stays here.
+            </p>
+          </div>
+        )}
+          </div>
+        </EventTypeDisclosure>
+        <EventTypeDisclosure
+          section="appearance"
+          title="Appearance"
+          description="Theme and booking-page layout."
+          open={openSections.has("appearance")}
+          onToggle={toggleSection}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-theme">Theme</Label>
           <select
             id="et-theme"
-            className="flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+            {...invalidProps("theme")}
+            className={`flex h-9 w-full rounded-md border bg-card px-3 py-1 text-sm shadow-sm ${fieldError("theme") ? "border-destructive" : "border-border"}`}
             value={form.theme}
             onChange={(e) => set("theme", e.target.value)}
           >
@@ -2874,6 +3547,7 @@ function EventTypeForm({
               </option>
             ))}
           </select>
+          <FieldError field="theme" />
         </div>
         <div className="flex flex-col gap-1.5 sm:col-span-2">
           <Label>Booking layout</Label>
@@ -2896,21 +3570,16 @@ function EventTypeForm({
             })}
           </div>
         </div>
-        <label className="flex items-start gap-3 rounded-xl border border-border p-4 sm:col-span-2">
-          <input
-            type="checkbox"
-            className="mt-1 h-4 w-4 accent-primary"
-            checked={form.emailVerificationRequired ?? false}
-            onChange={(event) => set("emailVerificationRequired", event.target.checked)}
-          />
-          <span>
-            <span className="block text-sm font-medium">Verify invitee email before booking</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              Send a six-digit code before confirmation. Verified browsers are trusted for 30 days.
-            </span>
-          </span>
-        </label>
-        <div className="flex flex-col gap-3 sm:col-span-2">
+          </div>
+        </EventTypeDisclosure>
+        <EventTypeDisclosure
+          section="location"
+          title="Location"
+          description="Where the meeting happens and what invitees need to know."
+          open={openSections.has("location")}
+          onToggle={toggleSection}
+        >
+        <div className="flex flex-col gap-3">
           <div>
             <Label>Locations</Label>
             <p className="text-xs text-muted-foreground">Invitees choose one. Team hosts may override the details.</p>
@@ -2997,7 +3666,30 @@ function EventTypeForm({
             ]);
           }}><Plus className="h-4 w-4" /> Add location</Button>
         </div>
-        <div className="flex flex-col gap-3 sm:col-span-2">
+        </EventTypeDisclosure>
+        <EventTypeDisclosure
+          section="invitee"
+          title="Invitee form"
+          description="Verification and questions collected before confirmation."
+          open={openSections.has("invitee")}
+          onToggle={toggleSection}
+        >
+        <div className="flex flex-col gap-4">
+          <label className="flex items-start gap-3 rounded-xl border border-border p-4">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-primary"
+              checked={form.emailVerificationRequired ?? false}
+              onChange={(event) => set("emailVerificationRequired", event.target.checked)}
+            />
+            <span>
+              <span className="block text-sm font-medium">Verify invitee email before booking</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                Send a six-digit code before confirmation. Verified browsers are trusted for 30 days.
+              </span>
+            </span>
+          </label>
+        <div className="flex flex-col gap-3">
           <div>
             <Label>Booking questions</Label>
             <p className="text-xs text-muted-foreground">Collect structured information with each booking. Hidden fields accept URL-prefilled or API values.</p>
@@ -3054,22 +3746,35 @@ function EventTypeForm({
             ]);
           }}><Plus className="h-4 w-4" /> Add question</Button>
         </div>
+        </div>
+        </EventTypeDisclosure>
+        <EventTypeDisclosure
+          section="sharing"
+          title="Sharing"
+          description="Workspace ownership and public-page branding."
+          open={openSections.has("sharing")}
+          onToggle={toggleSection}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5 sm:col-span-2">
           <Label htmlFor="et-logo">Whitelabel logo URL</Label>
           <Input
             id="et-logo"
+            {...invalidProps("logoUrl")}
             type="url"
             value={form.logoUrl ?? ""}
             placeholder="https://example.com/logo.svg"
             onChange={(e) => set("logoUrl", e.target.value || null)}
           />
+          <FieldError field="logoUrl" />
           <p className="text-xs text-muted-foreground">Optional. TourScale uses its private brand logo automatically.</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="et-team">Team</Label>
           <select
             id="et-team"
-            className="flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+            {...invalidProps("teamId")}
+            className={`flex h-9 w-full rounded-md border bg-card px-3 py-1 text-sm shadow-sm ${fieldError("teamId") ? "border-destructive" : "border-border"}`}
             value={form.teamId ?? ""}
             onChange={(e) => set("teamId", e.target.value === "" ? null : e.target.value)}
           >
@@ -3080,9 +3785,19 @@ function EventTypeForm({
               </option>
             ))}
           </select>
+          <FieldError field="teamId" />
         </div>
+          </div>
+        </EventTypeDisclosure>
       </div>
 
+      <EventTypeDisclosure
+        section="hosts"
+        title="Hosts"
+        description="People who can be assigned or must attend."
+        open={openSections.has("hosts")}
+        onToggle={toggleSection}
+      >
       <div className="flex flex-col gap-1.5">
         <Label>{form.mode === "group" ? "Required hosts" : "Hosts"}</Label>
         <PeoplePicker
@@ -3102,6 +3817,7 @@ function EventTypeForm({
           />
         </div>
       )}
+      </EventTypeDisclosure>
 
       <div className="flex gap-2">
         <Button type="submit" disabled={!canSave}>
@@ -3117,11 +3833,12 @@ function EventTypeForm({
 
 // ---- profile and API tokens ----
 
-function ProfileTab() {
+function ProfileTab({ section }: { section: "profile" | "api" }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [tokens, setTokens] = useState<ApiTokenRecord[]>([]);
   const [tokenName, setTokenName] = useState("");
   const [newToken, setNewToken] = useState<string | null>(null);
+  const [tokenCopied, setTokenCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reloadTokens = useCallback(() => {
@@ -3131,11 +3848,14 @@ function ProfileTab() {
   }, []);
 
   useEffect(() => {
-    getProfile()
-      .then((result) => setProfile(result.profile))
-      .catch((reason: unknown) => setError(errorText(reason)));
-    reloadTokens();
-  }, [reloadTokens]);
+    if (section === "profile") {
+      getProfile()
+        .then((result) => setProfile(result.profile))
+        .catch((reason: unknown) => setError(errorText(reason)));
+    } else {
+      reloadTokens();
+    }
+  }, [reloadTokens, section]);
 
   const saveProfile = async () => {
     if (!profile) return;
@@ -3174,6 +3894,7 @@ function ProfileTab() {
     try {
       const result = await createApiToken({ name: tokenName, expiresAt: null });
       setNewToken(result.token);
+      setTokenCopied(false);
       setTokenName("");
       reloadTokens();
     } catch (reason) {
@@ -3182,15 +3903,15 @@ function ProfileTab() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-      <Card>
+    <div className="max-w-3xl">
+      {section === "profile" && <Card>
         <CardHeader>
           <CardTitle className="text-xl">Profile</CardTitle>
           <CardDescription>This identity appears on your public booking pages.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {!profile ? <p className="text-sm text-muted-foreground">Loading…</p> : (
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {!profile ? <InlineLoading label="Loading profile…" /> : (
             <>
               <div className="flex items-center gap-4">
                 {profile.image ? (
@@ -3270,9 +3991,9 @@ function ProfileTab() {
             </>
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
-      <Card>
+      {section === "api" && <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
             <KeyRound className="h-5 w-5" /> API tokens
@@ -3295,9 +4016,17 @@ function ProfileTab() {
                 type="button"
                 size="sm"
                 className="mt-2"
-                onClick={() => void navigator.clipboard.writeText(newToken)}
+                onClick={() => {
+                  void navigator.clipboard.writeText(newToken)
+                    .then(() => {
+                      setTokenCopied(true);
+                      setTimeout(() => setTokenCopied(false), 1500);
+                    })
+                    .catch(() => setError("Could not copy the token. Try again."));
+                }}
               >
-                <Copy className="mr-1 h-3.5 w-3.5" /> Copy
+                <Copy className="mr-1 h-3.5 w-3.5" />
+                <CopyFeedbackLabel copied={tokenCopied} idle="Copy" />
               </Button>
             </div>
           )}
@@ -3338,8 +4067,7 @@ function ProfileTab() {
             </ul>
           )}
         </CardContent>
-      </Card>
-      <WorkspaceCard />
+      </Card>}
     </div>
   );
 }
@@ -3385,8 +4113,8 @@ function WorkspaceCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {!workspace ? <p className="text-sm text-muted-foreground">Loading…</p> : (
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {!workspace ? <InlineLoading label="Loading workspace…" /> : (
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
               <div className="flex flex-col gap-1.5">
@@ -3552,7 +4280,7 @@ function SchedulesTab() {
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {editing ? (
           <ScheduleForm
             form={editing.form}
@@ -3562,9 +4290,13 @@ function SchedulesTab() {
             people={people}
           />
         ) : !schedules ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <InlineLoading label="Loading availability schedules…" />
         ) : schedules.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No schedules yet.</p>
+          <ActionableEmptyState
+            title="No availability schedules yet"
+            description="Set the weekly hours when invitees can book you."
+            action={<Button size="sm" onClick={() => setEditing({ id: null, form: DEFAULT_SCHEDULE })}><Plus className="h-4 w-4" /> Create a schedule</Button>}
+          />
         ) : (
           <ul className="flex flex-col gap-2">
             {schedules.map((s) => (
@@ -3978,7 +4710,7 @@ function RoutingTab({ users }: { users: DirectoryUser[] }) {
     void navigator.clipboard.writeText(url).then(() => {
       setCopied(slug);
       setTimeout(() => setCopied(null), 1500);
-    });
+    }).catch(() => setError("Could not copy the routing link. Try again."));
   };
 
   return (
@@ -3995,7 +4727,7 @@ function RoutingTab({ users }: { users: DirectoryUser[] }) {
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {editing ? (
           <RoutingFormEditor
             form={editing.form}
@@ -4007,9 +4739,13 @@ function RoutingTab({ users }: { users: DirectoryUser[] }) {
             onSave={() => void save()}
           />
         ) : !forms ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <InlineLoading label="Loading routing forms…" />
         ) : forms.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No routing forms yet.</p>
+          <ActionableEmptyState
+            title="No routing forms yet"
+            description="Ask a few questions, then direct each invitee to the right event or team."
+            action={<Button size="sm" onClick={() => setEditing({ id: null, form: DEFAULT_ROUTING_FORM })}><Plus className="h-4 w-4" /> Create a routing form</Button>}
+          />
         ) : (
           <ul className="flex flex-col gap-2">
             {forms.map((f) => (
@@ -4026,7 +4762,7 @@ function RoutingTab({ users }: { users: DirectoryUser[] }) {
                 </span>
                 <Button variant="ghost" size="sm" onClick={() => copyLink(f.slug)}>
                   <Copy className="mr-1 h-3.5 w-3.5" />
-                  {copied === f.slug ? "Copied" : "Link"}
+                  <CopyFeedbackLabel copied={copied === f.slug} idle="Link" />
                 </Button>
                 <Button
                   variant="ghost"
@@ -4586,7 +5322,7 @@ function UserManagementPanel() {
           </Button>
         </form>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {notice && <p className="text-sm text-primary">{notice}</p>}
 
         <div className="divide-y divide-border rounded-xl border border-border/70">
@@ -4710,7 +5446,7 @@ function TeamTab({ users }: { users: DirectoryUser[] }) {
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {creating && (
           <form
             className="flex items-end gap-3"
@@ -4745,9 +5481,13 @@ function TeamTab({ users }: { users: DirectoryUser[] }) {
           </form>
         )}
         {!teams ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <InlineLoading label="Loading teams…" />
         ) : teams.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No teams yet.</p>
+          <ActionableEmptyState
+            title="No teams yet"
+            description="Create a team to share round-robin and group event types with the right people."
+            action={<Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Create a team</Button>}
+          />
         ) : (
           teams.map((team) => (
             <TeamMembers key={team.id} team={team} users={users} onMembershipChange={reload} />
@@ -4817,9 +5557,9 @@ function TeamMembers({
       <p className="mb-2 text-sm font-medium">
         {team.name} <span className="text-xs font-normal text-muted-foreground">/{team.slug}</span>
       </p>
-      {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
+      {error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}
       {!members ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <InlineLoading label="Loading team members…" />
       ) : (
         <>
           <ul className="mb-3 flex flex-col gap-1.5">
@@ -4917,34 +5657,39 @@ function CalendarsTab() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
-        {!error && !calendars && <p className="text-sm text-muted-foreground">Loading…</p>}
+        {error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}
+        {!error && !calendars && <InlineLoading label="Loading calendars…" />}
         {calendars && (
           <ul className="flex flex-col gap-2">
             {calendars.map((cal) => (
               <li
                 key={cal.id}
-                className="flex flex-col gap-3 rounded-md border border-border px-3 py-3 text-sm sm:flex-row sm:items-center"
+                className="grid gap-4 rounded-md border border-border px-4 py-4 text-sm lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center"
               >
-                <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="flex min-w-0 items-start gap-3">
                   <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{cal.summary}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {cal.primary ? "Google primary · " : ""}
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {cal.id}{cal.primary ? " · Google primary" : ""}
+                    </span>
+                    <span className={`mt-1.5 inline-flex items-center gap-1.5 text-xs ${
+                      !cal.connected || cal.syncHealthy === false ? "text-destructive" : "text-muted-foreground"
+                    }`}>
+                      {cal.connected && cal.syncHealthy !== false && <CheckCircle2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" />}
                       {!cal.connected
                         ? "Not connected"
                         : cal.syncHealthy === false
                           ? "Sync needs attention"
                           : cal.lastSyncedAt
-                            ? `Synced ${new Date(cal.lastSyncedAt).toLocaleString()}`
-                            : "Initial sync pending"}
+                            ? `Healthy · synced ${new Date(cal.lastSyncedAt).toLocaleString()}`
+                            : "Connected · initial sync pending"}
                     </span>
                   </span>
                 </div>
                 {cal.connected && (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label className="flex items-center gap-2 text-xs">
+                  <div className="grid gap-2">
+                    <label className="flex min-h-11 items-center gap-2 text-xs lg:min-h-0">
                       <input
                         type="checkbox"
                         checked={cal.conflictEnabled}
@@ -4953,7 +5698,7 @@ function CalendarsTab() {
                           conflictEnabled: event.target.checked,
                         })}
                       />
-                      Check conflicts
+                      Checks conflicts on this calendar
                     </label>
                     <Button
                       size="sm"
@@ -4965,11 +5710,8 @@ function CalendarsTab() {
                       }
                       onClick={() => void updateConnection(cal, { isWriteDestination: true })}
                     >
-                      {cal.isWriteDestination ? "Booking destination" : "Set destination"}
+                      {cal.isWriteDestination ? "Adds new meetings here" : "Use for new meetings"}
                     </Button>
-                    {cal.syncHealthy !== false && (
-                      <CheckCircle2 className="h-4 w-4 text-primary" aria-label="Calendar sync healthy" />
-                    )}
                   </div>
                 )}
                 <Button

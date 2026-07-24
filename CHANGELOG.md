@@ -5,6 +5,118 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+### User-facing improvements
+
+- Clarified that continuing with Google signs existing users in and creates a
+  Calpaca account for new users.
+- Replaced the misleading mobile setup-menu action with an accurately labeled
+  availability-settings shortcut.
+- Replaced infrastructure-oriented sign-in failures with actionable guidance
+  for connection problems, expired sessions, Google cancellations, rate
+  limits, and provider failures.
+- Copy actions for booking links, booking pages, embeds, routing forms, polls,
+  sign-up sheets, one-off offers, and API tokens now confirm success without
+  shifting nearby controls.
+- Organizer loading states now identify the content being loaded instead of
+  displaying an ambiguous generic message.
+- Empty event-type, schedule, routing, team, offer, poll, and custom-page
+  states now explain their purpose and provide a direct creation action.
+- Booking details now keep keyboard focus inside the open panel, close with
+  Escape, prevent background scrolling, and return focus to the booking row
+  that opened them.
+- Poll results now use ranked time summaries with participant details on
+  mobile, removing the need to pan across a wide response matrix.
+- Calendar settings now distinguish the account, conflict-checking role,
+  new-meeting destination, and sync health of every calendar.
+- Expired offers, invalid cancellation and reschedule links, closed sign-up
+  sheets, and unknown routes now provide a safe way back to Calpaca.
+- Event-type editing now keeps Basics visible and groups Hosts, Availability,
+  Location, Invitee form, Appearance, and Sharing into named disclosures.
+  Sections containing server validation errors reopen automatically.
+- Organizer screens now have durable `/app` locations that survive refresh,
+  browser Back, and direct linking. Existing `/dashboard` links remain valid
+  during migration.
+- Mobile organizer navigation now focuses on Home, Engagements, Meetings, and
+  More. The accessible More sheet retains every existing scheduling tool and
+  workspace setting during migration.
+- Polls, sign-up sheets, routing forms, and one-off offers now appear under a
+  clearly labeled secondary Tools section on desktop.
+- Meeting details now have durable `/app/meetings/:id` links while preserving
+  the existing accessible panel, browser Back behavior, and focus return.
+- Event types now use dedicated, refresh-safe routes for creation and editing.
+  The existing fields, validation, and save behavior remain unchanged, while
+  the editor no longer competes with custom booking-page management.
+- Personal profile, workspace identity and domains, API access, people, and
+  calendar connections now have clearly scoped, refresh-safe destinations.
+  Existing settings and permissions are unchanged.
+- Existing event types can now open the availability troubleshooter with the
+  event and duration already selected. Diagnostic links open separately to
+  preserve unsaved editor changes, and can also prefill a specific time.
+
+### Accessibility improvements
+
+- Public booking, cancellation, rescheduling, routing, poll, sign-up sheet,
+  suggestion, sign-in, and organizer errors are now announced to assistive
+  technology.
+- Booking-duration and poll-response controls now expose their selected state
+  programmatically.
+- Required sign-up sheet identity and custom-question fields now use native
+  required-field semantics.
+- Custom booking-page event links now display a visible keyboard focus state.
+- Busy sign-in actions now expose their progress state to assistive technology.
+- Invalid routing-form answers now identify their controls, expose associated
+  error descriptions, and move keyboard focus to the first field that needs
+  correction.
+- Dynamic errors across every organizer dashboard workflow are now announced
+  consistently to assistive technology.
+- OAuth callback failures now return to Calpaca's sign-in screen without
+  exposing provider descriptions or unsafe error values.
+- Clipboard success is announced through polite live regions, while clipboard
+  failures use each workflow's existing error announcement.
+- In-place organizer loading messages now use consistent status semantics for
+  assistive technology.
+- The booking-detail panel now has stable dialog naming, visible initial focus,
+  and complete keyboard focus management.
+- Event-type validation summaries now focus the exact invalid control, and
+  affected fields expose linked inline messages and programmatic invalid state.
+
+### Mobile improvements
+
+- The organizer header shortcut now uses an availability icon and accessible
+  label that accurately describe its destination.
+- Poll response controls retain accessible names when their visible labels are
+  condensed on smaller screens.
+- Buttons, calendar navigation, organizer navigation, and compact icon actions
+  now provide at least 44-pixel touch targets through tablet widths while
+  retaining the existing desktop density.
+- Public and organizer poll results now remain readable without horizontal
+  panning on narrow screens; the detailed desktop matrix is preserved.
+
+### Breaking changes
+
+- None.
+
+### Screenshots changed
+
+- Updated the sign-in reference screenshot to reflect the clarified account
+  creation and Google connection messaging.
+- Added before-and-after sign-in screenshots under
+  `docs/screenshots/migration-plan/`.
+- Added empty-state and mobile touch-target comparisons under
+  `docs/screenshots/migration-plan/`.
+- Added desktop and mobile event-type route comparisons under
+  `docs/screenshots/migration-plan/l-03/`.
+- Added account, workspace, and mobile settings-navigation comparisons under
+  `docs/screenshots/migration-plan/l-05/`.
+- Added standalone and context-prefilled availability diagnostic comparisons
+  under `docs/screenshots/migration-plan/l-06/`.
+
+### Migration notes
+
+- No data or environment migration is required. Existing `/dashboard` links
+  remain valid while durable `/app` routes are introduced. APIs and business
+  logic are unchanged.
+
 ## [0.19.0] - 2026-07-23
 
 ### Added

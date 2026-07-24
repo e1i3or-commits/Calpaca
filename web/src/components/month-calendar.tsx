@@ -105,7 +105,7 @@ function NavButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30 disabled:hover:bg-transparent"
+      className="flex h-11 w-11 items-center justify-center rounded-md hover:bg-accent disabled:opacity-30 disabled:hover:bg-transparent lg:h-7 lg:w-7"
     >
       {children}
     </button>

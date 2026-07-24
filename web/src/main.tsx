@@ -6,11 +6,12 @@ import {
   createRoute,
   createRouter,
   Outlet,
+  redirect,
   RouterProvider,
 } from "@tanstack/react-router";
 import { BookingPage } from "@/pages/booking-page";
 import { CancelPage } from "@/pages/cancel-page";
-import { DashboardPage } from "@/pages/dashboard-page";
+import { DashboardPage, type DashboardView } from "@/pages/dashboard-page";
 import { ReschedulePage } from "@/pages/reschedule-page";
 import { RoutingFormPage } from "@/pages/routing-form-page";
 import { SignInPage } from "@/pages/sign-in-page";
@@ -32,6 +33,18 @@ const rootRoute = createRootRoute({
     <div className="min-h-screen bg-background text-foreground">
       <Outlet />
     </div>
+  ),
+  notFoundComponent: () => (
+    <main className="mx-auto max-w-lg px-4 py-24 text-center">
+      <BrandMark className="mx-auto h-10 w-10" />
+      <h1 className="mt-6 text-2xl font-semibold">Page not found</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Check the link or return to Calpaca to choose another scheduling option.
+      </p>
+      <a href="/" className="mt-6 inline-flex min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">
+        Return to Calpaca
+      </a>
+    </main>
   ),
 });
 
@@ -292,6 +305,170 @@ const dashboardRoute = createRoute({
   component: DashboardPage,
 });
 
+const organizerView = (view: DashboardView) => () => <DashboardPage initialView={view} />;
+
+const appIndexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app",
+  beforeLoad: () => {
+    throw redirect({ href: "/app/home" });
+  },
+  component: () => null,
+});
+
+const appHomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/home",
+  component: organizerView("home"),
+});
+
+const appEngagementsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/engagements",
+  component: organizerView("engagements"),
+});
+
+const appMeetingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/meetings",
+  component: organizerView("bookings"),
+});
+
+const appMeetingDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/meetings/$meetingId",
+  component: function AppMeetingDetailRoute() {
+    return (
+      <DashboardPage
+        initialView="bookings"
+        initialMeetingId={appMeetingDetailRoute.useParams().meetingId}
+      />
+    );
+  },
+});
+
+const appInsightsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/insights",
+  component: organizerView("analytics"),
+});
+
+const appPlaybooksRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/workspace/conversation-playbooks",
+  component: organizerView("event-types"),
+});
+
+const appNewPlaybookRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/workspace/conversation-playbooks/new",
+  component: () => <DashboardPage initialView="event-types" initialEventTypeEditor="new" />,
+});
+
+const appEditPlaybookRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/workspace/conversation-playbooks/$eventTypeId/edit",
+  component: function AppEditPlaybookRoute() {
+    return (
+      <DashboardPage
+        initialView="event-types"
+        initialEventTypeEditor={appEditPlaybookRoute.useParams().eventTypeId}
+      />
+    );
+  },
+});
+
+const appPeopleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/workspace/people",
+  component: organizerView("team"),
+});
+
+const appWorkspaceGeneralRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/workspace/general",
+  component: organizerView("workspace-general"),
+});
+
+const appWorkspaceApiRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/workspace/api",
+  component: organizerView("api"),
+});
+
+const appCalendarsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/workspace/calendars",
+  component: organizerView("calendars"),
+});
+
+const appAvailabilityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/workspace/availability",
+  validateSearch: (search: Record<string, unknown>) => {
+    const duration = typeof search.durationMinutes === "number"
+      ? search.durationMinutes
+      : typeof search.durationMinutes === "string"
+        ? Number(search.durationMinutes)
+        : undefined;
+    return {
+      view: search.view === "troubleshooter" ? "troubleshooter" as const : undefined,
+      eventTypeId: typeof search.eventTypeId === "string" ? search.eventTypeId : undefined,
+      start: typeof search.start === "string" ? search.start : undefined,
+      durationMinutes: Number.isFinite(duration) && duration! >= 5 && duration! <= 480
+        ? duration
+        : undefined,
+    };
+  },
+  component: function AppAvailabilityRoute() {
+    const { view, eventTypeId, start, durationMinutes } = appAvailabilityRoute.useSearch();
+    return (
+      <DashboardPage
+        initialView={view === "troubleshooter" ? "troubleshooter" : "schedules"}
+        initialDiagnostic={view === "troubleshooter"
+          ? { eventTypeId, start, durationMinutes }
+          : undefined}
+      />
+    );
+  },
+});
+
+const appAccountProfileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/account/profile",
+  component: organizerView("profile"),
+});
+
+const appPollsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/tools/polls",
+  component: organizerView("polls"),
+});
+
+const appSignupSheetsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/tools/signup-sheets",
+  component: organizerView("signup-sheets"),
+});
+
+const appRoutingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/tools/routing",
+  component: organizerView("routing"),
+});
+
+const appToolsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/tools",
+  validateSearch: (search: Record<string, unknown>) => ({
+    view: search.view === "one-off-offers" ? "one-off-offers" as const : undefined,
+  }),
+  component: function AppToolsRoute() {
+    const { view } = appToolsRoute.useSearch();
+    return <DashboardPage initialView={view === "one-off-offers" ? "one-off" : "polls"} />;
+  },
+});
+
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
@@ -311,6 +488,25 @@ const router = createRouter({
     signupSheetRoute,
     signupCancelRoute,
     dashboardRoute,
+    appIndexRoute,
+    appHomeRoute,
+    appEngagementsRoute,
+    appMeetingsRoute,
+    appMeetingDetailRoute,
+    appInsightsRoute,
+    appPlaybooksRoute,
+    appNewPlaybookRoute,
+    appEditPlaybookRoute,
+    appWorkspaceGeneralRoute,
+    appPeopleRoute,
+    appCalendarsRoute,
+    appWorkspaceApiRoute,
+    appAvailabilityRoute,
+    appAccountProfileRoute,
+    appPollsRoute,
+    appSignupSheetsRoute,
+    appRoutingRoute,
+    appToolsRoute,
   ]),
 });
 

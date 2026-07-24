@@ -47,6 +47,12 @@ app.use("/book/*", async (c, next) => {
 app.get("/health", (c) => c.json({ ok: true }));
 app.get("/version", (c) => c.json({ version: CALPACA_VERSION }));
 
+app.get("/api/auth/error", (c) => {
+  const error = new URL(c.req.url).searchParams.get("error");
+  const safeError = error && /^[a-z0-9_-]{1,80}$/i.test(error) ? error : "unknown";
+  return c.redirect(`/sign-in?error=${encodeURIComponent(safeError)}`);
+});
+
 app.on(["GET", "POST"], "/api/auth/*", (c) => getAuth().handler(c.req.raw));
 app.route("/", availabilityRoutes);
 app.route("/", bookingRoutes);

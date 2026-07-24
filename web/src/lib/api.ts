@@ -1251,7 +1251,11 @@ export function deleteRoutingForm(id: string): Promise<{ ok: true }> {
 export async function signInWithGoogle(callbackURL: string): Promise<string> {
   const { url } = await request<{ url: string }>("/api/auth/sign-in/social", {
     method: "POST",
-    body: JSON.stringify({ provider: "google", callbackURL }),
+    body: JSON.stringify({
+      provider: "google",
+      callbackURL,
+      errorCallbackURL: "/sign-in",
+    }),
   });
   return url;
 }

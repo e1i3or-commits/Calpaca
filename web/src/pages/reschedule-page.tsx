@@ -87,7 +87,12 @@ export function ReschedulePage({ bookingId, token }: { bookingId: string; token:
           )}
         </CardHeader>
         <CardContent>
-          {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
+          {error && !ctx && (
+            <a href="/" className="inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4">
+              Return to Calpaca
+            </a>
+          )}
 
           {!error && !ctx && <AlpacaLoader label="Finding your booking" />}
 
@@ -107,6 +112,7 @@ export function ReschedulePage({ bookingId, token }: { bookingId: string; token:
           {ctx && step.name === "confirm" && (
             <div className="flex flex-col gap-4">
               <button
+                type="button"
                 className="flex items-center gap-1 self-start text-sm text-muted-foreground hover:text-foreground"
                 onClick={() => setStep({ name: "pick" })}
               >

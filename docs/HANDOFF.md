@@ -66,3 +66,27 @@ Remaining queue items still require normal review before execution.
   notice + schedule); query a wide window before concluding "no slots."
 - `psql -tAc` with multiple statements runs them as one implicit
   transaction — one statement per invocation when that matters.
+
+## Uncommitted implementation-plan migration, 2026-07-24
+
+The frozen UX migration backlog in
+`docs/CALPACA-IMPLEMENTATION-PLAN.md` is implemented through L-06. This
+includes all Quick Wins, Small, Medium, and Large tickets:
+
+- durable organizer routes and a four-destination mobile shell;
+- focused event-type new and edit routes;
+- durable meeting-detail routes;
+- separately scoped account profile, workspace general, API, people, and
+  calendar destinations;
+- context-prefilled availability diagnostics;
+- the accessibility, recovery, loading, validation, empty-state, poll, and
+  mobile-target corrections recorded in the plan.
+
+Each completed ticket has browser evidence under
+`docs/screenshots/migration-plan/`. The final verification gate passes with
+511 tests, zero failures, plus TypeScript and ESLint.
+
+No commit, push, or deployment was performed during this migration session.
+The remaining plan consists of E-01 through E-08. E-01 requires the explicit
+lifecycle and permission ratification named in its dependency list, so epic
+implementation should not begin by inference.

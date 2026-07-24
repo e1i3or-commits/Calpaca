@@ -37,3 +37,23 @@ describe("organizer sign-in origin", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 });
+
+describe("organizer sign-in error recovery", () => {
+  test("redirects auth failures to sign-in without provider detail", async () => {
+    const response = await app.request(
+      "http://localhost/api/auth/error?error=state_mismatch&error_description=technical+detail",
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/sign-in?error=state_mismatch");
+  });
+
+  test("does not reflect an unsafe auth error value", async () => {
+    const response = await app.request(
+      "http://localhost/api/auth/error?error=%3Cscript%3E",
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/sign-in?error=unknown");
+  });
+});

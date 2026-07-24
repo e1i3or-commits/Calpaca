@@ -88,9 +88,18 @@ export function RoutingFormPage({
       setError("No booking page matches those answers. Reach out to us directly instead.");
     } catch (e) {
       if (e instanceof ApiError && e.code === "invalid_answers" && e.issues) {
-        setIssues(Object.fromEntries(e.issues.flatMap((issue) =>
+        const fieldIssues = Object.fromEntries(e.issues.flatMap((issue) =>
           issue.field && issue.reason ? [[issue.field, issue.reason]] : [],
-        )));
+        ));
+        setIssues(fieldIssues);
+        const firstInvalidField = e.issues
+          .map((issue) => issue.field)
+          .find((field) => field && document.getElementById(`rf-${field}`));
+        if (firstInvalidField) {
+          requestAnimationFrame(() => {
+            document.getElementById(`rf-${firstInvalidField}`)?.focus();
+          });
+        }
       } else if (e instanceof ApiError) {
         setError(`Something went wrong (${e.code}).`);
       } else {
@@ -109,12 +118,13 @@ export function RoutingFormPage({
           <CardDescription>Answer a few questions and we'll route you to the right booking page.</CardDescription>
         </CardHeader>
         <CardContent>
-          {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
 
           {fields === null && !error && <AlpacaLoader label="Preparing your questions" />}
 
           {fields && (
             <form
+              noValidate
               className="flex flex-col gap-4"
               onSubmit={(e) => {
                 e.preventDefault();
@@ -153,10 +163,12 @@ function FieldInput({
   onChange: (v: string | string[]) => void;
 }) {
   const id = `rf-${field.key}`;
+  const errorId = `${id}-error`;
+  const hasIssue = Boolean(issue);
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>
+      <Label htmlFor={field.type === "multiselect" ? undefined : id} id={`${id}-label`}>
         {field.label}
         {field.required && <span className="text-destructive"> *</span>}
       </Label>
@@ -165,6 +177,9 @@ function FieldInput({
         <Input
           id={id}
           type={field.type === "email" ? "email" : "text"}
+          required={field.required}
+          aria-invalid={hasIssue}
+          aria-describedby={hasIssue ? errorId : undefined}
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -173,6 +188,9 @@ function FieldInput({
       {field.type === "select" && (
         <select
           id={id}
+          required={field.required}
+          aria-invalid={hasIssue}
+          aria-describedby={hasIssue ? errorId : undefined}
           className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
@@ -187,14 +205,24 @@ function FieldInput({
       )}
 
       {field.type === "multiselect" && (
-        <div className="flex flex-col gap-1">
-          {(field.options ?? []).map((opt) => {
+        <div
+          role="group"
+          aria-labelledby={`${id}-label`}
+          aria-required={field.required}
+          aria-invalid={hasIssue}
+          aria-describedby={hasIssue ? errorId : undefined}
+          className="flex flex-col gap-1"
+        >
+          {(field.options ?? []).map((opt, index) => {
             const selected = Array.isArray(value) ? value : [];
             const checked = selected.includes(opt);
             return (
               <label key={opt} className="flex items-center gap-2 text-sm">
                 <input
+                  id={index === 0 ? id : `${id}-${index}`}
                   type="checkbox"
+                  aria-invalid={hasIssue}
+                  aria-describedby={hasIssue ? errorId : undefined}
                   checked={checked}
                   onChange={() =>
                     onChange(checked ? selected.filter((v) => v !== opt) : [...selected, opt])
@@ -208,7 +236,9 @@ function FieldInput({
       )}
 
       {issue && (
-        <p className="text-xs text-destructive">{ISSUE_TEXT[issue] ?? "Check this answer."}</p>
+        <p id={errorId} className="text-xs text-destructive">
+          {ISSUE_TEXT[issue] ?? "Check this answer."}
+        </p>
       )}
     </div>
   );

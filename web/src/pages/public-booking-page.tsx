@@ -60,7 +60,7 @@ export function PublicBookingPage({
                 ? `/book/${encodeURIComponent(workspaceSlug)}/${encodeURIComponent(eventType.slug)}`
                 : `/book/${encodeURIComponent(eventType.slug)}`;
               return (
-                <a key={eventType.slug} href={href} className="group block">
+                <a key={eventType.slug} href={href} className="group block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
                   <Card className="h-full transition duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/40 group-hover:shadow-md">
                     <CardHeader>
                       <div className="flex items-start justify-between gap-4">
@@ -84,7 +84,15 @@ export function PublicBookingPage({
             })}
           </div>
         ) : (
-          <p className="mt-12 text-center text-sm text-muted-foreground">No meetings are available yet.</p>
+          <div className="mt-12 rounded-lg border border-dashed border-border p-6">
+            <p className="font-medium">No meetings are available yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The organizer has not published any booking options. Ask them for a direct booking link.
+            </p>
+            <a href="/" className="mt-4 inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4">
+              Return to Calpaca
+            </a>
+          </div>
         )}
       </main>
     </div>
