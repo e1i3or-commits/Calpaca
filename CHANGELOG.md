@@ -13,6 +13,19 @@ tracked with annotated Git tags named `v<version>`.
   linked conversations and meetings from one overview.
 - Engagement lists support direct search and lifecycle filtering without
   changing existing booking or event-type behavior.
+- Engagements now organize scheduling as Conversation playbooks. Organizers
+  can define each conversation's purpose, required roles, preparation,
+  intended outcome, duration, host, and availability schedule.
+- Existing event types remain the scheduling source of truth. They can be
+  reused as workspace playbooks, copied into an Engagement, and opened in the
+  existing advanced editor without changing their public booking behavior.
+- Draft playbooks identify missing publishing decisions and cannot be marked
+  Ready until their scheduling and outcome requirements are complete.
+- Recommended booking times now explain the recorded availability and
+  preference signals behind their ranking. Calendar confidence is shown as
+  confirmed, delayed, or unavailable, with the evidence time when known.
+- Hosted plans are now named Cloud Basic and Cloud Pro to distinguish the
+  managed service from the self-hosted Community Edition.
 - Clarified that continuing with Google signs existing users in and creates a
   Calpaca account for new users.
 - Replaced the misleading mobile setup-menu action with an accurately labeled
@@ -63,6 +76,10 @@ tracked with annotated Git tags named `v<version>`.
 
 - Engagement creation uses associated labels, native controls, named setup
   steps, announced loading and error states, and keyboard-reachable actions.
+- Conversation navigation, editor sections, readiness feedback, loading
+  states, and save results expose explicit names and status semantics.
+- Recommendation explanations use named expandable controls, descriptive
+  confidence text, and reason types that do not rely on color alone.
 - Public booking, cancellation, rescheduling, routing, poll, sign-up sheet,
   suggestion, sign-in, and organizer errors are now announced to assistive
   technology.
@@ -93,6 +110,11 @@ tracked with annotated Git tags named `v<version>`.
 - Engagement lists become stacked, readable records on narrow screens, and
   the four-step creation map remains horizontally accessible without forcing
   a desktop form into the viewport.
+- Conversation rows stack their purpose and actions on mobile. Playbook
+  sections remain horizontally reachable, and workspace playbooks open in a
+  full-height mobile sheet.
+- Recommended times keep the booking action prominent on narrow screens while
+  placing supporting evidence in an expandable explanation.
 - The organizer header shortcut now uses an availability icon and accessible
   label that accurately describe its destination.
 - Poll response controls retain accessible names when their visible labels are
@@ -123,12 +145,19 @@ tracked with annotated Git tags named `v<version>`.
   under `docs/screenshots/migration-plan/l-06/`.
 - No existing reference screenshots changed for the additive Engagement
   release.
+- No repository screenshots changed for recommendation provenance. Pricing
+  references now render Cloud Basic and Cloud Pro in the application.
 
 ### Migration notes
 
 - Apply generated database migration `0043_tiresome_marrow.sql` before starting
   the new application version. Existing event types remain unassigned and all
   booking behavior is unchanged.
+- Apply generated migration `0044_superb_red_hulk.sql` to add playbook metadata
+  to event types. Existing event types default to Ready and retain their
+  current links, hosts, availability, and booking settings.
+- Recommendation provenance is additive and requires no migration. Clients
+  that do not render the new availability response field continue to work.
 
 ## [0.19.0] - 2026-07-23
 

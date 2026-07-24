@@ -26,6 +26,15 @@ export interface ScoredSlot {
   readonly slot: Interval;
   readonly score: number;
   readonly reasons: readonly string[];
+  readonly signals: ScoringSignals;
+}
+
+export interface ScoringSignals {
+  readonly fragmentationPenalty: number;
+  readonly consumesBlockEdge: boolean;
+  readonly adjacencyBonus: number;
+  readonly timeOfDayScore: number;
+  readonly focusBlockPenalty: number;
 }
 
 /** Weighted-sum coefficients for combining the individual signals below. */
@@ -149,7 +158,18 @@ export function scoreSlots(slots: readonly Interval[], context: ScoringContext):
       SCORING_WEIGHTS.fragmentation * fragPenalty -
       SCORING_WEIGHTS.focusBlock * focusPenalty;
 
-    return { slot, score, reasons };
+    return {
+      slot,
+      score,
+      reasons,
+      signals: {
+        fragmentationPenalty: fragPenalty,
+        consumesBlockEdge: fragPenalty === 0,
+        adjacencyBonus: adjBonus,
+        timeOfDayScore: todScore,
+        focusBlockPenalty: focusPenalty,
+      },
+    };
   });
 
   return scored.sort((a, b) => {

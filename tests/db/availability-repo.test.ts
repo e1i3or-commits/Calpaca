@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { Temporal } from "@js-temporal/polyfill";
 import * as schema from "../../src/db/schema";
 import {
+  getAvailabilityEvidenceForUsers,
   getBusyForUsers,
   getCapacityAwareBusyForUsers,
 } from "../../src/db/availability-repo";
@@ -229,6 +230,57 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("availability-repo getBusyForUse
       const busy = await getBusyForUsers([host1.id], window, db);
       expect(busy[0]?.intervals.map((interval) => interval.start.toString())).toEqual([
         "2027-05-01T09:00:00Z",
+      ]);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  test("summarizes only conflict-enabled calendar evidence for each host", async () => {
+    const { pool, db, host1, host2 } = await setup();
+    try {
+      await db.insert(schema.calendarConnections).values([
+        {
+          userId: host1.id,
+          externalCalendarId: "primary",
+          conflictEnabled: true,
+          syncHealthy: true,
+          lastSyncedAt: new Date("2027-05-01T08:30:00Z"),
+        },
+        {
+          userId: host1.id,
+          externalCalendarId: "team",
+          conflictEnabled: true,
+          syncHealthy: true,
+          lastSyncedAt: new Date("2027-05-01T08:00:00Z"),
+        },
+        {
+          userId: host2.id,
+          externalCalendarId: "ignored",
+          conflictEnabled: false,
+          syncHealthy: true,
+          lastSyncedAt: new Date("2027-05-01T09:00:00Z"),
+        },
+      ]);
+
+      const evidence = await getAvailabilityEvidenceForUsers(
+        [host1.id, host2.id],
+        db,
+      );
+
+      expect(evidence).toEqual([
+        {
+          userId: host1.id,
+          connected: true,
+          healthy: true,
+          lastSyncedAt: new Date("2027-05-01T08:00:00Z"),
+        },
+        {
+          userId: host2.id,
+          connected: false,
+          healthy: false,
+          lastSyncedAt: null,
+        },
       ]);
     } finally {
       await pool.end();

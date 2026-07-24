@@ -209,11 +209,15 @@ export function DashboardPage({
   initialEventTypeEditor,
   initialDiagnostic,
   initialEngagement,
+  initialEngagementSection,
+  initialPlaybook,
 }: {
   initialView?: DashboardView;
   initialMeetingId?: string;
   initialEventTypeEditor?: "new" | string;
   initialEngagement?: "list" | "new" | string;
+  initialEngagementSection?: "overview" | "conversations";
+  initialPlaybook?: "new" | string;
   initialDiagnostic?: {
     eventTypeId?: string;
     start?: string;
@@ -363,7 +367,14 @@ export function DashboardPage({
           {users && (
             <>
               {tab === "home" && <HomeTab onNavigate={navigateToView} />}
-              {tab === "engagements" && <EngagementsTab users={users} mode={initialEngagement} />}
+              {tab === "engagements" && (
+                <EngagementsTab
+                  users={users}
+                  mode={initialEngagement}
+                  section={initialEngagementSection}
+                  playbookId={initialPlaybook}
+                />
+              )}
               {tab === "event-types" && (
                 <EventTypesTab
                   users={users}

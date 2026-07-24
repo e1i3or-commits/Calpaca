@@ -309,6 +309,13 @@
       "when": 1784897702318,
       "tag": "0043_tiresome_marrow",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1784899842484,
+      "tag": "0044_superb_red_hulk",
+      "breakpoints": true
     }
   ]
 }

@@ -14,6 +14,15 @@ export type SlotDto = {
   localHourWarning: boolean;
   mutual?: boolean;
   seatsRemaining?: number;
+  recommendation?: {
+    confidence: "confirmed" | "needs_confirmation" | "unknown" | "stale";
+    evidenceCheckedAt?: string;
+    reasons: {
+      kind: "positive" | "tradeoff" | "warning";
+      label: string;
+      detail: string;
+    }[];
+  };
 };
 
 export type AvailabilityResponse = {
@@ -1378,6 +1387,102 @@ export function updateEngagementStatus(
     method: "PATCH",
     body: JSON.stringify({ status }),
   });
+}
+
+export type ConversationPlaybook = {
+  id: string;
+  engagementId: string | null;
+  title: string;
+  slug: string;
+  purpose: string | null;
+  clientExplanation: string | null;
+  durationMinutes: number;
+  selectableDurations: number[];
+  participantRoles: { role: string; required: boolean }[];
+  preparationItems: { label: string; required: boolean }[];
+  outcomeDefinition: string | null;
+  status: "draft" | "ready" | "retired";
+  scheduleId: string | null;
+  hosts: { userId: string; name: string; email: string; role: string }[];
+  readiness: {
+    ready: boolean;
+    issues: ("purpose" | "participants" | "outcome" | "duration" | "schedule" | "hosts")[];
+  };
+};
+
+export type ConversationPlaybookInput = Pick<
+  ConversationPlaybook,
+  | "title"
+  | "purpose"
+  | "clientExplanation"
+  | "durationMinutes"
+  | "selectableDurations"
+  | "participantRoles"
+  | "preparationItems"
+  | "outcomeDefinition"
+  | "status"
+>;
+
+export function listEngagementConversations(
+  engagementId: string,
+): Promise<{ conversations: ConversationPlaybook[] }> {
+  return request(`/api/me/engagements/${encodeURIComponent(engagementId)}/conversations`);
+}
+
+export function listWorkspacePlaybooks(
+  engagementId: string,
+): Promise<{ templates: ConversationPlaybook[] }> {
+  return request(`/api/me/engagements/${encodeURIComponent(engagementId)}/conversations/templates`);
+}
+
+export function listConversationSchedulingOptions(
+  engagementId: string,
+): Promise<{
+  schedules: { id: string; userId: string; name: string; timezone: string }[];
+}> {
+  return request(
+    `/api/me/engagements/${encodeURIComponent(engagementId)}/conversations/scheduling-options`,
+  );
+}
+
+export function attachConversationPlaybook(
+  engagementId: string,
+  eventTypeId: string,
+): Promise<{ ok: true }> {
+  return request(
+    `/api/me/engagements/${encodeURIComponent(engagementId)}/conversations/${encodeURIComponent(eventTypeId)}/attach`,
+    { method: "POST" },
+  );
+}
+
+export function createConversationPlaybook(
+  engagementId: string,
+  input: ConversationPlaybookInput & { hostUserId: string; scheduleId: string | null },
+): Promise<{ playbook: ConversationPlaybook }> {
+  return request(`/api/me/engagements/${encodeURIComponent(engagementId)}/conversations`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getConversationPlaybook(
+  engagementId: string,
+  eventTypeId: string,
+): Promise<{ playbook: ConversationPlaybook; canManage: boolean }> {
+  return request(
+    `/api/me/engagements/${encodeURIComponent(engagementId)}/conversations/${encodeURIComponent(eventTypeId)}`,
+  );
+}
+
+export function updateConversationPlaybook(
+  engagementId: string,
+  eventTypeId: string,
+  input: ConversationPlaybookInput,
+): Promise<{ playbook: ConversationPlaybook }> {
+  return request(
+    `/api/me/engagements/${encodeURIComponent(engagementId)}/conversations/${encodeURIComponent(eventTypeId)}`,
+    { method: "PATCH", body: JSON.stringify(input) },
+  );
 }
 
 export function analyticsCsvUrl(from: string, to: string): string {

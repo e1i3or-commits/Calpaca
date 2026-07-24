@@ -8,10 +8,10 @@ function overlaps(left: Interval, right: Interval): boolean {
     && Temporal.Instant.compare(left.end, right.start) > 0;
 }
 
-export function rankByMutualAvailability(
-  slots: readonly RankedSlot[],
+export function rankByMutualAvailability<T extends RankedSlot>(
+  slots: readonly T[],
   inviteeBusy: readonly Interval[],
-): { slot: Interval; score: number; mutual: boolean }[] {
+): (T & { mutual: boolean })[] {
   return slots
     .map((candidate) => ({
       ...candidate,

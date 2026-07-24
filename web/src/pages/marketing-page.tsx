@@ -57,7 +57,7 @@ const features = [
 
 const plans = [
   {
-    label: "Hosted Basic",
+    label: "Cloud Basic",
     title: "Free",
     price: "$0",
     priceNote: "forever",
@@ -68,7 +68,7 @@ const plans = [
     featured: false,
   },
   {
-    label: "Hosted Pro",
+    label: "Cloud Pro",
     title: "For teams",
     price: "$7",
     priceNote: "per user / month",

@@ -196,6 +196,13 @@ export interface HostBusy {
   readonly intervals: readonly Interval[];
 }
 
+export interface HostAvailabilityEvidence {
+  readonly userId: string;
+  readonly connected: boolean;
+  readonly healthy: boolean;
+  readonly lastSyncedAt: Date | null;
+}
+
 function toInstant(date: Date): Temporal.Instant {
   return Temporal.Instant.fromEpochMilliseconds(date.getTime());
 }
@@ -432,6 +439,44 @@ export async function getBusyForUsers(
   }
 
   return [...byUser.entries()].map(([userId, intervals]) => ({ userId, intervals }));
+}
+
+export async function getAvailabilityEvidenceForUsers(
+  userIds: readonly string[],
+  executor: Db = getDb(),
+): Promise<HostAvailabilityEvidence[]> {
+  if (userIds.length === 0) return [];
+  const rows = await executor
+    .select({
+      userId: calendarConnections.userId,
+      syncHealthy: calendarConnections.syncHealthy,
+      lastSyncedAt: calendarConnections.lastSyncedAt,
+    })
+    .from(calendarConnections)
+    .where(and(
+      inArray(calendarConnections.userId, [...userIds]),
+      eq(calendarConnections.conflictEnabled, true),
+    ));
+  const byUser = new Map<string, typeof rows>();
+  for (const row of rows) {
+    byUser.set(row.userId, [...(byUser.get(row.userId) ?? []), row]);
+  }
+  return userIds.map((userId) => {
+    const connections = byUser.get(userId) ?? [];
+    const checked = connections.flatMap((connection) =>
+      connection.lastSyncedAt ? [connection.lastSyncedAt] : [],
+    );
+    return {
+      userId,
+      connected: connections.length > 0,
+      healthy: connections.length > 0
+        && connections.every((connection) => connection.syncHealthy)
+        && checked.length === connections.length,
+      lastSyncedAt: checked.length
+        ? new Date(Math.min(...checked.map((date) => date.getTime())))
+        : null,
+    };
+  });
 }
 
 export async function getCapacityAwareBusyForUsers(

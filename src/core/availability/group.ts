@@ -1,7 +1,12 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { intersectMany, subtract, type Interval } from "./intervals";
 import { generateSlots, type SlotConfig } from "./slots";
-import { scoreSlots, type HostPrefs } from "./scoring";
+import {
+  scoreSlots,
+  type HostPrefs,
+  type ScoredSlot,
+  type ScoringSignals,
+} from "./scoring";
 
 export type HostRole = "required" | "optional";
 
@@ -19,6 +24,8 @@ export interface GroupHost {
 export interface GroupScoredSlot {
   readonly slot: Interval;
   readonly score: number;
+  readonly signals: ScoringSignals;
+  readonly optionalParticipantConflict: boolean;
 }
 
 export interface QuorumFallback {
@@ -53,14 +60,14 @@ function isFreeForHost(slot: Interval, host: GroupHost): boolean {
   );
 }
 
-function scoreForHost(candidates: readonly Interval[], host: GroupHost): Map<string, number> {
+function scoreForHost(candidates: readonly Interval[], host: GroupHost): Map<string, ScoredSlot> {
   const ranked = scoreSlots(candidates, {
     busy: host.busy,
     open: host.open,
     prefs: host.prefs,
     timezone: host.timezone,
   });
-  return new Map(ranked.map((r) => [slotKey(r.slot), r.score]));
+  return new Map(ranked.map((r) => [slotKey(r.slot), r]));
 }
 
 /** Averages per-host scores (task 08) across every host in the group, discounting
@@ -77,15 +84,36 @@ function scoreGroupSlots(
 
   const scored = candidates.map((slot) => {
     const key = slotKey(slot);
-    const contributions = requiredScoreMaps.map((m) => m.get(key)!);
+    const scored = requiredScoreMaps.map((m) => m.get(key)!);
+    let optionalParticipantConflict = false;
 
     optional.forEach((host, i) => {
-      const base = optionalScoreMaps[i]!.get(key)!;
-      contributions.push(isFreeForHost(slot, host) ? base : base - OPTIONAL_CONFLICT_PENALTY);
+      const hostScore = optionalScoreMaps[i]!.get(key)!;
+      if (isFreeForHost(slot, host)) {
+        scored.push(hostScore);
+      } else {
+        optionalParticipantConflict = true;
+        scored.push({ ...hostScore, score: hostScore.score - OPTIONAL_CONFLICT_PENALTY });
+      }
     });
 
-    const score = contributions.reduce((a, b) => a + b, 0) / contributions.length;
-    return { slot, score };
+    const score = scored.reduce((sum, item) => sum + item.score, 0) / scored.length;
+    const average = (field: keyof Pick<
+      ScoringSignals,
+      "fragmentationPenalty" | "adjacencyBonus" | "timeOfDayScore" | "focusBlockPenalty"
+    >) => scored.reduce((sum, item) => sum + item.signals[field], 0) / scored.length;
+    return {
+      slot,
+      score,
+      signals: {
+        fragmentationPenalty: average("fragmentationPenalty"),
+        consumesBlockEdge: scored.every((item) => item.signals.consumesBlockEdge),
+        adjacencyBonus: average("adjacencyBonus"),
+        timeOfDayScore: average("timeOfDayScore"),
+        focusBlockPenalty: average("focusBlockPenalty"),
+      },
+      optionalParticipantConflict,
+    };
   });
 
   return scored.sort((a, b) => {

@@ -21,6 +21,15 @@ interface SlotDto {
   readonly end: { readonly utc: string; readonly invitee: string };
   readonly score: number;
   readonly localHourWarning: boolean;
+  readonly recommendation: {
+    readonly confidence: "confirmed" | "needs_confirmation" | "unknown" | "stale";
+    readonly evidenceCheckedAt?: string;
+    readonly reasons: {
+      readonly kind: "positive" | "tradeoff" | "warning";
+      readonly label: string;
+      readonly detail: string;
+    }[];
+  };
 }
 
 interface AvailabilityResponse {
@@ -147,6 +156,44 @@ describe("GET /availability", () => {
       "2027-01-04T09:30:00Z",
     ]);
     expect(body.all[2]?.start.utc).toBe("2027-01-04T09:15:00Z");
+    expect(body.curated[0]?.recommendation.confidence).toBe("unknown");
+    expect(body.curated[0]?.recommendation.reasons.length).toBeGreaterThanOrEqual(2);
+    expect(body.curated[0]?.recommendation.reasons.length).toBeLessThanOrEqual(4);
+    expect(Object.keys(body.curated[0]?.recommendation.reasons[0] ?? {}).sort())
+      .toEqual(["detail", "kind", "label"]);
+  });
+
+  test("recommendation confidence is derived from calendar evidence freshness", async () => {
+    const freshRouter = createAvailabilityRoutes({
+      ...makeDeps(),
+      getAvailabilityEvidenceForUsers: async (userIds) => userIds.map((userId) => ({
+        userId,
+        connected: true,
+        healthy: true,
+        lastSyncedAt: new Date("2027-01-03T23:55:00Z"),
+      })),
+    });
+    const fresh = await json(await freshRouter.request(
+      `/availability?${baseParams("solo-30").toString()}`,
+    ));
+    expect(fresh.curated[0]?.recommendation).toMatchObject({
+      confidence: "confirmed",
+      evidenceCheckedAt: "2027-01-03T23:55:00.000Z",
+    });
+
+    const staleRouter = createAvailabilityRoutes({
+      ...makeDeps(),
+      getAvailabilityEvidenceForUsers: async (userIds) => userIds.map((userId) => ({
+        userId,
+        connected: true,
+        healthy: true,
+        lastSyncedAt: new Date("2027-01-02T00:00:00Z"),
+      })),
+    });
+    const stale = await json(await staleRouter.request(
+      `/availability?${baseParams("solo-30").toString()}`,
+    ));
+    expect(stale.curated[0]?.recommendation.confidence).toBe("stale");
   });
 
   test("solo: OOO forwarding offers the teammate's availability", async () => {

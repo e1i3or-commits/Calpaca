@@ -8,6 +8,7 @@ import {
   getPublicBookingPage as dbGetPublicBookingPage,
   getSchedulesForUsers as dbGetSchedulesForUsers,
   getBusyForUsers as dbGetBusyForUsers,
+  getAvailabilityEvidenceForUsers as dbGetAvailabilityEvidenceForUsers,
   getCapacityAwareBusyForUsers as dbGetCapacityAwareBusyForUsers,
   getEventTypeSlotOccupancy as dbGetEventTypeSlotOccupancy,
   type EventTypeConfig,
@@ -15,6 +16,7 @@ import {
   type EventTypeProfile,
   type HostSchedule,
   type HostBusy,
+  type HostAvailabilityEvidence,
   type PublicBookingPage,
 } from "../../db/availability-repo";
 import {
@@ -29,6 +31,12 @@ import {
 } from "../../core/availability/intervals";
 import { generateSlots, type SlotConfig } from "../../core/availability/slots";
 import { scoreSlots } from "../../core/availability/scoring";
+import type { ScoringSignals } from "../../core/availability/scoring";
+import {
+  confidenceFromEvidence,
+  recommendationProvenance,
+  type RecommendationProvenance,
+} from "../../core/availability/provenance";
 import { groupAvailability, type GroupHost } from "../../core/availability/group";
 import { resolveBookingLayout, resolveTheme } from "../../core/theming/themes";
 import { publicWorkspaceId } from "../public-workspace";
@@ -56,6 +64,9 @@ export interface AvailabilityDeps {
   readonly getEventTypeProfile?: (eventTypeId: string) => Promise<EventTypeProfile>;
   readonly getSchedulesForUsers: (userIds: readonly string[]) => Promise<HostSchedule[]>;
   readonly getBusyForUsers: (userIds: readonly string[], window: Interval) => Promise<HostBusy[]>;
+  readonly getAvailabilityEvidenceForUsers?: (
+    userIds: readonly string[],
+  ) => Promise<HostAvailabilityEvidence[]>;
   readonly getCapacityAwareBusyForUsers?: (
     userIds: readonly string[],
     window: Interval,
@@ -86,6 +97,8 @@ const defaultDeps: AvailabilityDeps = {
   getEventTypeProfile: (eventTypeId) => dbGetEventTypeProfile(eventTypeId),
   getSchedulesForUsers: (userIds) => dbGetSchedulesForUsers(userIds),
   getBusyForUsers: (userIds, window) => dbGetBusyForUsers(userIds, window),
+  getAvailabilityEvidenceForUsers: (userIds) =>
+    dbGetAvailabilityEvidenceForUsers(userIds),
   getCapacityAwareBusyForUsers: (userIds, window, eventTypeId, capacity) =>
     dbGetCapacityAwareBusyForUsers(userIds, window, eventTypeId, capacity),
   getEventTypeSlotOccupancy: (eventTypeId, window, now) =>
@@ -118,6 +131,7 @@ interface SlotDto {
   readonly localHourWarning: boolean;
   readonly mutual?: boolean;
   readonly seatsRemaining?: number;
+  readonly recommendation: RecommendationProvenance;
 }
 
 const LOCAL_HOUR_MIN = 7;
@@ -135,6 +149,7 @@ function renderSlot(
   inviteeTimezone: string,
   mutual?: boolean,
   seatsRemaining?: number,
+  recommendation?: RecommendationProvenance,
 ): SlotDto {
   return {
     start: {
@@ -147,6 +162,18 @@ function renderSlot(
     },
     score,
     localHourWarning: isOutsideLocalHours(slot.start, inviteeTimezone),
+    recommendation: recommendation ?? {
+      confidence: "unknown",
+      reasons: [{
+        kind: "warning",
+        label: "Calendar verification unavailable",
+        detail: "This time matches configured availability, but current calendar evidence is unavailable.",
+      }, {
+        kind: "positive",
+        label: "Fits the booking rules",
+        detail: "This time satisfies duration, notice, buffer, and availability requirements.",
+      }],
+    },
     ...(mutual === undefined ? {} : { mutual }),
     ...(seatsRemaining === undefined ? {} : { seatsRemaining }),
   };
@@ -193,6 +220,14 @@ function freeForHost(
   return normalize([...own, ...forwarded]);
 }
 
+type ProvenanceSlot = {
+  slot: Interval;
+  score: number;
+  signals: ScoringSignals;
+  hostUserId?: string;
+  optionalParticipantConflict: boolean;
+};
+
 /**
  * Availability with no hosts[] filter: union of every host configured on the
  * event type (mirrors src/core/assignment/round-robin.ts teamAvailability),
@@ -207,8 +242,8 @@ function soloAvailability(
   config: SlotConfig,
   window: Interval,
   now: Temporal.Instant,
-): { slot: Interval; score: number }[] {
-  const bestByKey = new Map<string, { slot: Interval; score: number }>();
+): ProvenanceSlot[] {
+  const bestByKey = new Map<string, ProvenanceSlot>();
 
   for (const host of hosts) {
     const schedule = schedulesByUser.get(host.userId);
@@ -219,11 +254,17 @@ function soloAvailability(
     const candidates = generateSlots(open, { ...config, timezone: schedule.timezone }, now);
     const scored = scoreSlots(candidates, { busy, open, prefs: {}, timezone: schedule.timezone });
 
-    for (const { slot, score } of scored) {
+    for (const { slot, score, signals } of scored) {
       const key = slotKey(slot);
       const existing = bestByKey.get(key);
       if (!existing || score > existing.score) {
-        bestByKey.set(key, { slot, score });
+        bestByKey.set(key, {
+          slot,
+          score,
+          signals,
+          hostUserId: host.userId,
+          optionalParticipantConflict: false,
+        });
       }
     }
   }
@@ -432,6 +473,21 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     const busyByUser = new Map(busyRows.map((b) => [b.userId, b.intervals]));
 
     const now = deps.now();
+    const evidenceRows = deps.getAvailabilityEvidenceForUsers
+      ? await deps.getAvailabilityEvidenceForUsers(userIds)
+      : [];
+    const evidenceByUser = new Map(evidenceRows.map((evidence) => [
+      evidence.userId,
+      {
+        connected: evidence.connected,
+        healthy: evidence.healthy
+          && evidence.lastSyncedAt !== null
+          && now.epochMilliseconds - evidence.lastSyncedAt.getTime() <= 86_400_000,
+        ...(evidence.lastSyncedAt
+          ? { checkedAt: evidence.lastSyncedAt.toISOString() }
+          : {}),
+      },
+    ]));
     const baseConfig: SlotConfig = {
       durationMinutes,
       bufferBeforeMin: eventType.bufferBeforeMin,
@@ -442,7 +498,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       timezone: "UTC",
     };
 
-    let scoredSlots: { slot: Interval; score: number }[];
+    let scoredSlots: ProvenanceSlot[];
     let quorum:
       | {
           missingHost: { id: string; name: string };
@@ -485,9 +541,37 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
             id: bestFallback.missingUserId,
             name: missingHost?.name ?? bestFallback.missingUserId,
           },
-          slots: bestFallback.slots.map((s) =>
-            renderSlot(s.slot, s.score, inviteeTimezone),
-          ),
+          slots: bestFallback.slots.map((s) => {
+            const requiredIds = selectedHosts
+              .filter((host) =>
+                groupHostRole(host.role) === "required"
+                && host.userId !== bestFallback.missingUserId,
+              )
+              .map((host) => host.userId);
+            const confidence = confidenceFromEvidence(
+              requiredIds.flatMap((id) => {
+                const evidence = evidenceByUser.get(id);
+                return evidence ? [evidence] : [];
+              }),
+              requiredIds.length,
+            );
+            const localHourWarning = isOutsideLocalHours(s.slot.start, inviteeTimezone);
+            return renderSlot(
+              s.slot,
+              s.score,
+              inviteeTimezone,
+              undefined,
+              undefined,
+              recommendationProvenance({
+                signals: s.signals,
+                ...confidence,
+                inviteeCalendarConnected: false,
+                localHourWarning,
+                requiredParticipantCount: requiredIds.length,
+                optionalParticipantConflict: s.optionalParticipantConflict,
+              }),
+            );
+          }),
         };
       }
     } else {
@@ -510,14 +594,27 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
           }
         })
       : null;
-    const ranked: { slot: Interval; score: number; mutual?: boolean }[] = inviteeBusy
+    const ranked: (ProvenanceSlot & { mutual?: boolean })[] = inviteeBusy
       ? rankByMutualAvailability(scoredSlots, inviteeBusy)
       : scoredSlots;
     const occupancy = capacity > 1 && deps.getEventTypeSlotOccupancy
       ? await deps.getEventTypeSlotOccupancy(eventType.id, window, now)
       : null;
-    const rendered = ranked.map((s) =>
-      renderSlot(
+    const rendered = ranked.map((s) => {
+      const requiredIds = s.hostUserId
+        ? [s.hostUserId]
+        : selectedHosts
+            .filter((host) => groupHostRole(host.role) === "required")
+            .map((host) => host.userId);
+      const confidence = confidenceFromEvidence(
+        requiredIds.flatMap((id) => {
+          const evidence = evidenceByUser.get(id);
+          return evidence ? [evidence] : [];
+        }),
+        requiredIds.length,
+      );
+      const localHourWarning = isOutsideLocalHours(s.slot.start, inviteeTimezone);
+      return renderSlot(
         s.slot,
         s.score,
         inviteeTimezone,
@@ -525,8 +622,17 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
         occupancy
           ? Math.max(0, capacity - (occupancy.get(s.slot.start.toString()) ?? 0))
           : undefined,
-      ),
-    ).filter((slot) => slot.seatsRemaining === undefined || slot.seatsRemaining > 0);
+        recommendationProvenance({
+          signals: s.signals,
+          ...confidence,
+          mutual: s.mutual,
+          inviteeCalendarConnected: inviteeBusy !== null,
+          localHourWarning,
+          requiredParticipantCount: requiredIds.length,
+          optionalParticipantConflict: s.optionalParticipantConflict,
+        }),
+      );
+    }).filter((slot) => slot.seatsRemaining === undefined || slot.seatsRemaining > 0);
     const curated = rendered.slice(0, eventType.curatedSlotCount);
 
     return c.json({

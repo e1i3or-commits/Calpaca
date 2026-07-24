@@ -571,6 +571,12 @@ Complexity estimates assume one experienced engineer familiar with the codebase.
 - **Before screenshot:** EventTypeForm
 - **After screenshot:** Conversations and playbook editor per 3.6 and 3.7
 - **Ticket:** Existing event settings remain source-of-truth until mapping is verified.
+- **Status:** Implemented
+- **Evidence:** Generated migration `0044_superb_red_hulk.sql`; pure readiness
+  tests; API and database adapter tests; Engagement Conversation list, reusable
+  workspace playbooks, and focused playbook editor at durable Engagement
+  routes. Existing event-type identifiers and public booking behavior remain
+  authoritative, while workspace playbooks are copied rather than consumed.
 
 #### E-03: Explainable recommendation provenance
 
@@ -582,6 +588,14 @@ Complexity estimates assume one experienced engineer familiar with the codebase.
 - **Before screenshot:** Best times without reasons
 - **After screenshot:** Recommendation review per 3.9
 - **Ticket:** No generated reasons lacking deterministic signal.
+- **Status:** Implemented
+- **Evidence:** Availability scoring now emits structured deterministic signals
+  without changing slot eligibility or ordering. The API derives calendar
+  confidence from conflict-enabled connection health and sync freshness, and
+  serializes two to four public-safe reasons for every recommended time. The
+  booking UI exposes confidence, evidence freshness, and an expandable
+  explanation without showing internal scores, identifiers, or provider
+  details. Pure core, API, and database adapter tests cover the contract.
 
 #### E-04: Proposal lifecycle
 

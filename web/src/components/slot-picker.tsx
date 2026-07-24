@@ -34,6 +34,23 @@ function currentCursor(timezone: string): Cursor {
   return { year: Number(y), month: Number(m) };
 }
 
+const confidenceLabels = {
+  confirmed: "Confirmed",
+  needs_confirmation: "Needs confirmation",
+  unknown: "Evidence unavailable",
+  stale: "Evidence delayed",
+} as const;
+
+function evidenceTime(iso: string, timezone: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: timezone,
+  }).format(new Date(iso));
+}
+
 export function SlotPicker(props: {
   slug: string;
   workspaceSlug?: string;
@@ -169,22 +186,53 @@ function SlotPickerInner({
         <div className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">Best times</p>
           {curated.map((slot) => (
-            <Button
-              key={slot.start.utc}
-              variant="outline"
-              size="lg"
-              className="justify-between"
-              onClick={() => onPick(slot)}
-            >
-              <span>{formatDayTime(slot.start.utc, timezone)}</span>
-              {slot.seatsRemaining !== undefined && (
-                <span className="text-xs text-muted-foreground">
-                  {slot.seatsRemaining} seat{slot.seatsRemaining === 1 ? "" : "s"} left
+            <div key={slot.start.utc} className="rounded-lg border border-border bg-card">
+              <button
+                type="button"
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => onPick(slot)}
+              >
+                <span className="font-medium">{formatDayTime(slot.start.utc, timezone)}</span>
+                <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {slot.recommendation && confidenceLabels[slot.recommendation.confidence]}
+                  {slot.seatsRemaining !== undefined && (
+                    <span>{slot.seatsRemaining} seat{slot.seatsRemaining === 1 ? "" : "s"} left</span>
+                  )}
+                  {slot.mutual && <CalendarCheck aria-label="Works with your calendar" className="h-4 w-4 text-primary" />}
+                  {slot.localHourWarning && <AlertTriangle aria-label="Outside typical local hours" className="h-4 w-4 text-warning" />}
                 </span>
+              </button>
+              {slot.recommendation && (
+                <div className="border-t border-border px-4 py-3">
+                  <ul className="space-y-1.5">
+                    {slot.recommendation.reasons.slice(0, 2).map((reason) => (
+                      <li key={reason.label} className="text-sm">
+                        <span className="font-medium">{reason.label}</span>
+                        <span className="text-muted-foreground"> · {reason.detail}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {(slot.recommendation.reasons.length > 2 || slot.recommendation.evidenceCheckedAt) && (
+                    <details className="mt-2 text-sm">
+                      <summary className="min-h-11 cursor-pointer py-3 text-muted-foreground">Why this time</summary>
+                      <ul className="space-y-2 pb-2">
+                        {slot.recommendation.reasons.slice(2).map((reason) => (
+                          <li key={reason.label}>
+                            <span className="font-medium">{reason.label}</span>
+                            <span className="text-muted-foreground"> · {reason.detail}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {slot.recommendation.evidenceCheckedAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Calendar evidence checked {evidenceTime(slot.recommendation.evidenceCheckedAt, timezone)}
+                        </p>
+                      )}
+                    </details>
+                  )}
+                </div>
               )}
-              {slot.mutual && <CalendarCheck aria-label="Works with your calendar" className="h-4 w-4 text-primary" />}
-              {slot.localHourWarning && <AlertTriangle className="h-4 w-4 text-warning" />}
-            </Button>
+            </div>
           ))}
         </div>
       )}

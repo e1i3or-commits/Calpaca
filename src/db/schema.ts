@@ -42,6 +42,9 @@ export const engagementVisibility = pgEnum("engagement_visibility", [
 export const engagementType = pgEnum("engagement_type", [
   "project", "retainer", "discovery", "internal", "other",
 ]);
+export const playbookStatus = pgEnum("playbook_status", [
+  "draft", "ready", "retired",
+]);
 
 // Doubles as BetterAuth's user model (drizzleAdapter usePlural maps user ->
 // users). BetterAuth requires emailVerified/image/updatedAt; timezone and
@@ -342,8 +345,20 @@ export const eventTypes = pgTable("event_types", {
   agentPolicy: jsonb("agent_policy").$type<{
     enabled: boolean; autoExpireHoldsMin?: number;
   }>().notNull().default({ enabled: false }),
+  playbookStatus: playbookStatus("playbook_status").notNull().default("ready"),
+  purpose: text("purpose"),
+  participantRoles: jsonb("participant_roles").$type<{
+    role: string;
+    required: boolean;
+  }[]>().notNull().default([]),
+  preparationItems: jsonb("preparation_items").$type<{
+    label: string;
+    required: boolean;
+  }[]>().notNull().default([]),
+  outcomeDefinition: text("outcome_definition"),
 }, (t) => [
   uniqueIndex("event_type_workspace_slug_uq").on(t.workspaceId, t.slug),
+  index("event_type_engagement_idx").on(t.engagementId),
 ]);
 
 export const bookingPages = pgTable("booking_pages", {

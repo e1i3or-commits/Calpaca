@@ -347,6 +347,51 @@ const appEngagementDetailRoute = createRoute({
   },
 });
 
+const appEngagementConversationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/engagements/$engagementId/conversations",
+  component: function AppEngagementConversationsRoute() {
+    return (
+      <DashboardPage
+        initialView="engagements"
+        initialEngagement={appEngagementConversationsRoute.useParams().engagementId}
+        initialEngagementSection="conversations"
+      />
+    );
+  },
+});
+
+const appNewConversationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/engagements/$engagementId/conversations/new",
+  component: function AppNewConversationRoute() {
+    return (
+      <DashboardPage
+        initialView="engagements"
+        initialEngagement={appNewConversationRoute.useParams().engagementId}
+        initialEngagementSection="conversations"
+        initialPlaybook="new"
+      />
+    );
+  },
+});
+
+const appEditConversationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/engagements/$engagementId/conversations/$playbookId/edit",
+  component: function AppEditConversationRoute() {
+    const params = appEditConversationRoute.useParams();
+    return (
+      <DashboardPage
+        initialView="engagements"
+        initialEngagement={params.engagementId}
+        initialEngagementSection="conversations"
+        initialPlaybook={params.playbookId}
+      />
+    );
+  },
+});
+
 const appMeetingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/app/meetings",
@@ -512,6 +557,9 @@ const router = createRouter({
     appEngagementsRoute,
     appNewEngagementRoute,
     appEngagementDetailRoute,
+    appEngagementConversationsRoute,
+    appNewConversationRoute,
+    appEditConversationRoute,
     appMeetingsRoute,
     appMeetingDetailRoute,
     appInsightsRoute,
