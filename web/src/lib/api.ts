@@ -1298,6 +1298,88 @@ export function getAnalytics(from: string, to: string): Promise<AnalyticsReport>
   return request(`/api/me/analytics?${new URLSearchParams({ from, to })}`);
 }
 
+export type EngagementStatus =
+  | "draft"
+  | "potential"
+  | "active"
+  | "paused"
+  | "completed"
+  | "archived";
+
+export type EngagementSummary = {
+  id: string;
+  name: string;
+  type: "project" | "retainer" | "discovery" | "internal" | "other";
+  status: EngagementStatus;
+  visibility: "workspace" | "restricted";
+  clientId: string;
+  clientName: string;
+  accountLeadUserId: string;
+  accountLeadName: string;
+  expectedEndDate: string | null;
+  updatedAt: string;
+};
+
+export type EngagementDetail = EngagementSummary & {
+  createdAt: string;
+  canManage: boolean;
+  people: { userId: string; name: string; email: string; role: string }[];
+  eventTypes: { id: string; title: string; slug: string }[];
+  meetings: {
+    id: string;
+    inviteeName: string;
+    startsAt: string;
+    status: string;
+  }[];
+};
+
+export function listEngagements(input: {
+  search?: string;
+  status?: EngagementStatus;
+} = {}): Promise<{ engagements: EngagementSummary[] }> {
+  const query = new URLSearchParams();
+  if (input.search) query.set("search", input.search);
+  if (input.status) query.set("status", input.status);
+  const suffix = query.size ? `?${query}` : "";
+  return request(`/api/me/engagements${suffix}`);
+}
+
+export function getEngagement(id: string): Promise<{ engagement: EngagementDetail }> {
+  return request(`/api/me/engagements/${encodeURIComponent(id)}`);
+}
+
+export function findSimilarClients(name: string): Promise<{
+  clients: { id: string; name: string }[];
+}> {
+  return request(`/api/me/engagements/clients/similar?name=${encodeURIComponent(name)}`);
+}
+
+export function createEngagement(input: {
+  clientName: string;
+  name: string;
+  type: EngagementSummary["type"];
+  status: "draft" | "potential" | "active";
+  visibility: "workspace" | "restricted";
+  accountLeadUserId: string;
+  expectedEndDate?: string | null;
+  people?: { userId: string; role: string }[];
+}): Promise<{ engagement: { id: string } }> {
+  return request("/api/me/engagements", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateEngagementStatus(
+  id: string,
+  status: EngagementStatus,
+): Promise<{ engagement: unknown }> {
+  return request(`/api/me/engagements/${encodeURIComponent(id)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
 export function analyticsCsvUrl(from: string, to: string): string {
   return `/api/me/analytics.csv?${new URLSearchParams({ from, to })}`;
 }

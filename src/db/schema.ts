@@ -1,5 +1,5 @@
 import {
-  pgTable, uuid, text, integer, boolean, timestamp, jsonb,
+  pgTable, uuid, text, integer, boolean, timestamp, date, jsonb,
   pgEnum, uniqueIndex, index, primaryKey,
 } from "drizzle-orm/pg-core";
 import type { BookingAnswers, BookingQuestion } from "../core/booking/questions";
@@ -32,6 +32,15 @@ export const workspacePlan = pgEnum("workspace_plan", [
 ]);
 export const domainStatus = pgEnum("domain_status", [
   "pending", "verified",
+]);
+export const engagementStatus = pgEnum("engagement_status", [
+  "draft", "potential", "active", "paused", "completed", "archived",
+]);
+export const engagementVisibility = pgEnum("engagement_visibility", [
+  "workspace", "restricted",
+]);
+export const engagementType = pgEnum("engagement_type", [
+  "project", "retainer", "discovery", "internal", "other",
 ]);
 
 // Doubles as BetterAuth's user model (drizzleAdapter usePlural maps user ->
@@ -89,6 +98,56 @@ export const workspaceDomains = pgTable("workspace_domains", {
   isPrimary: boolean("is_primary").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("workspace_domain_workspace_idx").on(t.workspaceId)]);
+
+export const clients = pgTable("clients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  normalizedName: text("normalized_name").notNull(),
+  createdByUserId: uuid("created_by_user_id").notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("client_workspace_normalized_name_uq").on(t.workspaceId, t.normalizedName),
+  index("client_workspace_name_idx").on(t.workspaceId, t.name),
+]);
+
+export const engagements = pgTable("engagements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  clientId: uuid("client_id").notNull()
+    .references(() => clients.id, { onDelete: "restrict" }),
+  name: text("name").notNull(),
+  type: engagementType("type").notNull().default("project"),
+  status: engagementStatus("status").notNull().default("draft"),
+  visibility: engagementVisibility("visibility").notNull().default("workspace"),
+  accountLeadUserId: uuid("account_lead_user_id").notNull()
+    .references(() => users.id),
+  expectedEndDate: date("expected_end_date", { mode: "string" }),
+  createdByUserId: uuid("created_by_user_id").notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("engagement_workspace_status_idx").on(t.workspaceId, t.status),
+  index("engagement_client_idx").on(t.clientId),
+  index("engagement_account_lead_idx").on(t.accountLeadUserId),
+]);
+
+export const engagementPeople = pgTable("engagement_people", {
+  engagementId: uuid("engagement_id").notNull()
+    .references(() => engagements.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.engagementId, t.userId] }),
+  index("engagement_person_user_idx").on(t.userId),
+]);
 
 export const userInvitations = pgTable("user_invitations", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -250,6 +309,7 @@ export const schedules = pgTable("schedules", {
 export const eventTypes = pgTable("event_types", {
   id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: uuid("workspace_id").notNull().default(sql`NULL`).references(() => workspaces.id),
+  engagementId: uuid("engagement_id").references(() => engagements.id, { onDelete: "set null" }),
   ownerUserId: uuid("owner_user_id").references(() => users.id),
   teamId: uuid("team_id").references(() => teams.id),
   slug: text("slug").notNull(),

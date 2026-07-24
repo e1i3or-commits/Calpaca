@@ -554,6 +554,12 @@ Complexity estimates assume one experienced engineer familiar with the codebase.
 - **Before screenshot:** Scheduling and Bookings without client-work parent
 - **After screenshot:** Engagement list and overview per specification 3.3 and 3.5
 - **Ticket:** Implement Specification Milestone 1. Existing bookings and event types may remain unassigned.
+- **Status:** Implemented
+- **Evidence:** Generated migration `0043_tiresome_marrow.sql`; lifecycle and
+  permission tests; tenant-scoped Engagement API tests; durable list, create,
+  and overview routes at `/app/engagements`, `/app/engagements/new`, and
+  `/app/engagements/:id`. Draft persistence, duplicate-client warning, and
+  restricted discovery are implemented without changing booking mutations.
 
 #### E-02: Conversation playbooks over event types
 

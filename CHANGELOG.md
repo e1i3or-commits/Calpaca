@@ -7,6 +7,12 @@ tracked with annotated Git tags named `v<version>`.
 
 ### User-facing improvements
 
+- Added Engagements as a durable client-work context. Organizers can create
+  Potential or Active engagements, assign an account lead and contributors,
+  preserve an in-progress draft, find possible duplicate clients, and review
+  linked conversations and meetings from one overview.
+- Engagement lists support direct search and lifecycle filtering without
+  changing existing booking or event-type behavior.
 - Clarified that continuing with Google signs existing users in and creates a
   Calpaca account for new users.
 - Replaced the misleading mobile setup-menu action with an accurately labeled
@@ -55,6 +61,8 @@ tracked with annotated Git tags named `v<version>`.
 
 ### Accessibility improvements
 
+- Engagement creation uses associated labels, native controls, named setup
+  steps, announced loading and error states, and keyboard-reachable actions.
 - Public booking, cancellation, rescheduling, routing, poll, sign-up sheet,
   suggestion, sign-in, and organizer errors are now announced to assistive
   technology.
@@ -82,6 +90,9 @@ tracked with annotated Git tags named `v<version>`.
 
 ### Mobile improvements
 
+- Engagement lists become stacked, readable records on narrow screens, and
+  the four-step creation map remains horizontally accessible without forcing
+  a desktop form into the viewport.
 - The organizer header shortcut now uses an availability icon and accessible
   label that accurately describe its destination.
 - Poll response controls retain accessible names when their visible labels are
@@ -110,12 +121,14 @@ tracked with annotated Git tags named `v<version>`.
   `docs/screenshots/migration-plan/l-05/`.
 - Added standalone and context-prefilled availability diagnostic comparisons
   under `docs/screenshots/migration-plan/l-06/`.
+- No existing reference screenshots changed for the additive Engagement
+  release.
 
 ### Migration notes
 
-- No data or environment migration is required. Existing `/dashboard` links
-  remain valid while durable `/app` routes are introduced. APIs and business
-  logic are unchanged.
+- Apply generated database migration `0043_tiresome_marrow.sql` before starting
+  the new application version. Existing event types remain unassigned and all
+  booking behavior is unchanged.
 
 ## [0.19.0] - 2026-07-23
 

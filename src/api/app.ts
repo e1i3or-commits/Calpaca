@@ -21,6 +21,7 @@ import { CALPACA_VERSION } from "../version";
 import { oneOffOfferRoutes } from "./routes/one-off-offers";
 import { availabilityTroubleshooterRoutes } from "./routes/availability-troubleshooter";
 import { bookingEmailVerificationRoutes } from "./routes/booking-email-verification";
+import { engagementRoutes } from "./routes/engagements";
 
 export const app = new Hono();
 
@@ -73,3 +74,4 @@ app.route("/", signupSheetRoutes);
 app.route("/", oneOffOfferRoutes);
 app.route("/", availabilityTroubleshooterRoutes);
 app.route("/", bookingEmailVerificationRoutes);
+app.route("/", engagementRoutes);

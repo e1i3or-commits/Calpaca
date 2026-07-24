@@ -87,6 +87,9 @@ Each completed ticket has browser evidence under
 511 tests, zero failures, plus TypeScript and ESLint.
 
 No commit, push, or deployment was performed during this migration session.
-The remaining plan consists of E-01 through E-08. E-01 requires the explicit
-lifecycle and permission ratification named in its dependency list, so epic
-implementation should not begin by inference.
+
+E-01 is now implemented in the working tree after explicit lifecycle and
+permission ratification. It adds the Client and Engagement schema, generated
+migration, tenant-scoped API, draft-preserving creation flow, list, and
+overview. Existing event types and bookings remain unassigned by default and
+their behavior is unchanged. The remaining plan consists of E-02 through E-08.

@@ -328,6 +328,25 @@ const appEngagementsRoute = createRoute({
   component: organizerView("engagements"),
 });
 
+const appNewEngagementRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/engagements/new",
+  component: () => <DashboardPage initialView="engagements" initialEngagement="new" />,
+});
+
+const appEngagementDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/app/engagements/$engagementId",
+  component: function AppEngagementDetailRoute() {
+    return (
+      <DashboardPage
+        initialView="engagements"
+        initialEngagement={appEngagementDetailRoute.useParams().engagementId}
+      />
+    );
+  },
+});
+
 const appMeetingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/app/meetings",
@@ -491,6 +510,8 @@ const router = createRouter({
     appIndexRoute,
     appHomeRoute,
     appEngagementsRoute,
+    appNewEngagementRoute,
+    appEngagementDetailRoute,
     appMeetingsRoute,
     appMeetingDetailRoute,
     appInsightsRoute,

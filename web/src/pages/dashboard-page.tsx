@@ -143,6 +143,7 @@ import { Label } from "@/components/ui/label";
 import { PeoplePicker } from "@/components/people-picker";
 import { TimezoneSelect } from "@/pages/booking-page";
 import { BrandMark } from "@/components/brand-mark";
+import { EngagementsTab } from "@/components/engagements-tab";
 
 const TABS = [
   { key: "home", label: "Home", icon: Home, group: "primary" },
@@ -207,10 +208,12 @@ export function DashboardPage({
   initialMeetingId,
   initialEventTypeEditor,
   initialDiagnostic,
+  initialEngagement,
 }: {
   initialView?: DashboardView;
   initialMeetingId?: string;
   initialEventTypeEditor?: "new" | string;
+  initialEngagement?: "list" | "new" | string;
   initialDiagnostic?: {
     eventTypeId?: string;
     start?: string;
@@ -360,7 +363,7 @@ export function DashboardPage({
           {users && (
             <>
               {tab === "home" && <HomeTab onNavigate={navigateToView} />}
-              {tab === "engagements" && <EngagementsPlaceholder />}
+              {tab === "engagements" && <EngagementsTab users={users} mode={initialEngagement} />}
               {tab === "event-types" && (
                 <EventTypesTab
                   users={users}
@@ -641,17 +644,6 @@ function PageHeading({ tab }: { tab: DashboardView }) {
       <h1 className="text-[28px] font-semibold tracking-[-0.035em] sm:text-[32px]">{copy.title}</h1>
       <p className="mt-1 text-sm text-muted-foreground">{copy.description}</p>
     </header>
-  );
-}
-
-function EngagementsPlaceholder() {
-  return (
-    <div className="rounded-xl border border-dashed border-border p-6">
-      <h2 className="font-medium">Engagements are coming next</h2>
-      <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-        Existing scheduling workflows remain available while relationship-aware client work is introduced.
-      </p>
-    </div>
   );
 }
 
