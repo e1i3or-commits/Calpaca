@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CalendarCheck } from "lucide-react";
+import { AlertTriangle, CalendarCheck, X } from "lucide-react";
 import { getAvailability, type SlotDto } from "@/lib/api";
 import { dayKey, formatDay, formatDayTime, formatTime } from "@/lib/time";
 import { Button } from "@/components/ui/button";
@@ -104,6 +104,10 @@ function SlotPickerInner({
   } | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [explanation, setExplanation] = useState<{
+    slot: SlotDto;
+    recommendation: NonNullable<SlotDto["recommendation"]>;
+  } | null>(null);
 
   const key = monthKey(cursor);
   const monthSlots = months.get(key);
@@ -175,6 +179,16 @@ function SlotPickerInner({
   const daySlots = effectiveDay ? (byDay.get(effectiveDay) ?? []) : [];
 
   const loading = monthSlots === undefined;
+
+  useEffect(() => {
+    if (!explanation) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExplanation(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [explanation]);
+
   if (failed) return null;
   if (loading && curated === null) {
     return <p className="text-sm text-muted-foreground">Loading times…</p>;
@@ -186,54 +200,105 @@ function SlotPickerInner({
         <div className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">Best times</p>
           {curated.map((slot) => (
-            <div key={slot.start.utc} className="rounded-lg border border-border bg-card">
+            <div key={slot.start.utc} className="overflow-hidden rounded-lg border border-border bg-card">
               <button
                 type="button"
-                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex min-h-16 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 onClick={() => onPick(slot)}
               >
-                <span className="font-medium">{formatDayTime(slot.start.utc, timezone)}</span>
-                <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {slot.recommendation && confidenceLabels[slot.recommendation.confidence]}
+                <span className="min-w-0">
+                  <span className="block text-xs font-medium text-muted-foreground">
+                    {formatDay(slot.start.utc, timezone)}
+                  </span>
+                  <span className="mt-0.5 block text-lg font-semibold leading-tight">
+                    {formatTime(slot.start.utc, timezone)}
+                  </span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                  {slot.recommendation && (
+                    <span className="hidden sm:inline">{confidenceLabels[slot.recommendation.confidence]}</span>
+                  )}
                   {slot.seatsRemaining !== undefined && (
                     <span>{slot.seatsRemaining} seat{slot.seatsRemaining === 1 ? "" : "s"} left</span>
                   )}
                   {slot.mutual && <CalendarCheck aria-label="Works with your calendar" className="h-4 w-4 text-primary" />}
                   {slot.localHourWarning && <AlertTriangle aria-label="Outside typical local hours" className="h-4 w-4 text-warning" />}
+                  <span className="rounded-md bg-primary px-3 py-2 font-semibold text-primary-foreground">
+                    <span className="sm:hidden">Choose</span>
+                    <span className="hidden sm:inline">Choose time</span>
+                  </span>
                 </span>
               </button>
               {slot.recommendation && (
-                <div className="border-t border-border px-4 py-3">
-                  <ul className="space-y-1.5">
-                    {slot.recommendation.reasons.slice(0, 2).map((reason) => (
-                      <li key={reason.label} className="text-sm">
-                        <span className="font-medium">{reason.label}</span>
-                        <span className="text-muted-foreground"> · {reason.detail}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  {(slot.recommendation.reasons.length > 2 || slot.recommendation.evidenceCheckedAt) && (
-                    <details className="mt-2 text-sm">
-                      <summary className="min-h-11 cursor-pointer py-3 text-muted-foreground">Why this time</summary>
-                      <ul className="space-y-2 pb-2">
-                        {slot.recommendation.reasons.slice(2).map((reason) => (
-                          <li key={reason.label}>
-                            <span className="font-medium">{reason.label}</span>
-                            <span className="text-muted-foreground"> · {reason.detail}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      {slot.recommendation.evidenceCheckedAt && (
-                        <p className="text-xs text-muted-foreground">
-                          Calendar evidence checked {evidenceTime(slot.recommendation.evidenceCheckedAt, timezone)}
-                        </p>
-                      )}
-                    </details>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  className="min-h-11 w-full border-t border-border px-4 text-left text-xs font-medium text-muted-foreground hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  onClick={() => setExplanation({ slot, recommendation: slot.recommendation! })}
+                >
+                  Why this time?
+                </button>
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {explanation && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="slot-explanation-title"
+          className="fixed inset-0 z-50 grid place-items-end bg-black/40 p-0 sm:place-items-center sm:p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setExplanation(null);
+          }}
+        >
+          <div className="max-h-[85vh] w-full overflow-y-auto bg-background p-5 shadow-xl sm:max-w-lg sm:rounded-xl sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  {formatDay(explanation.slot.start.utc, timezone)}
+                </p>
+                <h2 id="slot-explanation-title" className="mt-1 text-2xl font-semibold">
+                  {formatTime(explanation.slot.start.utc, timezone)}
+                </h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close explanation"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-lg hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setExplanation(null)}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Why Calpaca suggested it
+            </p>
+            <ul className="mt-3 divide-y divide-border border-y border-border">
+              {explanation.recommendation.reasons.map((reason) => (
+                <li key={`${reason.label}-${reason.detail}`} className="py-4">
+                  <p className="text-sm font-medium">{reason.label}</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{reason.detail}</p>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>{confidenceLabels[explanation.recommendation.confidence]}</span>
+              {explanation.recommendation.evidenceCheckedAt && (
+                <span>
+                  Checked {evidenceTime(explanation.recommendation.evidenceCheckedAt, timezone)}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="mt-6 min-h-11 w-full rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
+              onClick={() => onPick(explanation.slot)}
+            >
+              Choose this time
+            </button>
+          </div>
         </div>
       )}
 
