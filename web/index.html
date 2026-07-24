@@ -12,6 +12,15 @@
     <link rel="manifest" href="/site.webmanifest" />
     <script>
       (() => {
+        const marketingHost =
+          location.hostname === "calpaca.io" ||
+          location.hostname === "www.calpaca.io" ||
+          location.hostname === "localhost" ||
+          location.hostname === "127.0.0.1";
+        if (marketingHost) {
+          document.documentElement.dataset.appearance = "light";
+          return;
+        }
         const saved = localStorage.getItem("calpaca:appearance");
         document.documentElement.dataset.appearance =
           saved === "light" || saved === "dark"
@@ -19,8 +28,58 @@
             : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
       })();
     </script>
+    <style>
+      #calpaca-boot {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background: #faf7f1;
+        color: #2e302b;
+        font: 500 14px/1.5 ui-sans-serif, system-ui, sans-serif;
+      }
+      #calpaca-boot-track {
+        position: relative;
+        width: 150px;
+        height: 64px;
+        border-bottom: 1px solid #d9d2c5;
+      }
+      #calpaca-boot img {
+        position: absolute;
+        bottom: 5px;
+        left: 0;
+        width: 48px;
+        height: 48px;
+        animation: calpaca-boot-walk 1.8s ease-in-out infinite, calpaca-boot-step .28s ease-in-out infinite alternate;
+      }
+      #calpaca-boot p {
+        margin: 14px 0 0;
+        text-align: center;
+        color: #756f65;
+      }
+      @keyframes calpaca-boot-walk {
+        0% { transform: translateX(0); }
+        50% { transform: translateX(102px); }
+        50.01% { transform: translateX(102px) scaleX(-1); }
+        100% { transform: translateX(0) scaleX(-1); }
+      }
+      @keyframes calpaca-boot-step {
+        from { bottom: 5px; }
+        to { bottom: 9px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #calpaca-boot img { animation: none; left: 51px; }
+      }
+    </style>
   </head>
   <body>
+    <div id="calpaca-boot" role="status" aria-label="Calpaca is loading">
+      <div>
+        <div id="calpaca-boot-track"><img src="/icons/llama.svg" alt="" /></div>
+        <p>Gathering your schedule</p>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

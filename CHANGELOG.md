@@ -5,6 +5,23 @@ tracked with annotated Git tags named `v<version>`.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-07-23
+
+### Added
+
+- A complete responsive marketing website for `calpaca.io` with product
+  previews, feature and team scheduling sections, hosted and self-hosted
+  paths, plans, frequently asked questions, and public calls to action.
+- Animated alpaca loading screens for initial application startup and public
+  data-loading states.
+
+### Fixed
+
+- Public marketing pages now retain their intended light appearance when an
+  organizer previously selected dark mode.
+- Event-type validation failures now display the exact invalid fields and
+  server messages with links that focus the relevant controls.
+
 ## [0.18.1] - 2026-07-23
 
 ### Fixed

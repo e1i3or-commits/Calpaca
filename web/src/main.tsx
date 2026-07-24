@@ -18,6 +18,7 @@ import { PollPage } from "@/pages/poll-page";
 import { SignupSheetPage } from "@/pages/signup-sheet-page";
 import { PublicBookingPage } from "@/pages/public-booking-page";
 import { OneOffOfferPage } from "@/pages/one-off-offer-page";
+import { MarketingPage } from "@/pages/marketing-page";
 import type { RoutingAnswers } from "@/lib/api";
 import { BrandMark } from "@/components/brand-mark";
 import { initializeAppearance } from "@/lib/appearance";
@@ -34,10 +35,8 @@ const rootRoute = createRootRoute({
   ),
 });
 
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/",
-  component: () => (
+function AppEntryPage() {
+  return (
     <div data-organizer className="min-h-screen overflow-hidden bg-background text-foreground">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 sm:px-8">
         <div className="flex items-center gap-2.5">
@@ -62,7 +61,7 @@ const indexRoute = createRoute({
             Make time feel a little more human.
           </h1>
           <p className="mt-6 max-w-lg text-base leading-7 text-muted-foreground sm:text-lg">
-            Flexible booking pages, team availability, and calm organizer tools—all in one focused workspace.
+            Flexible booking pages, team availability, and calm organizer tools, all in one focused workspace.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <a
@@ -107,7 +106,23 @@ const indexRoute = createRoute({
         </section>
       </main>
     </div>
-  ),
+  );
+}
+
+function HomePage() {
+  const hostname = window.location.hostname;
+  const isMarketingSite =
+    hostname === "calpaca.io"
+    || hostname === "www.calpaca.io"
+    || hostname === "localhost"
+    || hostname === "127.0.0.1";
+  return isMarketingSite ? <MarketingPage /> : <AppEntryPage />;
+}
+
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  component: HomePage,
 });
 
 // Routing forms hand off ?answers= as JSON. The router's default search
@@ -310,3 +325,7 @@ createRoot(document.getElementById("root")!).render(
     <RouterProvider router={router} />
   </StrictMode>,
 );
+
+requestAnimationFrame(() => {
+  document.getElementById("calpaca-boot")?.remove();
+});

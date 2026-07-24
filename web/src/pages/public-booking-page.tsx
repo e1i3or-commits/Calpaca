@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Clock } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { AlpacaLoader } from "@/components/alpaca-loader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getPublicBookingPage, type PublicBookingPage as BookingPageData } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
@@ -35,7 +36,7 @@ export function PublicBookingPage({
     return <main className="mx-auto max-w-3xl px-5 py-20 text-center">This booking page is unavailable.</main>;
   }
   if (!page) {
-    return <main className="mx-auto max-w-3xl px-5 py-20 text-center text-muted-foreground">Loading…</main>;
+    return <AlpacaLoader label="Finding the right meetings" fullPage />;
   }
 
   return (

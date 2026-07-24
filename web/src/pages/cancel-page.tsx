@@ -49,7 +49,7 @@ export function CancelPage({ bookingId, token }: { bookingId: string; token: str
       <Card>
         <CardHeader>
           <CardTitle>Cancel this booking?</CardTitle>
-          <CardDescription>This can't be undone — you'd need to book a new time.</CardDescription>
+          <CardDescription>This can't be undone. You would need to book a new time.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {error && <p className="text-sm text-destructive">{error}</p>}

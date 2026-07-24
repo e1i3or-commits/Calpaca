@@ -186,7 +186,12 @@ export type CalendarEntry = {
   lastSyncedAt: string | null;
 };
 
-export type AnswerIssue = { field: string; reason: string };
+export type AnswerIssue = {
+  field?: string;
+  reason?: string;
+  path?: Array<string | number>;
+  message?: string;
+};
 
 export class ApiError extends Error {
   constructor(

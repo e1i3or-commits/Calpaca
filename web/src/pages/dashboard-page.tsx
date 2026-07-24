@@ -168,7 +168,7 @@ const ERROR_TEXT: Record<string, string> = {
   write_destination_required: "Choose another booking destination before disconnecting this calendar.",
   calendar_not_writable: "Google does not allow this account to create events on that calendar.",
   event_type_in_use: "This event type has bookings; it can't be deleted.",
-  invalid_body: "Some fields are invalid — check the form.",
+  invalid_body: "Some fields are invalid. Check the form.",
   team_not_found: "Team not found.",
   last_team_admin: "Promote another member before removing or demoting the final team admin.",
   form_not_found: "Routing form not found.",
@@ -538,7 +538,7 @@ function HomeTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Metric label="Recent meetings" value={completed.length} />
-        <Metric label="No-show rate" value={completed.length ? `${Math.round((noShows / completed.length) * 100)}%` : "—"} />
+        <Metric label="No-show rate" value={completed.length ? `${Math.round((noShows / completed.length) * 100)}%` : "Not available"} />
         <Metric className="col-span-2 sm:col-span-1" label="Delivery issues" value={failed} tone={failed ? "danger" : "normal"} />
       </section>
 
@@ -654,9 +654,9 @@ function AnalyticsTab() {
         <>
           <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Metric label="Bookings" value={total} />
-            <Metric label="Still confirmed" value={total ? percent(confirmed / total) : "—"} />
+            <Metric label="Still confirmed" value={total ? percent(confirmed / total) : "Not available"} />
             <Metric label="Cancelled" value={cancelled} />
-            <Metric label="Average lead time" value={averageLead === null ? "—" : hours(averageLead)} />
+            <Metric label="Average lead time" value={averageLead === null ? "Not available" : hours(averageLead)} />
           </section>
 
           <section className="grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
@@ -2104,6 +2104,10 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
   const [editing, setEditing] = useState<{ id: string | null; form: EventTypeInput } | null>(null);
   const [embed, setEmbed] = useState<{ slug: string; mode: "inline" | "popup" } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [validationIssues, setValidationIssues] = useState<Array<{
+    path: Array<string | number>;
+    message: string;
+  }>>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [bookingBase, setBookingBase] = useState(window.location.origin);
 
@@ -2137,6 +2141,7 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
   const save = async () => {
     if (!editing) return;
     setError(null);
+    setValidationIssues([]);
     try {
       if (editing.id) await updateEventType(editing.id, editing.form);
       else await createEventType(editing.form);
@@ -2144,6 +2149,12 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
       reload();
     } catch (e) {
       setError(errorText(e));
+      if (e instanceof ApiError && e.code === "invalid_body" && e.issues) {
+        setValidationIssues(e.issues.map((issue) => ({
+          path: issue.path ?? (issue.field ? [issue.field] : []),
+          message: issue.message ?? issue.reason ?? "This value is invalid.",
+        })));
+      }
     }
   };
 
@@ -2215,6 +2226,46 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {error && <p className="text-sm text-destructive">{error}</p>}
+        {validationIssues.length > 0 && (
+          <div className="rounded-xl border border-destructive/25 bg-destructive/8 p-4" role="alert">
+            <p className="text-sm font-medium text-destructive">Please fix the following:</p>
+            <ul className="mt-2 space-y-1.5 text-sm text-destructive">
+              {validationIssues.map((issue, index) => {
+                const field = String(issue.path[0] ?? "form");
+                const label = field
+                  .replace(/([A-Z])/g, " $1")
+                  .replace(/^./, (character) => character.toUpperCase());
+                const fieldIds: Record<string, string> = {
+                  title: "et-title",
+                  description: "et-description",
+                  slug: "et-slug",
+                  durationMinutes: "et-duration",
+                  capacity: "et-capacity",
+                  mode: "et-mode",
+                  bufferBeforeMin: "et-buffer-before",
+                  bufferAfterMin: "et-buffer-after",
+                  minimumNoticeMin: "et-notice",
+                  rollingWindowDays: "et-window",
+                  scheduleId: "et-schedule",
+                  theme: "et-theme",
+                  logoUrl: "et-logo",
+                  teamId: "et-team",
+                };
+                return (
+                  <li key={`${issue.path.join(".")}-${index}`}>
+                    <button
+                      type="button"
+                      className="text-left underline decoration-destructive/35 underline-offset-2"
+                      onClick={() => document.getElementById(fieldIds[field] ?? "")?.focus()}
+                    >
+                      <span className="font-medium">{label}</span>: {issue.message}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
         {editing ? (
           <EventTypeForm
             form={editing.form}
@@ -2223,7 +2274,10 @@ function EventTypesTab({ users }: { users: DirectoryUser[] }) {
             teams={teams}
             themes={availableThemes}
             layouts={availableLayouts}
-            onChange={(form) => setEditing({ ...editing, form })}
+            onChange={(form) => {
+              setValidationIssues([]);
+              setEditing({ ...editing, form });
+            }}
             onCancel={() => setEditing(null)}
             onSave={() => void save()}
           />
@@ -4304,7 +4358,7 @@ function RoutingRuleEditor({
 
       {clauses === null ? (
         <p className="text-xs text-muted-foreground">
-          Custom condition (edited via the API) — kept as is.
+          Custom condition (edited via the API). Kept as is.
         </p>
       ) : (
         <div className="flex flex-col gap-2">
@@ -4321,7 +4375,7 @@ function RoutingRuleEditor({
                   setClauses(clauses.map((c, j) => (j === ci ? { ...c, field: e.target.value } : c)))
                 }
               >
-                {!fieldKeys.includes(clause.field) && <option value={clause.field}>{clause.field || "—"}</option>}
+                {!fieldKeys.includes(clause.field) && <option value={clause.field}>{clause.field || "Select a field"}</option>}
                 {fieldKeys.map((k) => (
                   <option key={k} value={k}>
                     {k}
@@ -4388,7 +4442,7 @@ function RoutingRuleEditor({
             value={rule.targetEventTypeId ?? ""}
             onChange={(e) => onChange({ targetEventTypeId: e.target.value === "" ? null : e.target.value })}
           >
-            <option value="">—</option>
+            <option value="">Select a field</option>
             {eventTypes.map((et) => (
               <option key={et.id} value={et.id}>
                 {et.title}
@@ -4406,7 +4460,7 @@ function RoutingRuleEditor({
             value={rule.targetHostUserId ?? ""}
             onChange={(e) => onChange({ targetHostUserId: e.target.value === "" ? null : e.target.value })}
           >
-            <option value="">—</option>
+            <option value="">Select a value</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}

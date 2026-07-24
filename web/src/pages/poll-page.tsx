@@ -218,9 +218,9 @@ export function PollPage({ publicId }: { publicId: string }) {
             <p className="rounded-lg bg-muted p-4 text-sm font-medium">
               Voting is closed
               {poll.deadline && new Date(poll.deadline).getTime() <= Date.now()
-                ? ` — the deadline was ${new Date(poll.deadline).toLocaleString()}.`
+                ? `. The deadline was ${new Date(poll.deadline).toLocaleString()}.`
                 : poll.participantLimitReached
-                  ? " — this poll has reached its participant limit."
+                  ? ". This poll has reached its participant limit."
                   : "."}
             </p>
           )}

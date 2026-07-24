@@ -11,6 +11,7 @@ import {
 import { useTheme } from "@/lib/theme";
 import { browserTimezone, formatDayTime, formatTime } from "@/lib/time";
 import { SlotPicker } from "@/components/slot-picker";
+import { AlpacaLoader } from "@/components/alpaca-loader";
 import { errorMessage, TimezoneSelect } from "@/pages/booking-page";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,7 +89,7 @@ export function ReschedulePage({ bookingId, token }: { bookingId: string; token:
         <CardContent>
           {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
-          {!error && !ctx && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {!error && !ctx && <AlpacaLoader label="Finding your booking" />}
 
           {ctx && step.name === "pick" && (
             <SlotPicker

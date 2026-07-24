@@ -7,6 +7,16 @@ import {
 const STORAGE_KEY = "calpaca:appearance";
 
 export function initializeAppearance(): Appearance {
+  const hostname = window.location.hostname;
+  if (
+    hostname === "calpaca.io"
+    || hostname === "www.calpaca.io"
+    || hostname === "localhost"
+    || hostname === "127.0.0.1"
+  ) {
+    document.documentElement.dataset["appearance"] = "light";
+    return "light";
+  }
   const appearance = resolveAppearance(
     localStorage.getItem(STORAGE_KEY),
     window.matchMedia("(prefers-color-scheme: dark)").matches,

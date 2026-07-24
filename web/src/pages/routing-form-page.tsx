@@ -11,13 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AlpacaLoader } from "@/components/alpaca-loader";
 
 const ISSUE_TEXT: Record<string, string> = {
   missing: "This field is required.",
   not_an_option: "Pick one of the listed options.",
   invalid_email: "Enter a valid email address.",
-  bad_type: "Unexpected answer shape — reload and try again.",
-  unknown_field: "Unexpected answer — reload and try again.",
+  bad_type: "Unexpected answer shape. Reload and try again.",
+  unknown_field: "Unexpected answer. Reload and try again.",
 };
 
 export function RoutingFormPage({
@@ -87,7 +88,9 @@ export function RoutingFormPage({
       setError("No booking page matches those answers. Reach out to us directly instead.");
     } catch (e) {
       if (e instanceof ApiError && e.code === "invalid_answers" && e.issues) {
-        setIssues(Object.fromEntries(e.issues.map((i) => [i.field, i.reason])));
+        setIssues(Object.fromEntries(e.issues.flatMap((issue) =>
+          issue.field && issue.reason ? [[issue.field, issue.reason]] : [],
+        )));
       } else if (e instanceof ApiError) {
         setError(`Something went wrong (${e.code}).`);
       } else {
@@ -108,7 +111,7 @@ export function RoutingFormPage({
         <CardContent>
           {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
-          {fields === null && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
+          {fields === null && !error && <AlpacaLoader label="Preparing your questions" />}
 
           {fields && (
             <form
