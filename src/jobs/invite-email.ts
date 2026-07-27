@@ -334,6 +334,9 @@ export function buildMail(
   return {
     to: booking.inviteeEmail,
     cc: hosts.map((h) => h.email),
+    // hosts are already Cc'd, but a plain (non reply-all) reply would go to
+    // the unattended EMAIL_FROM noreply address without this
+    replyTo: organizer.email,
     subject: email.subject,
     text: email.text,
     html: email.html,

@@ -24,6 +24,10 @@ function getTransporter(): Transporter {
 export interface InviteMail {
   readonly to: string;
   readonly cc?: readonly string[];
+  /** Where a plain "reply" should land. EMAIL_FROM is an unattended noreply
+   * address, so without this an invitee asking to move the meeting gets a
+   * bounce and assumes they were heard. Set to the organizing host. */
+  readonly replyTo?: string;
   readonly subject: string;
   readonly text: string;
   readonly html: string;
@@ -52,6 +56,7 @@ export async function sendInviteMail(mail: InviteMail): Promise<SendResult> {
     from: process.env.EMAIL_FROM,
     to: mail.to,
     cc: mail.cc && mail.cc.length > 0 ? [...mail.cc] : undefined,
+    replyTo: mail.replyTo,
     subject: mail.subject,
     text: mail.text,
     html: mail.html,
