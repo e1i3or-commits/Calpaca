@@ -343,6 +343,8 @@ export function MarketingPage() {
             <a href={`${githubUrl}/blob/main/docs/SELF-HOSTING.md`} className="hover:text-foreground">Self-hosting</a>
             <a href={`${githubUrl}/blob/main/docs/API.md`} className="hover:text-foreground">API</a>
             <a href={`${githubUrl}/blob/main/SECURITY.md`} className="hover:text-foreground">Security</a>
+            <a href="/privacy" className="hover:text-foreground">Privacy</a>
+            <a href="/terms" className="hover:text-foreground">Terms</a>
           </div>
           <p className="text-xs text-muted-foreground">AGPL v3 · Built on Bun and PostgreSQL</p>
         </div>

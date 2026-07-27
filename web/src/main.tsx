@@ -21,6 +21,7 @@ import { PublicBookingPage } from "@/pages/public-booking-page";
 import { OneOffOfferPage } from "@/pages/one-off-offer-page";
 import { MarketingPage } from "@/pages/marketing-page";
 import { ProposalPage } from "@/pages/proposal-page";
+import { PrivacyPage, TermsPage } from "@/pages/legal-page";
 import type { RoutingAnswers } from "@/lib/api";
 import { BrandMark } from "@/components/brand-mark";
 import { initializeAppearance } from "@/lib/appearance";
@@ -266,6 +267,20 @@ const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sign-in",
   component: SignInPage,
+});
+
+// Linked from the Google OAuth consent screen, so these paths are effectively
+// public API: changing them breaks the registered consent-screen URLs.
+const privacyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/privacy",
+  component: PrivacyPage,
+});
+
+const termsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/terms",
+  component: TermsPage,
 });
 
 const pollRoute = createRoute({
@@ -598,6 +613,8 @@ const router = createRouter({
     rescheduleRoute,
     cancelRoute,
     signInRoute,
+    privacyRoute,
+    termsRoute,
     pollRoute,
     oneOffOfferRoute,
     proposalRoute,
