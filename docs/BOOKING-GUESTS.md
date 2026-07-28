@@ -144,10 +144,20 @@ something it would reject outright.
 
 After confirmation a guest mailbox that does not exist bounces
 asynchronously, which does not affect delivery to the invitee and already flows
-through the email-delivery webhook. Worth confirming during implementation:
-whether a recipient our validation accepts but the provider rejects at SMTP
-time can fail the whole message rather than that one recipient. If it can, the
-invitee's copy should be sent independently of the guest copies.
+through the email-delivery webhook.
+
+Confirmed during implementation: a recipient our validation accepts but the
+provider rejects at SMTP time (RCPT TO) does **not** fail the whole message.
+`SendResult.rejected` in `src/notifications/mailer.ts` is documented as "the
+recipients the SMTP server refused at handoff... while still accepting the
+message for the rest," and `sendInviteMail`'s doc comment states per-recipient
+rejections do not throw. `sendInvite` in `src/jobs/invite-email.ts` passes
+`result.rejected` to `recordInviteeRejection`, which returns early when
+`rejected` is empty and, when it is not, only treats the send as failed
+(`invite_failed`) when the invitee's own address is among the rejected
+recipients; a rejected guest or host cc is only `console.warn`ed. A single bad
+guest address therefore cannot cost the invitee their confirmation email, and
+no second `sendMail` call is needed.
 
 ## Tests
 

@@ -1,5 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { getAuth } from "../auth/index";
+import { guestsToInvite } from "../core/booking/guests";
 import { buildIcs } from "../core/invite/ics";
 import { composeInviteEmail, type InviteKind } from "../core/invite/email";
 import {
@@ -128,6 +129,11 @@ export async function sendInvite(bookingId: string, kind: InviteKind): Promise<v
  */
 async function syncGoogleEvent(ctx: InviteContext, kind: InviteKind): Promise<boolean> {
   const { booking, hosts } = ctx;
+  const guests = guestsToInvite(
+    booking.guestEmails ?? [],
+    booking.inviteeEmail,
+    hosts.map((h) => h.email),
+  );
   const [organizer] = hosts;
   if (!organizer) return false;
   const existingId = booking.googleEventId ?? null;
@@ -187,6 +193,7 @@ async function syncGoogleEvent(ctx: InviteContext, kind: InviteKind): Promise<bo
         attendees: [
           { email: booking.inviteeEmail, displayName: booking.inviteeName },
           ...hosts.slice(1).map((h) => ({ email: h.email, displayName: h.name })),
+          ...guests.map((email) => ({ email })),
         ],
       },
     });
@@ -289,6 +296,11 @@ export function buildMail(
 ) {
   const includeIcs = opts?.includeIcs ?? true;
   const { booking, hosts } = ctx;
+  const guests = guestsToInvite(
+    booking.guestEmails ?? [],
+    booking.inviteeEmail,
+    hosts.map((h) => h.email),
+  );
   const [organizer] = hosts;
   if (!organizer) throw new Error(`booking ${booking.id} has no hosts`);
   const preparation = preparationText(ctx);
@@ -327,13 +339,17 @@ export function buildMail(
         attendees: [
           { name: booking.inviteeName, email: booking.inviteeEmail },
           ...hosts.slice(1).map((h) => ({ name: h.name, email: h.email })),
+          // A guest supplies only an address, and IcsPerson.name is
+          // interpolated straight into CN=, so an empty string would emit a
+          // bare "CN=;". The address is what clients show anyway.
+          ...guests.map((email) => ({ name: email, email })),
         ],
       })
     : null;
 
   return {
     to: booking.inviteeEmail,
-    cc: hosts.map((h) => h.email),
+    cc: [...hosts.map((h) => h.email), ...guests],
     // hosts are already Cc'd, but a plain (non reply-all) reply would go to
     // the unattended EMAIL_FROM noreply address without this
     replyTo: organizer.email,

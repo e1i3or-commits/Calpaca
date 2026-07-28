@@ -71,4 +71,24 @@ describe("buildIcs", () => {
     const ics = buildIcs({ ...base, dtStamp: Temporal.Instant.from("2026-07-22T15:00:00.123Z") });
     expect(ics).toContain("DTSTAMP:20260722T150000Z\r\n");
   });
+
+  test("emits one ATTENDEE line per guest, with the address as the common name", () => {
+    const ics = buildIcs({
+      ...base,
+      attendees: [
+        ...base.attendees,
+        { name: "g1@example.com", email: "g1@example.com" },
+        { name: "g2@example.com", email: "g2@example.com" },
+      ],
+    });
+    expect(ics.match(/^ATTENDEE/gm)).toHaveLength(3);
+    // the guest line exceeds 75 octets, so unfold before matching (see the
+    // "organizer and attendee render as mailto lines" test above)
+    const unfolded = ics.replace(/\r\n /g, "");
+    expect(unfolded).toContain(
+      "ATTENDEE;CN=g1@example.com;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:g1@example.com",
+    );
+    // never a bare CN
+    expect(ics).not.toContain("CN=;");
+  });
 });
