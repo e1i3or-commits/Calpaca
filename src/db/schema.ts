@@ -348,6 +348,7 @@ export const eventTypes = pgTable("event_types", {
   bookingQuestions: jsonb("booking_questions").$type<BookingQuestion[]>()
     .notNull().default([]),
   emailVerificationRequired: boolean("email_verification_required").notNull().default(false),
+  guestsEnabled: boolean("guests_enabled").notNull().default(false),
   locations: jsonb("locations").$type<EventLocation[]>().notNull().default([]),
   // group booking on public links: explicit allowlist, empty = auth-only
   publicSelectableHostIds: jsonb("public_selectable_host_ids")
@@ -429,6 +430,9 @@ export const bookings = pgTable("bookings", {
   cancelToken: text("cancel_token").notNull(),
   routingAnswers: jsonb("routing_answers"),
   bookingAnswers: jsonb("booking_answers").$type<BookingAnswers>().notNull().default({}),
+  // Invitee-added guests. Real attendees: they go on the Google event, the ICS,
+  // and the email Cc. Bounded by MAX_GUESTS in src/core/booking/guests.ts.
+  guestEmails: jsonb("guest_emails").$type<string[]>().notNull().default([]),
   bookingLocation: jsonb("booking_location").$type<BookingLocation>(),
   // set once the booking is written to the organizer host's Google calendar;
   // null means the ICS email is the only calendar artifact (fallback path)

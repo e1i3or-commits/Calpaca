@@ -6,6 +6,7 @@ import { eq, sql } from "drizzle-orm";
 import { Temporal } from "@js-temporal/polyfill";
 import * as schema from "../../src/db/schema";
 import { confirmHold, confirmReschedule, createHold } from "../../src/db/holds-repo";
+import { getBookingById, rebuildProjection } from "../../src/db/booking-repo";
 
 /**
  * Integration coverage for the transactional hold/confirm path against a
@@ -311,6 +312,62 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("holds-repo", () => {
         "rescheduled",
         "reassigned",
       ]);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  test("guests persist on the booking row and survive a projection rebuild", async () => {
+    const { pool, db, eventType, host1 } = await setup();
+    try {
+      const created = await createHold(eventType.id, [host1.id], slot, ttl, db);
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const confirmed = await confirmHold(
+        created.value.map((h) => h.id),
+        invitee,
+        db,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        ["a@example.com", "b@example.com"],
+      );
+      expect(confirmed.ok).toBe(true);
+      if (!confirmed.ok) return;
+
+      const row = await getBookingById(confirmed.value.bookingId, db);
+      expect(row?.guestEmails).toEqual(["a@example.com", "b@example.com"]);
+
+      // The log is the source of truth, so a rebuild must not lose them.
+      await rebuildProjection(confirmed.value.bookingId, db);
+      const rebuilt = await getBookingById(confirmed.value.bookingId, db);
+      expect(rebuilt?.guestEmails).toEqual(["a@example.com", "b@example.com"]);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  test("a booking with no guests stores an empty list, never null", async () => {
+    const { pool, db, eventType, host1 } = await setup();
+    try {
+      const created = await createHold(eventType.id, [host1.id], slot, ttl, db);
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const confirmed = await confirmHold(
+        created.value.map((h) => h.id),
+        invitee,
+        db,
+      );
+      expect(confirmed.ok).toBe(true);
+      if (!confirmed.ok) return;
+      const row = await getBookingById(confirmed.value.bookingId, db);
+      expect(row?.guestEmails).toEqual([]);
     } finally {
       await pool.end();
     }

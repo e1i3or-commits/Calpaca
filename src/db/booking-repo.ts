@@ -38,6 +38,7 @@ function serializePayload(event: BookingEvent): StoredPayload {
         ...(event.payload.bookingAnswers ? { bookingAnswers: event.payload.bookingAnswers } : {}),
         ...(event.payload.bookingLocation ? { bookingLocation: event.payload.bookingLocation } : {}),
         ...(event.payload.assignment ? { assignment: event.payload.assignment } : {}),
+        ...(event.payload.guestEmails?.length ? { guestEmails: event.payload.guestEmails } : {}),
       };
     case "rescheduled":
       return {
@@ -82,6 +83,7 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
           ...(bookingAnswers ? { bookingAnswers } : {}),
           ...(bookingLocation ? { bookingLocation } : {}),
           ...(assignment ? { assignment } : {}),
+          ...(Array.isArray(payload["guestEmails"]) ? { guestEmails: payload["guestEmails"] as string[] } : {}),
         },
       };
     }
@@ -222,6 +224,9 @@ export interface BookingRow {
   readonly cancelToken: string;
   readonly routingAnswers?: Record<string, string | string[]> | null;
   readonly bookingAnswers?: BookingAnswers;
+  /** Optional so BookingRow fixtures predating the column stay valid; rows
+   * loaded from the database always carry it. */
+  readonly guestEmails?: readonly string[];
   readonly bookingLocation?: BookingLocation | null;
   /** Google Calendar event id once written through to the organizer host's
    * calendar; null/absent means the ICS email is the calendar artifact.
@@ -254,6 +259,7 @@ export async function getBookingById(id: string, executor: Db = getDb()): Promis
     cancelToken: row.cancelToken,
     routingAnswers: row.routingAnswers as Record<string, string | string[]> | null,
     bookingAnswers: row.bookingAnswers,
+    guestEmails: row.guestEmails,
     bookingLocation: row.bookingLocation,
     googleEventId: row.googleEventId,
   };
