@@ -5,9 +5,13 @@
  * Deliberately not a whole email. The host is mid-sentence in their own thread,
  * so this contributes only the times and a one-line note about the timezone —
  * no greeting, no sign-off, nothing that would collide with what they wrote.
+ *
+ * Takes ISO instants and formats with Intl rather than Temporal. This is
+ * rendering at a boundary, not date math (same rationale as
+ * web/src/lib/time.ts), and keeping it dependency-free is what lets the
+ * dashboard import this module without pulling the Temporal polyfill into the
+ * browser bundle.
  */
-
-import type { Temporal } from "@js-temporal/polyfill";
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => ({
@@ -15,37 +19,56 @@ function escapeHtml(value: string): string {
   })[char] ?? char);
 }
 
-/** "Tuesday, July 29 · 2:00 PM EDT" — weekday included because a bare date
+/** "Wednesday, July 29 · 2:00 PM EDT" — weekday included because a bare date
  * makes the reader do calendar arithmetic, and the zone name because the
  * recipient is usually somewhere else. */
-function renderSlot(instant: Temporal.Instant, timezone: string): string {
-  const zoned = instant.toZonedDateTimeISO(timezone);
-  const date = zoned.toLocaleString("en-US", {
+export function formatSlotLabel(startIso: string, timeZone: string): string {
+  const at = new Date(startIso);
+  const date = new Intl.DateTimeFormat("en-US", {
+    timeZone,
     weekday: "long",
     month: "long",
     day: "numeric",
-  });
-  const time = zoned.toLocaleString("en-US", {
+  }).format(at);
+  const time = new Intl.DateTimeFormat("en-US", {
+    timeZone,
     hour: "numeric",
     minute: "2-digit",
     timeZoneName: "short",
-  });
+  }).format(at);
   return `${date} · ${time}`;
 }
 
 /** Deep link that preselects one slot on the offer page. */
-export function offerSlotUrl(
-  offerUrl: string,
-  start: Temporal.Instant,
-): string {
+export function offerSlotUrl(offerUrl: string, startIso: string): string {
   const separator = offerUrl.includes("?") ? "&" : "?";
-  return `${offerUrl}${separator}slot=${encodeURIComponent(start.toString())}`;
+  return `${offerUrl}${separator}slot=${encodeURIComponent(startIso)}`;
+}
+
+/**
+ * Resolves a `?slot=` value back to the offered slot it names, or undefined.
+ *
+ * Compared as parsed instants, not raw strings. `offerSlotUrl` embeds whatever
+ * ISO form the caller stored, and the same moment is spelled several ways
+ * ("2026-07-29T18:00:00Z", "2026-07-29T18:00:00.000Z",
+ * "2026-07-29T18:00:00+00:00"). String equality would miss those and silently
+ * drop the invitee back onto the full list — a broken-feeling link rather than
+ * a visible error, which is why this lives next to the function that writes it.
+ */
+export function findSlotByInstant<T extends { start: string }>(
+  slots: readonly T[] | undefined,
+  startIso: string | undefined,
+): T | undefined {
+  if (!slots?.length || !startIso) return undefined;
+  const target = Date.parse(startIso);
+  if (Number.isNaN(target)) return undefined;
+  return slots.find((slot) => Date.parse(slot.start) === target);
 }
 
 export interface OfferSnippetInput {
   /** Absolute URL of the offer page, e.g. https://app.calpaca.io/offer/abc123 */
   readonly offerUrl: string;
-  readonly slots: readonly { start: Temporal.Instant; end: Temporal.Instant }[];
+  readonly slots: readonly { start: string; end: string }[];
   /** Zone the times are written in — the host's, since they are the author. */
   readonly timezone: string;
 }
@@ -60,7 +83,7 @@ export function composeOfferSnippet(
   input: OfferSnippetInput,
 ): { text: string; html: string } {
   const rows = input.slots.map((slot) => ({
-    label: renderSlot(slot.start, input.timezone),
+    label: formatSlotLabel(slot.start, input.timezone),
     url: offerSlotUrl(input.offerUrl, slot.start),
   }));
 

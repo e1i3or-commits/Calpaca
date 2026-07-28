@@ -4,7 +4,14 @@ import { BookingPage } from "@/pages/booking-page";
 import { getOneOffOffer, type PublicOneOffOffer } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export function OneOffOfferPage({ publicId }: { publicId: string }) {
+export function OneOffOfferPage({
+  publicId,
+  preselectedSlot,
+}: {
+  publicId: string;
+  /** ISO instant from ?slot=, naming one of the offered times. */
+  preselectedSlot?: string;
+}) {
   const [offer, setOffer] = useState<PublicOneOffOffer | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -36,6 +43,7 @@ export function OneOffOfferPage({ publicId }: { publicId: string }) {
       slug={offer.eventTypeSlug}
       workspaceSlug={offer.workspaceSlug}
       offeredSlots={offer.slots}
+      preselectedSlotStart={preselectedSlot}
       offerPublicId={offer.publicId}
       offerTitle={offer.title}
       offerMessage={offer.message}

@@ -10,6 +10,7 @@ import {
   Clock3,
   Code2,
   Copy,
+  Mail,
   Download,
   Home,
   KeyRound,
@@ -80,6 +81,7 @@ import {
   revokeUserInvitation,
   revokeApiToken,
   revokeOneOffOffer,
+  suggestOneOffOfferTimes,
   removeWorkspaceDomain,
   resendPollFinalization,
   resendPollInvitation,
@@ -135,6 +137,9 @@ import {
 } from "@/lib/api";
 import { themeOptions } from "@/lib/theme";
 import { useAppearance } from "@/lib/appearance";
+// Pure core module, no server or Temporal dependency — same boundary as
+// @/lib/appearance, which also reads straight from src/core.
+import { composeOfferSnippet } from "../../../src/core/invite/offer-snippet";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1868,6 +1873,14 @@ function OneOffOffersTab() {
   const [expiresAt, setExpiresAt] = useState(localInputValue(new Date(Date.now() + 7 * 86_400_000)));
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestCount, setSuggestCount] = useState(3);
+  const [windowStartDate, setWindowStartDate] = useState(localDateValue(new Date()));
+  const [windowEndDate, setWindowEndDate] = useState(
+    localDateValue(new Date(Date.now() + 7 * 86_400_000)),
+  );
+  const [dailyStart, setDailyStart] = useState("09:00");
+  const [dailyEnd, setDailyEnd] = useState("17:00");
 
   const reload = useCallback(() => {
     listOneOffOffers().then((result) => setOffers(result.offers)).catch((e) => setError(errorText(e)));
@@ -1888,6 +1901,70 @@ function OneOffOffersTab() {
     setEventTypeId(id);
     const eventType = eventTypes.find((item) => item.id === id);
     if (eventType) setDuration(eventType.durationMinutes);
+  };
+
+  /**
+   * Puts the times on the clipboard as a rich block so each one pastes into an
+   * email as a real, clickable booking link.
+   */
+  const copyForEmail = async (offer: OneOffOffer) => {
+    setError(null);
+    const snippet = composeOfferSnippet({
+      offerUrl: `${window.location.origin}/offer/${offer.publicId}`,
+      slots: offer.slots,
+      timezone: viewerTimezone(),
+    });
+    try {
+      // Firefox still has no clipboard.write, so fall back to the plain flavor
+      // there. That flavor spells the URLs out precisely because it cannot
+      // carry a hyperlink — the recipient can still click them in most clients.
+      if (typeof ClipboardItem === "function" && navigator.clipboard.write) {
+        await navigator.clipboard.write([new ClipboardItem({
+          "text/html": new Blob([snippet.html], { type: "text/html" }),
+          "text/plain": new Blob([snippet.text], { type: "text/plain" }),
+        })]);
+      } else {
+        await navigator.clipboard.writeText(snippet.text);
+      }
+      setCopied(`email:${offer.id}`);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      setError("Could not copy the times. Try again.");
+    }
+  };
+
+  const suggest = async () => {
+    setError(null);
+    setSuggesting(true);
+    try {
+      const { suggestions } = await suggestOneOffOfferTimes({
+        eventTypeId,
+        timezone: viewerTimezone(),
+        startDate: windowStartDate,
+        endDate: windowEndDate,
+        dailyStart,
+        dailyEnd,
+        durationMinutes: duration,
+        count: suggestCount,
+      });
+      if (suggestions.length === 0) {
+        setError("No open times in that range. Try a wider window or different hours.");
+        return;
+      }
+      // Replaces the list rather than appending: these are the best available
+      // times, so mixing them with hand-typed ones would bury them.
+      setStarts(suggestions.map((slot) => localInputValue(new Date(slot.start))));
+      if (suggestions.length < suggestCount) {
+        setError(
+          `Only ${suggestions.length} open ${suggestions.length === 1 ? "time" : "times"} `
+          + `in that range, not ${suggestCount}.`,
+        );
+      }
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setSuggesting(false);
+    }
   };
 
   const save = async () => {
@@ -1960,6 +2037,30 @@ function OneOffOffersTab() {
                 ))}
               </div>
             </div>
+            <div className="rounded-xl border border-border bg-muted/30 p-4">
+              <p className="text-sm font-medium">Suggest times from my calendar</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Uses your working hours, this event type&rsquo;s buffers and notice, and
+                avoids conflicts across connected calendars.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div><Label htmlFor="offer-window-start">From</Label><Input id="offer-window-start" type="date" min={localDateValue(new Date())} className="mt-1" value={windowStartDate} onChange={(event) => setWindowStartDate(event.target.value)} /></div>
+                <div><Label htmlFor="offer-window-end">Through</Label><Input id="offer-window-end" type="date" min={windowStartDate} className="mt-1" value={windowEndDate} onChange={(event) => setWindowEndDate(event.target.value)} /></div>
+                <div><Label htmlFor="offer-daily-start">Earliest start</Label><Input id="offer-daily-start" type="time" step={900} className="mt-1" value={dailyStart} onChange={(event) => setDailyStart(event.target.value)} /></div>
+                <div><Label htmlFor="offer-daily-end">Latest end</Label><Input id="offer-daily-end" type="time" step={900} className="mt-1" value={dailyEnd} onChange={(event) => setDailyEnd(event.target.value)} /></div>
+              </div>
+              <div className="mt-4 flex flex-wrap items-end gap-3">
+                <div>
+                  <Label htmlFor="offer-suggestion-count">How many times</Label>
+                  <select id="offer-suggestion-count" className="mt-1 block h-9 rounded-md border border-border bg-card px-3 text-sm" value={suggestCount} onChange={(event) => setSuggestCount(Number(event.target.value))}>
+                    {[2, 3, 4, 5, 6].map((count) => <option key={count} value={count}>{count}</option>)}
+                  </select>
+                </div>
+                <Button type="button" onClick={() => void suggest()} disabled={suggesting || !eventTypeId || !windowStartDate || !windowEndDate || !dailyStart || !dailyEnd}>
+                  <CalendarRange className="h-4 w-4" /> {suggesting ? "Finding times…" : "Suggest open times"}
+                </Button>
+              </div>
+            </div>
             <div className="grid gap-3">
               <Label>Times</Label>
               {starts.map((start, index) => (
@@ -1995,6 +2096,10 @@ function OneOffOffersTab() {
               <p className="text-xs text-muted-foreground">Expires {new Date(offer.expiresAt).toLocaleString()}</p>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => void copyForEmail(offer)}>
+                <Mail className="h-4 w-4" />
+                <CopyFeedbackLabel copied={copied === `email:${offer.id}`} idle="Copy for email" />
+              </Button>
               <Button variant="outline" size="sm" onClick={() => {
                 const url = `${window.location.origin}/offer/${offer.publicId}`;
                 void navigator.clipboard.writeText(url).then(() => {

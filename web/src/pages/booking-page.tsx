@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowLeft, CalendarCheck, Check, Clock, Globe, Plus, Phone, Trash2, UserPlus, Video, X } from "lucide-react";
+// Pure core module: shares the ?slot= contract with the code that writes it.
+import { findSlotByInstant } from "../../../src/core/invite/offer-snippet";
 import {
   ApiError,
   confirmBooking,
@@ -64,11 +66,36 @@ export function errorMessage(e: unknown): string {
   return "Could not reach the server.";
 }
 
+type OfferedSlot = { start: string; end: string; recommendation?: SlotDto["recommendation"] };
+
+/** An offered slot is already fixed, so it carries no score and needs no
+ * invitee-local variant: the same instant is rendered per-viewer downstream. */
+function offeredSlotToDto(slot: OfferedSlot): SlotDto {
+  return {
+    start: { utc: slot.start, invitee: slot.start },
+    end: { utc: slot.end, invitee: slot.end },
+    score: 0,
+    localHourWarning: false,
+  };
+}
+
+/** Opens straight to the confirm step when `?slot=` names an offered time;
+ * an unmatched value falls back to the list rather than erroring, since a
+ * stale link should still let the invitee pick something. */
+function preselectedStep(
+  offeredSlots: readonly OfferedSlot[] | undefined,
+  preselectedSlotStart: string | undefined,
+): { name: "details"; slot: SlotDto } | undefined {
+  const match = findSlotByInstant(offeredSlots, preselectedSlotStart);
+  return match ? { name: "details", slot: offeredSlotToDto(match) } : undefined;
+}
+
 export function BookingPage({
   slug,
   workspaceSlug,
   routingAnswers,
   offeredSlots,
+  preselectedSlotStart,
   offerPublicId,
   proposalPublicId,
   offerTitle,
@@ -84,6 +111,10 @@ export function BookingPage({
     end: string;
     recommendation?: SlotDto["recommendation"];
   }[];
+  /** ISO instant naming one of `offeredSlots` to open straight to. Skipping
+   * the list matters because these links are pasted one-per-time into an
+   * email, so the recipient already chose before they clicked. */
+  preselectedSlotStart?: string;
   offerPublicId?: string;
   proposalPublicId?: string;
   offerTitle?: string;
@@ -91,7 +122,9 @@ export function BookingPage({
   recipientRestricted?: boolean;
 }) {
   const [timezone, setTimezone] = useState(browserTimezone());
-  const [step, setStep] = useState<Step>({ name: "pick" });
+  const [step, setStep] = useState<Step>(
+    () => preselectedStep(offeredSlots, preselectedSlotStart) ?? { name: "pick" },
+  );
   const [reloadKey, setReloadKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<EventTypeMeta | null>(null);
@@ -333,12 +366,7 @@ export function BookingPage({
                       className="h-auto justify-start px-4 py-3 text-left"
                       onClick={() => setStep({
                         name: "details",
-                        slot: {
-                          start: { utc: slot.start, invitee: slot.start },
-                          end: { utc: slot.end, invitee: slot.end },
-                          score: 0,
-                          localHourWarning: false,
-                        },
+                        slot: offeredSlotToDto(slot),
                       })}
                     >
                       <span>

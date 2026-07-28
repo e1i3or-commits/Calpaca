@@ -294,8 +294,17 @@ const pollRoute = createRoute({
 const oneOffOfferRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/offer/$publicId",
+  // ?slot=<iso instant> preselects one time, so each time in a pasted email
+  // can be its own link. An unmatched or absent value just shows the list.
+  validateSearch: (s: Record<string, unknown>): { slot?: string } =>
+    typeof s.slot === "string" && s.slot ? { slot: s.slot } : {},
   component: function OneOffOfferRoute() {
-    return <OneOffOfferPage publicId={oneOffOfferRoute.useParams().publicId} />;
+    return (
+      <OneOffOfferPage
+        publicId={oneOffOfferRoute.useParams().publicId}
+        preselectedSlot={oneOffOfferRoute.useSearch().slot}
+      />
+    );
   },
 });
 

@@ -1055,6 +1055,22 @@ export function createOneOffOffer(input: OneOffOfferInput): Promise<OneOffOffer>
   return request("/api/me/one-off-offers", { method: "POST", body: JSON.stringify(input) });
 }
 
+export function suggestOneOffOfferTimes(input: {
+  eventTypeId: string;
+  timezone: string;
+  startDate: string;
+  endDate: string;
+  dailyStart: string;
+  dailyEnd: string;
+  durationMinutes: number;
+  count: number;
+}): Promise<{ suggestions: { start: string; end: string }[] }> {
+  return request("/api/me/one-off-offers/suggestions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function revokeOneOffOffer(id: string): Promise<{ ok: true }> {
   return request(`/api/me/one-off-offers/${id}`, { method: "DELETE" });
 }

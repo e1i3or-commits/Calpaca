@@ -45,6 +45,7 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/api/me/users", "Organizer", "List active users", "session"],
   ["get", "/api/me/one-off-offers", "One-off offers", "List manageable single-use booking offers", "session"],
   ["post", "/api/me/one-off-offers", "One-off offers", "Create a single-use booking offer", "session"],
+  ["post", "/api/me/one-off-offers/suggestions", "One-off offers", "Suggest conflict-free offer times", "session"],
   ["delete", "/api/me/one-off-offers/{id}", "One-off offers", "Revoke a single-use booking offer", "session"],
   ["get", "/api/me/engagements/{engagementId}/proposals", "Proposals", "List Engagement proposals", "session"],
   ["post", "/api/me/engagements/{engagementId}/proposals", "Proposals", "Create an Engagement proposal", "session"],

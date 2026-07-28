@@ -1,30 +1,79 @@
 import { describe, expect, test } from "bun:test";
-import { Temporal } from "@js-temporal/polyfill";
-import { composeOfferSnippet, offerSlotUrl } from "../../../src/core/invite/offer-snippet";
+import {
+  composeOfferSnippet,
+  findSlotByInstant,
+  offerSlotUrl,
+} from "../../../src/core/invite/offer-snippet";
 
 const OFFER_URL = "https://app.calpaca.io/offer/abc123";
 
 function slot(startUtc: string, minutes = 30) {
-  const start = Temporal.Instant.from(startUtc);
-  return { start, end: start.add({ minutes }) };
+  return {
+    start: startUtc,
+    end: new Date(Date.parse(startUtc) + minutes * 60_000).toISOString(),
+  };
 }
 
 describe("offerSlotUrl", () => {
   test("adds the slot as a query parameter", () => {
-    const url = offerSlotUrl(OFFER_URL, Temporal.Instant.from("2026-07-29T18:00:00Z"));
+    const url = offerSlotUrl(OFFER_URL, "2026-07-29T18:00:00Z");
     expect(url).toBe(`${OFFER_URL}?slot=2026-07-29T18%3A00%3A00Z`);
   });
 
   test("appends rather than starting a second query string", () => {
-    const url = offerSlotUrl(`${OFFER_URL}?ref=email`, Temporal.Instant.from("2026-07-29T18:00:00Z"));
+    const url = offerSlotUrl(`${OFFER_URL}?ref=email`, "2026-07-29T18:00:00Z");
     expect(url).toContain("?ref=email&slot=");
     expect(url.match(/\?/g)).toHaveLength(1);
   });
 
   test("the round trip survives decoding", () => {
-    const start = Temporal.Instant.from("2026-07-29T18:30:00Z");
+    const start = "2026-07-29T18:30:00Z";
     const value = new URL(offerSlotUrl(OFFER_URL, start)).searchParams.get("slot");
-    expect(Temporal.Instant.from(value!).equals(start)).toBe(true);
+    expect(value).toBe(start);
+    expect(Date.parse(value!)).toBe(Date.parse(start));
+  });
+});
+
+describe("findSlotByInstant", () => {
+  const slots = [
+    { start: "2026-07-29T18:00:00Z", end: "2026-07-29T18:30:00Z" },
+    { start: "2026-07-30T13:30:00Z", end: "2026-07-30T14:00:00Z" },
+  ];
+
+  test("finds the named slot", () => {
+    expect(findSlotByInstant(slots, "2026-07-30T13:30:00Z")).toBe(slots[1]);
+  });
+
+  // The reason this is instant comparison and not ===. All four spellings are
+  // the same moment as slots[0], and every one must match.
+  test.each([
+    "2026-07-29T18:00:00Z",
+    "2026-07-29T18:00:00.000Z",
+    "2026-07-29T18:00:00+00:00",
+    "2026-07-29T14:00:00-04:00",
+  ])("matches %s despite a different spelling of the same instant", (spelling) => {
+    expect(findSlotByInstant(slots, spelling)).toBe(slots[0]);
+  });
+
+  test("a different moment does not match", () => {
+    expect(findSlotByInstant(slots, "2026-07-29T18:00:01Z")).toBeUndefined();
+    expect(findSlotByInstant(slots, "2026-07-29T19:00:00Z")).toBeUndefined();
+  });
+
+  test("garbage, empty and missing values yield undefined rather than throwing", () => {
+    expect(findSlotByInstant(slots, "not-a-date")).toBeUndefined();
+    expect(findSlotByInstant(slots, "")).toBeUndefined();
+    expect(findSlotByInstant(slots, undefined)).toBeUndefined();
+    expect(findSlotByInstant(undefined, "2026-07-29T18:00:00Z")).toBeUndefined();
+    expect(findSlotByInstant([], "2026-07-29T18:00:00Z")).toBeUndefined();
+  });
+
+  test("round-trips whatever offerSlotUrl wrote", () => {
+    for (const slot of slots) {
+      const value = new URL(offerSlotUrl("https://x.test/offer/a", slot.start))
+        .searchParams.get("slot");
+      expect(findSlotByInstant(slots, value ?? undefined)).toBe(slot);
+    }
   });
 });
 
