@@ -317,6 +317,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("availability-repo getPublicBook
           email: "zoe@example.com",
           name: "Zoe Adams",
           title: "Partner",
+          // Deliberately not the zone's city: a location must come from the
+          // host, never be derived from "America/New_York".
+          location: "Providence, RI",
           image: "https://example.com/zoe.jpg",
           timezone: "America/New_York",
         },
@@ -324,6 +327,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("availability-repo getPublicBook
           email: "rafael@example.com",
           name: "Rafael Ortiz",
           title: null,
+          location: null,
           image: null,
           timezone: "Europe/Berlin",
         },
@@ -371,6 +375,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("availability-repo getPublicBook
         {
           name: "Zoe Adams",
           title: "Partner",
+          location: "Providence, RI",
           image: "https://example.com/zoe.jpg",
           timezone: "America/New_York",
         },

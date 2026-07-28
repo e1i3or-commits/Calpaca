@@ -59,6 +59,11 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   title: text("title"),
+  // Host-authored, free text ("Charleston, SC"). Deliberately NOT derived from
+  // timezone: "America/New_York" names a representative zone city, not where
+  // the host lives, so rendering it as a location is just wrong for most of a
+  // zone's population.
+  location: text("location"),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
   timezone: text("timezone").notNull().default("UTC"), // IANA

@@ -21,12 +21,6 @@ export function hostLocalTime(timeZone: string): string {
   }).format(new Date());
 }
 
-/** "America/New_York" -> "New York". The IANA path is accurate but reads as
- * plumbing; invitees recognize the city. */
-export function timezoneCityLabel(timeZone: string): string {
-  return (timeZone.split("/").pop() ?? timeZone).replace(/_/g, " ");
-}
-
 export function formatDay(utc: string, timeZone: string): string {
   return new Intl.DateTimeFormat(undefined, {
     weekday: "long",

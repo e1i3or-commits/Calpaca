@@ -3876,6 +3876,7 @@ function ProfileTab({ section }: { section: "profile" | "api" }) {
       const result = await updateProfile({
         name: profile.name,
         title: profile.title ?? null,
+        location: profile.location ?? null,
         timezone: profile.timezone,
         image: profile.image,
       });
@@ -3982,6 +3983,23 @@ function ProfileTab({ section }: { section: "profile" | "api" }) {
                 />
                 <p className="text-xs text-muted-foreground">
                   Displayed with your name on public booking pages.
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="profile-location">Location</Label>
+                <Input
+                  id="profile-location"
+                  placeholder="Charleston, SC"
+                  value={profile.location ?? ""}
+                  onChange={(event) => setProfile({
+                    ...profile,
+                    location: event.target.value || null,
+                  })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Shown next to your local time on public booking pages. Leave
+                  blank to show the time without a place — your timezone is not
+                  used to guess one.
                 </p>
               </div>
               <div className="flex flex-col gap-1.5">

@@ -4,7 +4,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { AlpacaLoader } from "@/components/alpaca-loader";
 import { getPublicBookingPage, type PublicBookingPage as BookingPageData } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
-import { hostLocalTime, timezoneCityLabel } from "@/lib/time";
+import { hostLocalTime } from "@/lib/time";
 
 type EventTypeSummary = BookingPageData["eventTypes"][number];
 type Host = NonNullable<BookingPageData["hosts"]>[number];
@@ -35,12 +35,12 @@ function initials(name: string): string {
     .map((part) => part[0]?.toUpperCase() ?? "").join("");
 }
 
-/** Who the invitee is meeting. A single host gets a real portrait: this page is
- * often the first time a client sees a face, and the small stacked avatars used
- * on the event page read as participant chips rather than an introduction. Size,
- * not shape, carries that distinction — the frame stays circular because
- * user-supplied avatars are frequently pre-masked to a circle, and a square
- * frame would show corners around them. */
+/** Who the invitee is meeting. The portrait stays close to the scale of the
+ * rest of the page's chrome: a full-rail-width photograph next to a 36px flat
+ * logo mark reads as two unrelated designs, and it pushes the actual booking
+ * options below the fold. Type carries the hierarchy here, not image size.
+ * The frame is circular because user-supplied avatars are frequently already
+ * masked to a circle, and a square frame shows corners around them. */
 function IdentityRail({ page, hosts }: { page: BookingPageData; hosts: readonly Host[] }) {
   const solo = hosts.length === 1 ? hosts[0] : undefined;
   // Several hosts usually means several zones, and one clock would be a lie.
@@ -55,38 +55,38 @@ function IdentityRail({ page, hosts }: { page: BookingPageData; hosts: readonly 
 
   return (
     <div className="min-w-0 lg:sticky lg:top-12 lg:self-start">
-      <div className="flex items-center gap-4 lg:block">
+      <div className="flex items-center gap-4">
         {solo
           ? solo.image
             ? (
                 <img
                   src={solo.image}
                   alt={solo.name}
-                  className="h-20 w-20 shrink-0 rounded-full border border-border object-cover lg:mb-6 lg:h-auto lg:w-full lg:aspect-square"
+                  className="h-16 w-16 shrink-0 rounded-full border border-border object-cover"
                 />
               )
             : (
                 <div
                   aria-hidden
-                  className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xl font-medium text-muted-foreground lg:mb-6 lg:h-auto lg:w-full lg:aspect-square lg:text-5xl"
+                  className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-lg font-medium text-muted-foreground"
                 >
                   {initials(solo.name)}
                 </div>
               )
           : hosts.length > 1 && (
-              <div className="flex shrink-0 -space-x-3 lg:mb-6">
+              <div className="flex shrink-0 -space-x-3">
                 {hosts.slice(0, 4).map((host, index) => host.image ? (
                   <img
                     key={`${host.name}-${index}`}
                     src={host.image}
                     alt={host.name}
-                    className="h-14 w-14 rounded-full border-2 border-background object-cover lg:h-16 lg:w-16"
+                    className="h-12 w-12 rounded-full border-2 border-background object-cover"
                   />
                 ) : (
                   <div
                     key={`${host.name}-${index}`}
                     aria-hidden
-                    className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-background bg-muted text-sm font-medium text-muted-foreground lg:h-16 lg:w-16"
+                    className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-background bg-muted text-sm font-medium text-muted-foreground"
                   >
                     {initials(host.name)}
                   </div>
@@ -94,11 +94,11 @@ function IdentityRail({ page, hosts }: { page: BookingPageData; hosts: readonly 
               </div>
             )}
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-[-0.035em] lg:text-[2rem] lg:leading-[1.15]">
+          <h1 className="text-xl font-semibold tracking-[-0.03em] lg:text-2xl">
             {page.name}
           </h1>
           {subtitle && (
-            <p className="mt-1.5 text-sm text-muted-foreground lg:text-base">{subtitle}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
           )}
         </div>
       </div>
@@ -109,11 +109,15 @@ function IdentityRail({ page, hosts }: { page: BookingPageData; hosts: readonly 
         </p>
       )}
 
+      {/* Only the host's own `location` names a place. The IANA zone is not a
+          location — most of America/New_York is not in New York. */}
       {sharedZone && (
         <p className="mt-6 text-xs text-muted-foreground">
           {solo
-            ? `It is ${hostLocalTime(sharedZone)} where I am, in ${timezoneCityLabel(sharedZone)}.`
-            : `It is ${hostLocalTime(sharedZone)} for the team, in ${timezoneCityLabel(sharedZone)}.`}
+            ? solo.location
+              ? `It is ${hostLocalTime(sharedZone)} where I am, in ${solo.location}.`
+              : `It is ${hostLocalTime(sharedZone)} where I am.`
+            : `It is ${hostLocalTime(sharedZone)} for the team.`}
         </p>
       )}
     </div>

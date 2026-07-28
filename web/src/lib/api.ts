@@ -241,6 +241,7 @@ export type PublicBookingPage = {
   hosts?: {
     name: string;
     title: string | null;
+    location: string | null;
     image: string | null;
     timezone: string;
   }[];
@@ -736,6 +737,7 @@ export type UserProfile = {
   id: string;
   name: string;
   title?: string | null;
+  location?: string | null;
   email: string;
   timezone: string;
   image: string | null;
@@ -819,6 +821,7 @@ export function getProfile(): Promise<{ profile: UserProfile }> {
 export function updateProfile(input: {
   name: string;
   title: string | null;
+  location: string | null;
   timezone: string;
   image: string | null;
 }): Promise<{ profile: UserProfile }> {

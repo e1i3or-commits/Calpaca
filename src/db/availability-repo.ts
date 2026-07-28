@@ -61,6 +61,7 @@ export interface PublicBookingPage {
   readonly hosts?: readonly {
     readonly name: string;
     readonly title: string | null;
+    readonly location: string | null;
     readonly image: string | null;
     readonly timezone: string;
   }[];
@@ -132,6 +133,7 @@ export async function getPublicBookingPage(
         .selectDistinct({
           name: users.name,
           title: users.title,
+          location: users.location,
           image: users.image,
           timezone: users.timezone,
         })
