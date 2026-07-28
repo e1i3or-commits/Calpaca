@@ -25,6 +25,7 @@ export interface EventTypeConfig {
   readonly meetingFormats?: readonly ("phone" | "google_meet")[];
   readonly bookingQuestions?: readonly BookingQuestion[];
   readonly emailVerificationRequired?: boolean;
+  readonly guestsEnabled?: boolean;
   readonly locations?: readonly EventLocation[];
   readonly mode?: AssignmentMode;
   readonly durationMinutes: number;
@@ -169,6 +170,7 @@ export interface BookingEventTypeConfig {
   readonly meetingFormats?: readonly ("phone" | "google_meet")[];
   readonly bookingQuestions?: readonly BookingQuestion[];
   readonly emailVerificationRequired?: boolean;
+  readonly guestsEnabled?: boolean;
   readonly locations?: readonly EventLocation[];
   readonly durationMinutes: number;
   readonly selectableDurations?: readonly number[];
@@ -195,6 +197,7 @@ function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingE
     meetingFormats: row.meetingFormats,
     bookingQuestions: row.bookingQuestions,
     emailVerificationRequired: row.emailVerificationRequired,
+    guestsEnabled: row.guestsEnabled,
     locations: row.locations,
     durationMinutes: row.durationMinutes,
     selectableDurations: row.selectableDurations,
@@ -270,6 +273,7 @@ export async function getEventTypeBySlug(
     meetingFormats: row.meetingFormats,
     bookingQuestions: row.bookingQuestions,
     emailVerificationRequired: row.emailVerificationRequired,
+    guestsEnabled: row.guestsEnabled,
     locations: row.locations,
     mode: row.mode,
     durationMinutes: row.durationMinutes,

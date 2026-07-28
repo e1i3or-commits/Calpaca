@@ -297,6 +297,7 @@ const eventTypeBodySchema = z
       }
     })).max(20).default([]),
     emailVerificationRequired: z.boolean().default(false),
+    guestsEnabled: z.boolean().default(false),
     locations: z.array(z.object({
       id: z.string().min(1).max(80).regex(/^[a-z0-9][a-z0-9_-]*$/),
       type: z.enum(["google_meet", "phone", "in_person", "custom_url"]),

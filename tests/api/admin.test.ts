@@ -282,6 +282,33 @@ describe("admin routes", () => {
     expect(body.hosts).toHaveLength(1);
   });
 
+  test("guestsEnabled passes through create as the route received it", async () => {
+    let captured: unknown;
+    const router = createAdminRoutes(makeDeps({
+      createEventType: async (_owner, input) => {
+        captured = input;
+        return { ...eventType, ...input, hosts: eventType.hosts };
+      },
+    }));
+
+    const enabled = await post(router, "/api/me/event-types", {
+      ...validEventTypeBody,
+      slug: "new-call",
+      guestsEnabled: true,
+    });
+    expect(enabled.status).toBe(201);
+    expect((captured as { guestsEnabled?: boolean }).guestsEnabled).toBe(true);
+    expect(((await enabled.json()) as { guestsEnabled?: boolean }).guestsEnabled).toBe(true);
+
+    const omitted = await post(router, "/api/me/event-types", {
+      ...validEventTypeBody,
+      slug: "another-call",
+    });
+    expect(omitted.status).toBe(201);
+    expect((captured as { guestsEnabled?: boolean }).guestsEnabled).toBe(false);
+    expect(((await omitted.json()) as { guestsEnabled?: boolean }).guestsEnabled).toBe(false);
+  });
+
   test("event type update 404s outside scope; delete maps in_use to 409", async () => {
     const router = createAdminRoutes(
       makeDeps({ deleteEventType: async () => "in_use" }),
