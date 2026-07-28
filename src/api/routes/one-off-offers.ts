@@ -10,6 +10,9 @@ import {
 } from "../../db/one-off-offer-repo";
 import { getEventTypeForAdmin, isAppAdmin } from "../../db/admin-repo";
 import { isAllowedDuration } from "../../core/booking/durations";
+import { getBusyForUsers, getSchedulesForUsers } from "../../db/availability-repo";
+import { suggestOpenSlots, suggestionWindow } from "../../core/availability/suggest";
+import { isIanaZone } from "../../lib/timezone";
 
 const bodySchema = z.object({
   eventTypeId: z.string().uuid(),
@@ -21,6 +24,17 @@ const bodySchema = z.object({
     end: z.string().datetime({ offset: true }),
   })).min(1).max(20),
   expiresAt: z.string().datetime({ offset: true }),
+});
+
+const suggestionSchema = z.object({
+  eventTypeId: z.string().uuid(),
+  timezone: z.string().refine(isIanaZone, "must be an IANA timezone"),
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  dailyStart: z.string().regex(/^\d{2}:\d{2}$/),
+  dailyEnd: z.string().regex(/^\d{2}:\d{2}$/),
+  durationMinutes: z.number().int().min(5).max(480),
+  count: z.number().int().min(1).max(10),
 });
 
 const routes = new Hono<AuthEnv>();
@@ -52,6 +66,64 @@ routes.get("/api/me/one-off-offers", async (c) => {
   const admin = workspaceId ? await isAppAdmin(user.id, undefined, workspaceId) : false;
   return c.json({
     offers: workspaceId ? await listOneOffOffers(workspaceId, admin ? undefined : user.id) : [],
+  });
+});
+
+/**
+ * Times the host is actually free for, best first — the difference between
+ * pasting three options into an email and pasting three options the invitee can
+ * still book. Applies the event type's buffers and minimum notice, because
+ * unlike a poll option an offered slot is booked directly from the link.
+ */
+routes.post("/api/me/one-off-offers/suggestions", async (c) => {
+  const parsed = suggestionSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+  const user = c.get("user");
+  if (!user.workspaceId) return c.json({ error: "workspace_not_found" }, 404);
+
+  const eventType = await getEventTypeForAdmin(
+    parsed.data.eventTypeId,
+    user.id,
+    undefined,
+    user.workspaceId,
+  );
+  if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+  if (!isAllowedDuration(
+    parsed.data.durationMinutes,
+    eventType.durationMinutes,
+    eventType.selectableDurations,
+  )) {
+    return c.json({ error: "invalid_duration" }, 400);
+  }
+
+  let requested;
+  try {
+    requested = suggestionWindow(parsed.data);
+  } catch {
+    return c.json({ error: "invalid_window" }, 400);
+  }
+
+  const [schedule] = await getSchedulesForUsers([user.id]);
+  if (!schedule) return c.json({ suggestions: [] });
+  const [busy] = await getBusyForUsers([user.id], requested.window);
+
+  const suggestions = suggestOpenSlots(schedule, busy?.intervals ?? [], {
+    window: requested.window,
+    dailyWindows: requested.dailyWindows,
+    durationMinutes: parsed.data.durationMinutes,
+    count: parsed.data.count,
+    bufferBeforeMin: eventType.bufferBeforeMin,
+    bufferAfterMin: eventType.bufferAfterMin,
+    minimumNoticeMin: eventType.minimumNoticeMin,
+    slotIncrementMin: 15,
+    slotTimezone: parsed.data.timezone,
+  }, Temporal.Now.instant());
+
+  return c.json({
+    suggestions: suggestions.map((slot) => ({
+      start: slot.start.toString(),
+      end: slot.end.toString(),
+    })),
   });
 });
 

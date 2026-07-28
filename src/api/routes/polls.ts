@@ -30,10 +30,8 @@ import {
   type HostBusy,
   type HostSchedule,
 } from "../../db/availability-repo";
-import { effectiveOpenIntervals } from "../../core/availability/overrides";
-import { intersectMany, subtract, type Interval } from "../../core/availability/intervals";
-import { generateSlots } from "../../core/availability/slots";
-import { scoreSlots } from "../../core/availability/scoring";
+import { suggestOpenSlots, suggestionWindow } from "../../core/availability/suggest";
+import { type Interval } from "../../core/availability/intervals";
 import {
   emitPollFinalizedWebhook,
   enqueuePollInvitations,
@@ -190,41 +188,6 @@ function parseOptions(options: z.infer<typeof optionSchema>[]) {
   });
 }
 
-function suggestionWindow(
-  input: z.infer<typeof suggestionSchema>,
-): { window: Interval; dailyWindows: Interval[] } {
-  const startDate = Temporal.PlainDate.from(input.startDate);
-  const endDate = Temporal.PlainDate.from(input.endDate);
-  if (Temporal.PlainDate.compare(startDate, endDate) > 0) throw new RangeError("invalid date range");
-  if (startDate.until(endDate, { largestUnit: "day" }).days > 30) {
-    throw new RangeError("date range too large");
-  }
-  const dailyStart = Temporal.PlainTime.from(input.dailyStart);
-  const dailyEnd = Temporal.PlainTime.from(input.dailyEnd);
-  if (Temporal.PlainTime.compare(dailyStart, dailyEnd) >= 0) throw new RangeError("invalid daily window");
-
-  const dailyWindows: Interval[] = [];
-  for (
-    let date = startDate;
-    Temporal.PlainDate.compare(date, endDate) <= 0;
-    date = date.add({ days: 1 })
-  ) {
-    dailyWindows.push({
-      start: date.toPlainDateTime(dailyStart)
-        .toZonedDateTime(input.timezone, { disambiguation: "compatible" }).toInstant(),
-      end: date.toPlainDateTime(dailyEnd)
-        .toZonedDateTime(input.timezone, { disambiguation: "compatible" }).toInstant(),
-    });
-  }
-  return {
-    window: {
-      start: dailyWindows[0]!.start,
-      end: dailyWindows[dailyWindows.length - 1]!.end,
-    },
-    dailyWindows,
-  };
-}
-
 export function createPollRoutes(
   suggestionDeps: PollSuggestionDeps = defaultSuggestionDeps,
 ): Hono<AuthEnv> {
@@ -268,36 +231,23 @@ export function createPollRoutes(
     const [schedule] = await suggestionDeps.getSchedulesForUsers([userId]);
     if (!schedule) return c.json({ suggestions: [] });
     const [busy] = await suggestionDeps.getBusyForUsers([userId], requested.window);
-    const open = intersectMany([
-      subtract(
-        effectiveOpenIntervals(
-          schedule.rules,
-          schedule.overrides ?? [],
-          schedule.timezone,
-          requested.window,
-        ),
-        busy?.intervals ?? [],
-      ),
-      requested.dailyWindows,
-    ]);
-    const candidates = generateSlots(open, {
+    // Polls propose times rather than book them, so buffers and minimum notice
+    // are deliberately not applied here — the host confirms an option later,
+    // and that confirmation runs the full booking checks.
+    const ranked = suggestOpenSlots(schedule, busy?.intervals ?? [], {
+      window: requested.window,
+      dailyWindows: requested.dailyWindows,
       durationMinutes: parsed.data.durationMinutes,
+      count: parsed.data.count,
       bufferBeforeMin: 0,
       bufferAfterMin: 0,
       minimumNoticeMin: 0,
-      rollingWindowDays: 366,
       slotIncrementMin: 15,
-      timezone: parsed.data.timezone,
+      slotTimezone: parsed.data.timezone,
     }, suggestionDeps.now());
-    const ranked = scoreSlots(candidates, {
-      busy: busy?.intervals ?? [],
-      open,
-      prefs: {},
-      timezone: schedule.timezone,
-    }).slice(0, parsed.data.count);
 
     return c.json({
-      suggestions: ranked.map(({ slot }) => ({
+      suggestions: ranked.map((slot) => ({
         start: slot.start.toString(),
         end: slot.end.toString(),
       })),
