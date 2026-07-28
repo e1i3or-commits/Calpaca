@@ -117,6 +117,10 @@ routes.post("/api/me/one-off-offers/suggestions", async (c) => {
     minimumNoticeMin: eventType.minimumNoticeMin,
     slotIncrementMin: 15,
     slotTimezone: parsed.data.timezone,
+    // A handful of times pasted into an email has to look like real choices.
+    // Unspread, top-N returns near-identical neighbours (12:30/12:45/13:00).
+    minSeparationMinutes: 60,
+    preferDistinctDays: true,
   }, Temporal.Now.instant());
 
   return c.json({

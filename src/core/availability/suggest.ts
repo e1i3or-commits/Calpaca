@@ -102,6 +102,61 @@ export interface SuggestionConstraints {
   readonly prefs?: HostPrefs;
   /** Guard for generateSlots; the window above is the real bound. */
   readonly rollingWindowDays?: number;
+  /**
+   * Minimum gap between two returned suggestions. Adjacent slots score almost
+   * identically, so an unspread top-N is "12:30, 12:45, 1:00" — overlapping
+   * times that read as one option, not three. Zero keeps the raw ranking.
+   */
+  readonly minSeparationMinutes?: number;
+  /** Take at most one suggestion per local day before allowing a second on a
+   * day already used. A handful of times to choose from is only useful if they
+   * are not all the same afternoon. */
+  readonly preferDistinctDays?: boolean;
+}
+
+/**
+ * Greedy spread over the ranked list: walk best-first, keep a slot only if it
+ * clears `minSeparationMinutes` from everything kept so far, preferring a
+ * fresh day on the first pass and relaxing that on the second.
+ *
+ * Greedy rather than optimal on purpose. The host is glancing at three or four
+ * times before pasting them, so "best available, well separated" beats any
+ * globally optimal arrangement they would not notice.
+ */
+function spreadSlots(
+  ranked: readonly Interval[],
+  count: number,
+  minSeparationMinutes: number,
+  preferDistinctDays: boolean,
+  timezone: string,
+): Interval[] {
+  const localDay = (slot: Interval) =>
+    slot.start.toZonedDateTimeISO(timezone).toPlainDate().toString();
+
+  const picked: Interval[] = [];
+  const usedDays = new Set<string>();
+
+  const clears = (slot: Interval) => picked.every((kept) => {
+    const gap = Temporal.Instant.compare(slot.start, kept.start) < 0
+      ? slot.end.until(kept.start).total({ unit: "minutes" })
+      : kept.end.until(slot.start).total({ unit: "minutes" });
+    return gap >= minSeparationMinutes;
+  });
+
+  for (const requireNewDay of preferDistinctDays ? [true, false] : [false]) {
+    for (const slot of ranked) {
+      if (picked.length >= count) break;
+      if (picked.includes(slot)) continue;
+      if (requireNewDay && usedDays.has(localDay(slot))) continue;
+      if (!clears(slot)) continue;
+      picked.push(slot);
+      usedDays.add(localDay(slot));
+    }
+    if (picked.length >= count) break;
+  }
+
+  // Ranked order is by score; chronological is what a recipient reads.
+  return picked.sort((a, b) => Temporal.Instant.compare(a.start, b.start));
 }
 
 /**
@@ -146,10 +201,22 @@ export function suggestOpenSlots(
     timezone: constraints.slotTimezone ?? schedule.timezone,
   }, now);
 
-  return scoreSlots(candidates, {
+  const ranked = scoreSlots(candidates, {
     busy,
     open,
     prefs: constraints.prefs ?? {},
     timezone: schedule.timezone,
-  }).slice(0, constraints.count).map(({ slot }) => slot);
+  }).map(({ slot }) => slot);
+
+  const separation = constraints.minSeparationMinutes ?? 0;
+  if (separation <= 0 && !constraints.preferDistinctDays) {
+    return ranked.slice(0, constraints.count);
+  }
+  return spreadSlots(
+    ranked,
+    constraints.count,
+    separation,
+    constraints.preferDistinctDays ?? false,
+    constraints.slotTimezone ?? schedule.timezone,
+  );
 }

@@ -263,6 +263,80 @@ describe("suggestOpenSlots", () => {
     expect(slots).toEqual([]);
   });
 
+  // Clustering only shows up when availability is fragmented: with a wide-open
+  // calendar the ranking already spreads itself across mornings. These use a
+  // week that is busy except Wed 12:00-14:00 and Fri 15:00-16:00 local, which
+  // is the shape that produced overlapping suggestions against real data.
+  describe("spreading", () => {
+    const FRAGMENTED_BUSY = [
+      interval("2026-07-29T13:00:00Z", "2026-07-29T16:00:00Z"), // Wed 09-12
+      interval("2026-07-29T18:00:00Z", "2026-07-29T21:00:00Z"), // Wed 14-17
+      interval("2026-07-30T13:00:00Z", "2026-07-30T21:00:00Z"), // Thu, all day
+      interval("2026-07-31T13:00:00Z", "2026-07-31T19:00:00Z"), // Fri 09-15
+      interval("2026-07-31T20:00:00Z", "2026-07-31T21:00:00Z"), // Fri 16-17
+    ];
+    const raw = (count: number) =>
+      suggestOpenSlots(SCHEDULE, FRAGMENTED_BUSY, baseConstraints({ count }), NOW);
+    const spread = (count: number, over: Partial<SuggestionConstraints> = {}) =>
+      suggestOpenSlots(SCHEDULE, FRAGMENTED_BUSY, baseConstraints({
+        count,
+        minSeparationMinutes: 60,
+        preferDistinctDays: true,
+        ...over,
+      }), NOW);
+
+    const minGap = (slots: readonly Interval[]) => {
+      const sorted = [...slots].sort((a, b) => Temporal.Instant.compare(a.start, b.start));
+      return Math.min(...sorted.slice(1).map((slot, i) =>
+        sorted[i]!.end.until(slot.start).total({ unit: "minutes" })));
+    };
+
+    // The defect this exists for: unspread, asking for five returns 12:00 and
+    // 12:15 among them — a negative gap, i.e. two overlapping "options".
+    test("unspread suggestions can overlap; spread ones cannot", () => {
+      expect(minGap(raw(5))).toBeLessThan(0);
+      expect(minGap(spread(5))).toBeGreaterThanOrEqual(60);
+    });
+
+    test("prefers separate days where the raw ranking would double up", () => {
+      const day = (slot: Interval) =>
+        slot.start.toZonedDateTimeISO("America/New_York").toPlainDate().toString();
+      expect(new Set(raw(2).map(day)).size).toBe(1);
+      expect(new Set(spread(2).map(day)).size).toBe(2);
+    });
+
+    // Three well-separated times beat four where two collide, so the gap wins
+    // over the requested count.
+    test("returns fewer than asked rather than violating the gap", () => {
+      const slots = spread(5);
+      expect(slots.length).toBeLessThan(5);
+      expect(slots.length).toBeGreaterThan(1);
+      expect(minGap(slots)).toBeGreaterThanOrEqual(60);
+    });
+
+    test("results are chronological, because that is how a recipient reads them", () => {
+      const slots = spread(4);
+      for (let i = 1; i < slots.length; i += 1) {
+        expect(Temporal.Instant.compare(slots[i - 1]!.start, slots[i]!.start)).toBe(-1);
+      }
+    });
+
+    test("a separation wider than the range still yields the single best time", () => {
+      expect(spread(3, { minSeparationMinutes: 60 * 24 * 30 })).toHaveLength(1);
+    });
+
+    test("spreading is off unless asked for, leaving other callers untouched", () => {
+      const untouched = suggestOpenSlots(
+        SCHEDULE,
+        FRAGMENTED_BUSY,
+        baseConstraints({ count: 5, minSeparationMinutes: 0, preferDistinctDays: false }),
+        NOW,
+      );
+      expect(untouched.map((s) => s.start.toString()))
+        .toEqual(raw(5).map((s) => s.start.toString()));
+    });
+  });
+
   test("is deterministic for identical input", () => {
     const args = () => [SCHEDULE, [], baseConstraints({ count: 5 }), NOW] as const;
     const first = suggestOpenSlots(...args());
