@@ -19,7 +19,7 @@ Accepted design: `docs/BOOKING-GUESTS.md`. Read it before starting.
 - All date/time work uses Temporal. `moment`, `dayjs`, `date-fns` are forbidden.
 - No new npm dependencies. This feature needs none.
 - Comments explain why, not what. Sparse.
-- **`bun` is not installed on the local workstation.** The gate runs on the deployment box (`hetzner:/opt/scheduler`) inside the `scheduler-agent:latest` image, with `TEST_DATABASE_URL` pointing at a throwaway Postgres — never at the production `ts-scheduler-db`, because `tests/db/*` issue `truncate ... restart identity cascade`. The recipe is in the Appendix.
+- **`bun` is not installed on the local workstation**, so every test command runs inside the local `calpaca-app:latest` image with the repo bind-mounted. `TEST_DATABASE_URL` must point at the throwaway `gate-db` container, never at production. Exact commands are in the Appendix — use them verbatim.
 - `docs/openapi.json` needs **no** regeneration: request bodies are emitted generically as `{ type: "object", additionalProperties: true }` (`src/api/openapi.ts:186-191`) and this feature adds no new route.
 - Do not edit anything under `tasks/`, `scripts/verify.sh`, `scripts/loop.sh`, or `CLAUDE.md`.
 
@@ -1095,29 +1095,43 @@ about it. Client validation is a courtesy; the server revalidates."
 
 ## Appendix: running the gate
 
-`bun` is not installed on the workstation. Run tests on the deployment box, against a throwaway database — **never** the production `ts-scheduler-db`, because `tests/db/*` truncate tables.
+`bun` is not installed on the workstation, but the local `calpaca-app:latest`
+image carries bun 1.3.14, so the whole gate runs locally in a container with the
+repo mounted. **No SSH, and no touching the production database** — `tests/db/*`
+issue `truncate ... restart identity cascade`, so they must never point at
+`ts-scheduler-db`.
+
+The throwaway Postgres and its network are already running; verify with
+`docker exec gate-db pg_isready -U gate` before your first run. If it is gone,
+recreate it:
 
 ```bash
-# 1. get the work onto the box
-git format-patch -N --stdout <base>..HEAD > /tmp/guests.patch
-scp /tmp/guests.patch hetzner:/tmp/guests.patch
-ssh hetzner "cd /opt/scheduler && git am /tmp/guests.patch"
-
-# 2. throwaway Postgres
-ssh hetzner "docker run -d --rm --name gate-db \
-  -e POSTGRES_PASSWORD=gate -e POSTGRES_USER=gate -e POSTGRES_DB=gate postgres:16-alpine"
-
-# 3. the gate. TEST_DATABASE_URL, not DATABASE_URL — the db suites gate on it
-#    and silently SKIP without it.
-ssh hetzner "docker run --rm --network container:gate-db -v /opt/scheduler:/w -w /w \
-  -e TEST_DATABASE_URL=postgres://gate:gate@127.0.0.1:5432/gate \
-  scheduler-agent:latest bash -lc 'bun run verify'"
-
-# 4. tear down
-ssh hetzner "docker stop gate-db"
+docker network create calpaca-gate
+docker run -d --name gate-db --network calpaca-gate \
+  -e POSTGRES_PASSWORD=gate -e POSTGRES_USER=gate -e POSTGRES_DB=gate postgres:16-alpine
 ```
 
-A run reporting `0 fail` alongside dozens of `(skip)` lines from `tests/db/` is **not** a passing gate. The current baseline is 592 pass / 0 fail / 1806 assertions; the finished feature should exceed that and skip nothing new.
+Run any test command like this, from the repo root:
+
+```bash
+# full gate: typecheck (both projects) + lint + all tests, ~25s
+docker run --rm --network calpaca-gate -v "$PWD":/w -w /w \
+  -e TEST_DATABASE_URL=postgres://gate:gate@gate-db:5432/gate \
+  --entrypoint sh calpaca-app:latest -c 'bun run verify'
+
+# a single file
+docker run --rm --network calpaca-gate -v "$PWD":/w -w /w \
+  -e TEST_DATABASE_URL=postgres://gate:gate@gate-db:5432/gate \
+  --entrypoint sh calpaca-app:latest -c 'bun test tests/core/booking/guests.test.ts'
+```
+
+`TEST_DATABASE_URL`, not `DATABASE_URL` — the db suites gate on that exact
+variable and **silently skip** without it. A run reporting `0 fail` alongside
+`(skip)` lines from `tests/db/` is not a passing gate.
+
+Verified baseline on this machine before any of this work: **592 pass, 0 fail,
+1806 assertions, 103 files.** The finished feature should exceed that and skip
+nothing new.
 
 ## Deployment note
 
