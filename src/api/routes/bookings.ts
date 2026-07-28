@@ -50,6 +50,7 @@ import {
 } from "../../core/booking/questions";
 import { legacyLocations } from "../../core/booking/locations";
 import { isAllowedDuration } from "../../core/booking/durations";
+import { parseGuestEmails } from "../../core/booking/guests";
 import type { RoutingAnswers } from "../../core/routing/condition";
 import { ok, type Result } from "../../lib/result";
 import { suggestEmailDomain } from "../../lib/email-typo";
@@ -110,6 +111,7 @@ export interface BookingDeps {
     offerPublicId?: string,
     expectation?: ConfirmHoldExpectation,
     proposalPublicId?: string,
+    guestEmails?: readonly string[],
   ) => Promise<Result<ConfirmedBooking, ConfirmHoldError>>;
   readonly releaseHolds?: (holdIds: readonly string[]) => Promise<void>;
   readonly getOneOffOfferByPublicId?: (publicId: string) => Promise<OneOffOffer | null>;
@@ -162,7 +164,7 @@ const defaultDeps: BookingDeps = {
   getCapacityAwareBusyForUsers: (userIds, window, eventTypeId, capacity) =>
     dbGetCapacityAwareBusyForUsers(userIds, window, eventTypeId, capacity),
   createHold: (eventTypeId, hostUserIds, slot, ttl) => dbCreateHold(eventTypeId, hostUserIds, slot, ttl),
-  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting, bookingAnswers, offerPublicId, expectation, proposalPublicId) =>
+  confirmHold: (holdIds, invitee, assignment, routingAnswers, meeting, bookingAnswers, offerPublicId, expectation, proposalPublicId, guestEmails) =>
     dbConfirmHold(
       holdIds,
       invitee,
@@ -174,6 +176,7 @@ const defaultDeps: BookingDeps = {
       offerPublicId,
       expectation,
       proposalPublicId,
+      guestEmails,
     ),
   releaseHolds: (holdIds) => dbReleaseHolds(holdIds),
   getOneOffOfferByPublicId: (publicId) => dbGetOneOffOfferByPublicId(publicId),
@@ -245,6 +248,10 @@ const bookingBodySchema = z.object({
     z.array(z.string().max(200)).max(50),
     z.boolean(),
   ])).default({}),
+  // Bounded generously here and enforced precisely by core/booking/guests, so
+  // an over-long list produces a clear invalid_guests error instead of a
+  // generic invalid_body.
+  guests: z.array(z.string().max(320)).max(50).default([]),
   agent: z.literal(true).optional(),
 });
 
@@ -668,6 +675,19 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (agent && !eventType.agentPolicy?.enabled) {
       return c.json({ error: "agent_not_allowed" }, 403);
     }
+    // The endpoint is public, so the toggle has to be enforced server-side or
+    // it is decorative.
+    if (parsed.data.guests.length > 0 && !eventType.guestsEnabled) {
+      return c.json({ error: "guests_not_allowed" }, 400);
+    }
+    // Host addresses are not in scope here and fetching them would add a
+    // query to the booking hot path, so hosts are excluded at send time
+    // instead (guestsToInvite, Task 5). The invitee's own address is in the
+    // body, so that exclusion happens now.
+    const guests = parseGuestEmails(parsed.data.guests, invitee.email, []);
+    if (!guests.ok) {
+      return c.json({ error: "invalid_guests", detail: guests.error }, 400);
+    }
     if (
       eventType.emailVerificationRequired
       && (!parsed.data.emailVerificationToken
@@ -747,6 +767,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       parsed.data.offerPublicId,
       { eventTypeId: eventType.id },
       parsed.data.proposalPublicId,
+      guests.value,
     );
     if (!confirmed.ok) {
       return c.json({ error: confirmed.error.kind }, confirmHoldErrorStatus(confirmed.error.kind));

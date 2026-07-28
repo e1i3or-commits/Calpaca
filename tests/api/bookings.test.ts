@@ -62,6 +62,12 @@ const verifiedEventType: BookingEventTypeConfig = {
   slug: "verified-30",
   emailVerificationRequired: true,
 };
+const guestsEventType: BookingEventTypeConfig = {
+  ...soloEventType,
+  id: "et-guests",
+  slug: "guests-30",
+  guestsEnabled: true,
+};
 
 const eventTypesBySlug: Record<string, BookingEventTypeConfig> = {
   "solo-30": soloEventType,
@@ -69,6 +75,7 @@ const eventTypesBySlug: Record<string, BookingEventTypeConfig> = {
   "rr-30": roundRobinEventType,
   "phone-30": phoneEventType,
   "verified-30": verifiedEventType,
+  "guests-30": guestsEventType,
 };
 
 const eventTypesById: Record<string, BookingEventTypeConfig> = {
@@ -77,6 +84,7 @@ const eventTypesById: Record<string, BookingEventTypeConfig> = {
   "et-rr": roundRobinEventType,
   "et-phone": phoneEventType,
   "et-verified": verifiedEventType,
+  "et-guests": guestsEventType,
 };
 
 const hostsByEventType: Record<string, EventTypeHostRecord[]> = {
@@ -91,6 +99,7 @@ const hostsByEventType: Record<string, EventTypeHostRecord[]> = {
   ],
   "et-phone": [{ userId: "host-a", role: "member", weight: 100 }],
   "et-verified": [{ userId: "host-a", role: "member", weight: 100 }],
+  "et-guests": [{ userId: "host-a", role: "member", weight: 100 }],
 };
 
 const workingHours: HostSchedule["rules"] = [{ dow: 1, start: "09:00", end: "17:00" }];
@@ -131,7 +140,12 @@ interface DepsOverrides {
   confirmHoldResult?: Result<ConfirmedBooking, ConfirmHoldError>;
   confirmRescheduleResult?: Result<BookingState, ConfirmHoldError | BookingStateError>;
   cancelBookingResult?: Result<BookingState, BookingStateError>;
-  onConfirmHold?: (holdIds: readonly string[], invitee: Invitee, assignment?: RoundRobinAssignment) => void;
+  onConfirmHold?: (
+    holdIds: readonly string[],
+    invitee: Invitee,
+    assignment?: RoundRobinAssignment,
+    guestEmails?: readonly string[],
+  ) => void;
   bookingHistory?: readonly BookingRecord[];
   schedules?: Record<string, HostSchedule>;
   onCreateHold?: (hostUserIds: readonly string[]) => void;
@@ -169,8 +183,19 @@ function makeDeps(overrides: DepsOverrides = {}): BookingDeps {
         hostUserId,
       })));
     },
-    confirmHold: async (holdIds, invitee, assignment) => {
-      overrides.onConfirmHold?.(holdIds, invitee, assignment);
+    confirmHold: async (
+      holdIds,
+      invitee,
+      assignment,
+      _routingAnswers,
+      _meeting,
+      _bookingAnswers,
+      _offerPublicId,
+      _expectation,
+      _proposalPublicId,
+      guestEmails,
+    ) => {
+      overrides.onConfirmHold?.(holdIds, invitee, assignment, guestEmails);
       return overrides.confirmHoldResult ?? ok({ bookingId: "booking-1", hostUserIds: ["host-a"] });
     },
     confirmReschedule: async () =>
@@ -492,6 +517,63 @@ describe("POST /bookings", () => {
       invitee: { email: "invitee@example.com", name: "Invitee", timezone: "UTC" },
     });
     expect(res.status).toBe(404);
+  });
+
+  test("rejects guests when the event type has the toggle off", async () => {
+    const router = createBookingRoutes(makeDeps());
+    const res = await post(router, "/bookings", {
+      eventTypeSlug: "solo-30",
+      holdIds: ["hold-host-a"],
+      invitee: { email: "invitee@example.com", name: "Invitee", timezone: "UTC" },
+      guests: ["g@example.com"],
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("guests_not_allowed");
+  });
+
+  test("rejects a malformed guest address even when the toggle is on", async () => {
+    const bookingsById = { "booking-1": makeBooking({ eventTypeId: "et-guests" }) };
+    const router = createBookingRoutes(makeDeps({ bookingsById }));
+    const res = await post(router, "/bookings", {
+      eventTypeSlug: "guests-30",
+      holdIds: ["hold-host-a"],
+      invitee: { email: "invitee@example.com", name: "Invitee", timezone: "UTC" },
+      guests: ["nope"],
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("invalid_guests");
+  });
+
+  test("stores a normalized, de-duplicated guest list when the toggle is on", async () => {
+    let captured: readonly string[] | undefined;
+    const bookingsById = { "booking-1": makeBooking({ eventTypeId: "et-guests" }) };
+    const deps = makeDeps({
+      bookingsById,
+      onConfirmHold: (_holdIds, _invitee, _assignment, guestEmails) => {
+        captured = guestEmails;
+      },
+    });
+    const router = createBookingRoutes(deps);
+    const res = await post(router, "/bookings", {
+      eventTypeSlug: "guests-30",
+      holdIds: ["hold-host-a"],
+      invitee: { email: "invitee@example.com", name: "Invitee", timezone: "UTC" },
+      guests: ["  Guest@Example.com ", "guest@example.com"],
+    });
+
+    expect(res.status).toBe(201);
+    expect(captured).toEqual(["guest@example.com"]);
+  });
+
+  test("an absent guests field is accepted and books normally", async () => {
+    const bookingsById = { "booking-1": makeBooking() };
+    const router = createBookingRoutes(makeDeps({ bookingsById }));
+    const res = await post(router, "/bookings", {
+      eventTypeSlug: "solo-30",
+      holdIds: ["hold-host-a"],
+      invitee: { email: "invitee@example.com", name: "Invitee", timezone: "UTC" },
+    });
+    expect(res.status).toBe(201);
   });
 });
 
