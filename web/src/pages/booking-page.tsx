@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowLeft, CalendarCheck, Check, Clock, Globe, Plus, Phone, Trash2, UserPlus, Video, X } from "lucide-react";
 // Pure core module: shares the ?slot= contract with the code that writes it.
 import { findSlotByInstant } from "../../../src/core/invite/offer-snippet";
+import { MAX_GUESTS } from "../../../src/core/booking/guests";
 import {
   ApiError,
   confirmBooking,
@@ -59,6 +60,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   offer_unavailable: "This offer was already used or is no longer available.",
   email_verification_required: "Verify your email before booking.",
   invalid_verification: "That code is invalid or expired.",
+  guests_not_allowed: "This event type does not accept extra guests.",
+  invalid_guests: "Check the guest email addresses and try again.",
 };
 
 export function errorMessage(e: unknown): string {
@@ -457,6 +460,7 @@ export function BookingPage({
                   : { id: "google-meet", type: "google_meet" as const, label: "Google Meet" })}
               bookingQuestions={meta?.bookingQuestions ?? []}
               emailVerificationRequired={meta?.emailVerificationRequired ?? false}
+              guestsEnabled={meta?.guestsEnabled ?? false}
               offerPublicId={offerPublicId}
               proposalPublicId={proposalPublicId}
               onBack={() => setStep({ name: "pick" })}
@@ -761,6 +765,7 @@ function DetailsStep({
   locations,
   bookingQuestions,
   emailVerificationRequired,
+  guestsEnabled,
   offerPublicId,
   proposalPublicId,
   onBack,
@@ -778,6 +783,7 @@ function DetailsStep({
   locations: EventLocation[];
   bookingQuestions: BookingQuestion[];
   emailVerificationRequired: boolean;
+  guestsEnabled: boolean;
   offerPublicId?: string;
   proposalPublicId?: string;
   onBack: () => void;
@@ -800,6 +806,8 @@ function DetailsStep({
         .map((question) => [question.id, params.get(question.id) ?? ""]),
     );
   });
+  // One empty input is revealed on open; blank entries are ignored server-side.
+  const [guests, setGuests] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState("");
@@ -836,6 +844,7 @@ function DetailsStep({
         offerPublicId,
         proposalPublicId,
         ...(receipt ? { emailVerificationToken: receipt } : {}),
+        ...(guests.some((g) => g.trim()) ? { guests } : {}),
       });
       onConfirmed(confirmation);
     } catch (e) {
@@ -918,6 +927,55 @@ function DetailsStep({
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
+        {guestsEnabled && (
+          <div className="flex flex-col gap-1.5">
+            {guests.length === 0 ? (
+              <button
+                type="button"
+                className="self-start text-sm font-medium text-primary underline"
+                onClick={() => setGuests([""])}
+              >
+                + Add guests
+              </button>
+            ) : (
+              <>
+                <Label htmlFor="guest-0">Guests</Label>
+                {guests.map((guest, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      id={`guest-${index}`}
+                      type="email"
+                      placeholder="colleague@example.com"
+                      value={guest}
+                      onChange={(e) => setGuests(guests.map((g, i) => (i === index ? e.target.value : g)))}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setGuests(guests.filter((_, i) => i !== index))}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+                {guests.length < MAX_GUESTS && (
+                  <button
+                    type="button"
+                    className="self-start text-sm font-medium text-primary underline"
+                    onClick={() => setGuests([...guests, ""])}
+                  >
+                    + Add another
+                  </button>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Guests get the calendar invite and every email about this meeting.
+                  {guests.length >= MAX_GUESTS - 2 ? ` ${MAX_GUESTS - guests.length} left.` : ""}
+                </p>
+              </>
+            )}
+          </div>
+        )}
         <div className="flex flex-col gap-1.5">
           <Label>Location</Label>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

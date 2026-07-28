@@ -2668,6 +2668,7 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   locations: [{ id: "google-meet", type: "google_meet", label: "Google Meet" }],
   bookingQuestions: [],
   emailVerificationRequired: false,
+  guestsEnabled: false,
   hosts: [],
 };
 
@@ -2711,6 +2712,7 @@ function eventTypeToInput(eventType: AdminEventType): EventTypeInput {
         : { id: "google-meet", type: "google_meet" as const, label: "Google Meet" }),
     bookingQuestions: eventType.bookingQuestions ?? [],
     emailVerificationRequired: eventType.emailVerificationRequired ?? false,
+    guestsEnabled: eventType.guestsEnabled ?? false,
     hosts: eventType.hosts.map(({ userId, role, weight }) => ({ userId, role, weight })),
   };
 }
@@ -3081,6 +3083,7 @@ const EVENT_TYPE_SECTION_FOR_FIELD: Partial<Record<keyof EventTypeInput, EventTy
   meetingFormats: "location",
   bookingQuestions: "invitee",
   emailVerificationRequired: "invitee",
+  guestsEnabled: "invitee",
   theme: "appearance",
   layout: "appearance",
   logoUrl: "sharing",
@@ -3822,6 +3825,20 @@ function EventTypeForm({
               <span className="block text-sm font-medium">Verify invitee email before booking</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 Send a six-digit code before confirmation. Verified browsers are trusted for 30 days.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 rounded-xl border border-border p-4">
+            <input
+              type="checkbox"
+              className="mt-1 h-4 w-4 accent-primary"
+              checked={form.guestsEnabled ?? false}
+              onChange={(event) => set("guestsEnabled", event.target.checked)}
+            />
+            <span>
+              <span className="block text-sm font-medium">Let invitees add guests</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                Guests are invited to the calendar event and copied on every email. Up to ten per booking.
               </span>
             </span>
           </label>
