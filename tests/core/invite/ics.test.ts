@@ -86,7 +86,7 @@ describe("buildIcs", () => {
     // "organizer and attendee render as mailto lines" test above)
     const unfolded = ics.replace(/\r\n /g, "");
     expect(unfolded).toContain(
-      "ATTENDEE;CN=g1@example.com;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:g1@example.com",
+      "ATTENDEE;CN=g1@example.com;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:g1@example.com\r\n",
     );
     // never a bare CN
     expect(ics).not.toContain("CN=;");

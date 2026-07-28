@@ -29,7 +29,7 @@ function context(guestEmails: string[] = []): InviteContext {
       { id: "u2", name: "Second Host", email: "second@example.com", timezone: "America/New_York" },
     ],
     rescheduleCount: 0,
-  } as InviteContext;
+  };
 }
 
 describe("buildMail recipients", () => {
@@ -64,6 +64,13 @@ describe("buildMail recipients", () => {
   test("guests appear as ICS attendees on the fallback path", () => {
     const mail = buildMail(context(["g1@example.com"]), "created", NOW, { includeIcs: true });
     expect(mail.ics?.content).toContain("mailto:g1@example.com");
+    // the guest ATTENDEE line exceeds 75 octets, so unfold before matching
+    // (see tests/core/invite/ics.test.ts for the same pattern)
+    const unfolded = mail.ics?.content.replace(/\r\n /g, "");
+    expect(unfolded).not.toContain("CN=;");
+    expect(unfolded).toContain(
+      "ATTENDEE;CN=g1@example.com;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:g1@example.com\r\n",
+    );
   });
 
   test("cancellations reach guests too, so nobody keeps a dead hold", () => {

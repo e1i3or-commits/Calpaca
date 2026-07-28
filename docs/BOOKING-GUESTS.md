@@ -146,18 +146,29 @@ After confirmation a guest mailbox that does not exist bounces
 asynchronously, which does not affect delivery to the invitee and already flows
 through the email-delivery webhook.
 
-Confirmed during implementation: a recipient our validation accepts but the
-provider rejects at SMTP time (RCPT TO) does **not** fail the whole message.
-`SendResult.rejected` in `src/notifications/mailer.ts` is documented as "the
-recipients the SMTP server refused at handoff... while still accepting the
-message for the rest," and `sendInviteMail`'s doc comment states per-recipient
-rejections do not throw. `sendInvite` in `src/jobs/invite-email.ts` passes
+Confirmed during implementation, from this repo's own documented contract
+(there is no SES config to inspect — `src/notifications/mailer.ts` speaks
+generic SMTP via `SMTP_URL`, not a vendor SDK): a recipient our validation
+accepts but the provider rejects at SMTP time (RCPT TO) does not fail the
+whole message for a guest specifically, because the invitee is always in
+`to` and therefore the message always has at least one accepted recipient.
+`SendResult.rejected` is documented as "the recipients the SMTP server
+refused at handoff... while still accepting the message for the rest," and
+`sendInviteMail`'s doc comment states per-recipient rejections do not throw
+— but nodemailer's contract is that it throws when *every* recipient is
+rejected, so this guarantee holds for a bad guest or host cc riding along
+with a good `to`, not for an all-recipients-rejected message.
+
+On a non-cancellation send, `sendInvite` in `src/jobs/invite-email.ts` passes
 `result.rejected` to `recordInviteeRejection`, which returns early when
 `rejected` is empty and, when it is not, only treats the send as failed
 (`invite_failed`) when the invitee's own address is among the rejected
-recipients; a rejected guest or host cc is only `console.warn`ed. A single bad
-guest address therefore cannot cost the invitee their confirmation email, and
-no second `sendMail` call is needed.
+recipients; a rejected guest or host cc is only `console.warn`ed. On a
+cancellation, `sendInvite` skips this call entirely (it lives inside `if
+(kind !== "cancelled")`), so a rejected cc on a cancellation notice is
+discarded silently — not even warned. A single bad guest address therefore
+cannot cost the invitee their confirmation email, and no second `sendMail`
+call is needed.
 
 ## Tests
 
