@@ -140,6 +140,7 @@ import { useAppearance } from "@/lib/appearance";
 // Pure core module, no server or Temporal dependency — same boundary as
 // @/lib/appearance, which also reads straight from src/core.
 import { composeOfferSnippet } from "../../../src/core/invite/offer-snippet";
+import { allowedDurations } from "../../../src/core/booking/durations";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1707,6 +1708,11 @@ function localInputValue(date: Date): string {
   return shifted.toISOString().slice(0, 16);
 }
 
+/** "45 min", "1 hr", "1.5 hr" — matches the event type editor's chips. */
+function durationLabel(minutes: number): string {
+  return minutes < 60 ? `${minutes} min` : `${minutes / 60} hr`;
+}
+
 const DIAGNOSTIC_COPY: Record<AvailabilityDiagnostic["hosts"][number]["reason"], string> = {
   available: "Available",
   schedule_missing: "No availability schedule is connected",
@@ -1814,9 +1820,9 @@ function AvailabilityTroubleshooterTab({
           <div>
             <Label>Duration</Label>
             <div className="mt-2 flex flex-wrap gap-2">
-              {(selected?.selectableDurations?.length ? selected.selectableDurations : [selected?.durationMinutes ?? 30]).map((minutes) => (
+              {allowedDurations(selected?.durationMinutes ?? 30, selected?.selectableDurations).map((minutes) => (
                 <Button key={minutes} type="button" size="sm" variant={duration === minutes ? "default" : "outline"} onClick={() => setDuration(minutes)}>
-                  {minutes} min
+                  {durationLabel(minutes)}
                 </Button>
               ))}
             </div>
@@ -1896,6 +1902,15 @@ function OneOffOffersTab() {
       }
     }).catch((e) => setError(errorText(e)));
   }, [reload]);
+
+  const selectedEventType = eventTypes.find((item) => item.id === eventTypeId);
+  // The same helper the create route validates against, rather than a second
+  // hand-rolled fallback. `selectableDurations` defaults to `[]` in the
+  // database, and `[] ?? fallback` is `[]` — which rendered no buttons at all.
+  const offerDurations = allowedDurations(
+    selectedEventType?.durationMinutes ?? 30,
+    selectedEventType?.selectableDurations,
+  );
 
   const selectEventType = (id: string) => {
     setEventTypeId(id);
@@ -2030,12 +2045,16 @@ function OneOffOffersTab() {
             <div>
               <Label>Meeting duration</Label>
               <div className="mt-2 flex flex-wrap gap-2">
-                {(eventTypes.find((item) => item.id === eventTypeId)?.selectableDurations ?? [eventTypes.find((item) => item.id === eventTypeId)?.durationMinutes ?? 30]).map((minutes) => (
+                {offerDurations.map((minutes) => (
                   <Button key={minutes} type="button" size="sm" variant={duration === minutes ? "default" : "outline"} onClick={() => setDuration(minutes)}>
-                    {minutes} min
+                    {durationLabel(minutes)}
                   </Button>
                 ))}
               </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Set by the event type. Add choices under Event types &rarr; Invitee
+                duration choices.
+              </p>
             </div>
             <div className="rounded-xl border border-border bg-muted/30 p-4">
               <p className="text-sm font-medium">Suggest times from my calendar</p>
