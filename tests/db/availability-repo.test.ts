@@ -9,6 +9,7 @@ import {
   getAvailabilityEvidenceForUsers,
   getBusyForUsers,
   getCapacityAwareBusyForUsers,
+  getPublicBookingPage,
 } from "../../src/db/availability-repo";
 
 /**
@@ -282,6 +283,116 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("availability-repo getBusyForUse
           lastSyncedAt: null,
         },
       ]);
+    } finally {
+      await pool.end();
+    }
+  });
+});
+
+/**
+ * The booking page is the first client-facing surface, so it advertises who the
+ * invitee would be meeting. Two properties matter: hosts are derived from the
+ * event types actually on the page (never someone unbookable), and emails never
+ * appear — this feeds an unauthenticated endpoint.
+ */
+describe.skipIf(!process.env.TEST_DATABASE_URL)("availability-repo getPublicBookingPage hosts", () => {
+  async function setup() {
+    const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
+    const db = drizzle(pool, { schema });
+    await migrate(db, { migrationsFolder: "drizzle" });
+    await db.execute(
+      sql`truncate table ${schema.bookingPages}, ${schema.eventTypeHosts}, ${schema.eventTypes}, ${schema.users}, ${schema.workspaces} restart identity cascade`,
+    );
+
+    const [workspace] = await db
+      .insert(schema.workspaces)
+      .values({ name: "Acme", slug: "acme", plan: "free" })
+      .returning();
+    if (!workspace) throw new Error("failed to insert workspace fixture");
+
+    const hostRows = await db
+      .insert(schema.users)
+      .values([
+        {
+          email: "zoe@example.com",
+          name: "Zoe Adams",
+          title: "Partner",
+          image: "https://example.com/zoe.jpg",
+          timezone: "America/New_York",
+        },
+        {
+          email: "rafael@example.com",
+          name: "Rafael Ortiz",
+          title: null,
+          image: null,
+          timezone: "Europe/Berlin",
+        },
+      ])
+      .returning();
+    const [zoe, rafael] = hostRows;
+    if (!zoe || !rafael) throw new Error("failed to insert host fixtures");
+
+    const eventTypeRows = await db
+      .insert(schema.eventTypes)
+      .values([
+        { workspaceId: workspace.id, slug: "intro", title: "Intro", durationMinutes: 30 },
+        { workspaceId: workspace.id, slug: "deep-dive", title: "Deep dive", durationMinutes: 60 },
+        { workspaceId: workspace.id, slug: "unlisted", title: "Unlisted", durationMinutes: 15 },
+      ])
+      .returning();
+    const [intro, deepDive, unlisted] = eventTypeRows;
+    if (!intro || !deepDive || !unlisted) throw new Error("failed to insert event type fixtures");
+
+    // Zoe hosts both listed event types (so she must be deduplicated to one
+    // entry); Rafael hosts only the event type left off the page.
+    await db.insert(schema.eventTypeHosts).values([
+      { eventTypeId: intro.id, userId: zoe.id },
+      { eventTypeId: deepDive.id, userId: zoe.id },
+      { eventTypeId: unlisted.id, userId: rafael.id },
+    ]);
+
+    await db.insert(schema.bookingPages).values({
+      workspaceId: workspace.id,
+      slug: "team",
+      title: "Meet Acme",
+      description: "Who we are.",
+      eventTypeIds: [intro.id, deepDive.id],
+    });
+
+    return { pool, db, workspaceId: workspace.id };
+  }
+
+  test("derives hosts from the page's event types, deduplicated and without emails", async () => {
+    const { pool, db, workspaceId } = await setup();
+    try {
+      const page = await getPublicBookingPage(workspaceId, "team", db);
+      expect(page).not.toBeNull();
+      expect(page?.hosts).toEqual([
+        {
+          name: "Zoe Adams",
+          title: "Partner",
+          image: "https://example.com/zoe.jpg",
+          timezone: "America/New_York",
+        },
+      ]);
+      // Rafael only hosts the event type the page omits, so he is not
+      // advertised. Deliberately a name that is not a substring of Zoe's.
+      expect(JSON.stringify(page?.hosts)).not.toContain("Rafael");
+      // Unauthenticated surface: no address may leak through the profile.
+      expect(JSON.stringify(page)).not.toContain("@example.com");
+    } finally {
+      await pool.end();
+    }
+  });
+
+  test("exposes each listed event type's meeting formats", async () => {
+    const { pool, db, workspaceId } = await setup();
+    try {
+      const page = await getPublicBookingPage(workspaceId, "team", db);
+      expect(page?.eventTypes.map((eventType) => eventType.slug)).toEqual(["intro", "deep-dive"]);
+      for (const eventType of page?.eventTypes ?? []) {
+        expect(eventType.meetingFormats).toEqual(["google_meet"]);
+      }
     } finally {
       await pool.end();
     }

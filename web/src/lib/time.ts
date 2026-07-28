@@ -10,6 +10,23 @@ export function allTimezones(): string[] {
   return Intl.supportedValuesOf("timeZone");
 }
 
+/** Wall clock where the host is right now. Lets an invitee in another zone see
+ * whether they are about to propose someone's 7am. Rendering only, so Intl
+ * rather than Temporal — see the note at the top of this file. */
+export function hostLocalTime(timeZone: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(new Date());
+}
+
+/** "America/New_York" -> "New York". The IANA path is accurate but reads as
+ * plumbing; invitees recognize the city. */
+export function timezoneCityLabel(timeZone: string): string {
+  return (timeZone.split("/").pop() ?? timeZone).replace(/_/g, " ");
+}
+
 export function formatDay(utc: string, timeZone: string): string {
   return new Intl.DateTimeFormat(undefined, {
     weekday: "long",

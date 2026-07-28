@@ -51,6 +51,19 @@ export interface PublicBookingPage {
   readonly description?: string | null;
   readonly theme?: string;
   readonly logoUrl?: string | null;
+  /** Who the invitee would be meeting, deduplicated across the page's event
+   * types. Same discipline as EventTypeProfile: display fields only, emails
+   * never — this feeds an unauthenticated endpoint. timezone is included so
+   * the page can show the host's local time, which is what an invitee in
+   * another zone actually needs before picking a slot. Optional for the same
+   * fixture-compatibility reason as EventTypeProfile — the repo always returns
+   * an array, but injected test fixtures predating it stay valid. */
+  readonly hosts?: readonly {
+    readonly name: string;
+    readonly title: string | null;
+    readonly image: string | null;
+    readonly timezone: string;
+  }[];
   readonly eventTypes: readonly {
     slug: string;
     title: string;
@@ -58,6 +71,8 @@ export interface PublicBookingPage {
     durationMinutes: number;
     selectableDurations: readonly number[];
     theme: string;
+    /** optional for fixture compatibility, as above */
+    meetingFormats?: readonly ("phone" | "google_meet")[];
   }[];
 }
 
@@ -90,6 +105,7 @@ export async function getPublicBookingPage(
       durationMinutes: eventTypes.durationMinutes,
       selectableDurations: eventTypes.selectableDurations,
       theme: eventTypes.theme,
+      meetingFormats: eventTypes.meetingFormats,
     })
     .from(eventTypes)
     .where(and(
@@ -108,12 +124,29 @@ export async function getPublicBookingPage(
         return [eventType];
       })
     : rows;
+  // Hosts come from the event types actually on the page, so a page never
+  // advertises someone the invitee cannot book. Deduplicated because a host
+  // usually owns several of the listed event types.
+  const hostRows = rows.length
+    ? await executor
+        .selectDistinct({
+          name: users.name,
+          title: users.title,
+          image: users.image,
+          timezone: users.timezone,
+        })
+        .from(eventTypeHosts)
+        .innerJoin(users, eq(eventTypeHosts.userId, users.id))
+        .where(inArray(eventTypeHosts.eventTypeId, rows.map((row) => row.id)))
+        .orderBy(users.name)
+    : [];
   return {
     name: configuredPage?.title ?? workspace.name,
     slug: configuredPage?.slug ?? workspace.slug,
     description: configuredPage?.description,
     theme: configuredPage?.theme,
     logoUrl: configuredPage?.logoUrl,
+    hosts: hostRows,
     eventTypes: configuredPage
       ? orderedRows
       : rows.map(({ id, ...eventType }) => {

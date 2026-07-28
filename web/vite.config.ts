@@ -37,7 +37,7 @@ export default defineConfig({
   server: {
     // public endpoints are mounted at the API root, not /api
     proxy: Object.fromEntries(
-      ["/api", "/health", "/version", "/availability", "/holds", "/bookings", "/routing", "/event-types", "/polls"].map((p) => [
+      ["/api", "/health", "/version", "/availability", "/booking-page", "/holds", "/bookings", "/routing", "/event-types", "/polls"].map((p) => [
         p,
         "http://localhost:3000",
       ]),

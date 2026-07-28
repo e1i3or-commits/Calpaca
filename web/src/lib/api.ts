@@ -238,6 +238,12 @@ export type PublicBookingPage = {
   description?: string | null;
   theme?: string;
   logoUrl?: string | null;
+  hosts?: {
+    name: string;
+    title: string | null;
+    image: string | null;
+    timezone: string;
+  }[];
   eventTypes: {
     slug: string;
     title: string;
@@ -245,6 +251,7 @@ export type PublicBookingPage = {
     durationMinutes: number;
     selectableDurations: number[];
     theme: string;
+    meetingFormats?: ("phone" | "google_meet")[];
   }[];
 };
 
