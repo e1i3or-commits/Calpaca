@@ -37,7 +37,10 @@ function initials(name: string): string {
 
 /** Who the invitee is meeting. A single host gets a real portrait: this page is
  * often the first time a client sees a face, and the small stacked avatars used
- * on the event page read as participant chips rather than an introduction. */
+ * on the event page read as participant chips rather than an introduction. Size,
+ * not shape, carries that distinction — the frame stays circular because
+ * user-supplied avatars are frequently pre-masked to a circle, and a square
+ * frame would show corners around them. */
 function IdentityRail({ page, hosts }: { page: BookingPageData; hosts: readonly Host[] }) {
   const solo = hosts.length === 1 ? hosts[0] : undefined;
   // Several hosts usually means several zones, and one clock would be a lie.
@@ -59,13 +62,13 @@ function IdentityRail({ page, hosts }: { page: BookingPageData; hosts: readonly 
                 <img
                   src={solo.image}
                   alt={solo.name}
-                  className="h-20 w-20 shrink-0 rounded-2xl border border-border object-cover lg:mb-6 lg:h-auto lg:w-full lg:aspect-square"
+                  className="h-20 w-20 shrink-0 rounded-full border border-border object-cover lg:mb-6 lg:h-auto lg:w-full lg:aspect-square"
                 />
               )
             : (
                 <div
                   aria-hidden
-                  className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl border border-border bg-muted text-xl font-medium text-muted-foreground lg:mb-6 lg:h-auto lg:w-full lg:aspect-square lg:text-5xl"
+                  className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xl font-medium text-muted-foreground lg:mb-6 lg:h-auto lg:w-full lg:aspect-square lg:text-5xl"
                 >
                   {initials(solo.name)}
                 </div>
