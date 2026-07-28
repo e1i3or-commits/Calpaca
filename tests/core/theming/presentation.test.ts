@@ -9,10 +9,11 @@ import {
 describe("booking presentation registry", () => {
   test("exposes the complete public theme registry", () => {
     expect(publicThemeNames).toEqual([
-      "default", "midnight", "sand", "juniper", "solstice", "cobalt", "paper",
+      "default", "calpaca", "midnight", "sand", "juniper", "solstice", "cobalt",
+      "paper",
     ]);
     expect(themeNames).toEqual(publicThemeNames);
-    expect(themeNames).toHaveLength(7);
+    expect(themeNames).toHaveLength(8);
     expect(new Set(themeNames).size).toBe(themeNames.length);
   });
 

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 // routing types in api.ts — the web bundle never imports server code).
 export const themeOptions = [
   { value: "default", label: "Default" },
+  { value: "calpaca", label: "Calpaca" },
   { value: "midnight", label: "Midnight" },
   { value: "sand", label: "Sand" },
   { value: "juniper", label: "Juniper" },

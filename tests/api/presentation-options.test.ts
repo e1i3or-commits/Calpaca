@@ -44,9 +44,10 @@ describe("presentation options", () => {
     };
     expect(response.status).toBe(200);
     expect(body.themes.map((theme) => theme.value)).toEqual([
-      "default", "midnight", "sand", "juniper", "solstice", "cobalt", "paper",
+      "default", "calpaca", "midnight", "sand", "juniper", "solstice", "cobalt",
+      "paper",
     ]);
-    expect(body.themes).toHaveLength(7);
+    expect(body.themes).toHaveLength(8);
     expect(body.publicThemes).toEqual(body.themes.map((theme) => theme.value));
     expect(body.themes[0]).toEqual({ value: "default", label: "Default" });
     expect(body.themes.at(-1)).toEqual({ value: "paper", label: "Paper" });

@@ -8,6 +8,7 @@
 
 export const publicThemeNames = [
   "default",
+  "calpaca",
   "midnight",
   "sand",
   "juniper",
@@ -24,6 +25,7 @@ export const defaultTheme: ThemeName = "default";
 /** Dashboard-facing labels, in display order. */
 export const themeLabels: Readonly<Record<ThemeName, string>> = {
   default: "Default",
+  calpaca: "Calpaca",
   midnight: "Midnight",
   sand: "Sand",
   juniper: "Juniper",
