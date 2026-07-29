@@ -118,4 +118,42 @@ describe("presentation options", () => {
     });
   });
 
+  test("public event type carries guestsEnabled only when the organizer turned it on", async () => {
+    const baseEventType = {
+      id: USER_ID,
+      slug: "intro",
+      title: "Intro",
+      mode: "solo" as const,
+      durationMinutes: 30,
+      bufferBeforeMin: 0,
+      bufferAfterMin: 0,
+      minimumNoticeMin: 0,
+      rollingWindowDays: 14,
+      maxPerDay: null,
+      curatedSlotCount: 3,
+      publicSelectableHostIds: [],
+    };
+    const baseDeps: Omit<AvailabilityDeps, "getEventTypeBySlug"> = {
+      getEventTypeHosts: async () => [],
+      getSchedulesForUsers: async () => [],
+      getBusyForUsers: async () => [],
+      now: () => Temporal.Instant.from("2027-01-01T00:00:00Z"),
+    };
+
+    const enabledResponse = await createAvailabilityRoutes({
+      ...baseDeps,
+      getEventTypeBySlug: async () => ({ ...baseEventType, guestsEnabled: true }),
+    }).request("/event-types/intro");
+    const enabledBody = (await enabledResponse.json()) as { guestsEnabled?: boolean };
+    expect(enabledBody.guestsEnabled).toBe(true);
+
+    const disabledResponse = await createAvailabilityRoutes({
+      ...baseDeps,
+      getEventTypeBySlug: async () => ({ ...baseEventType, guestsEnabled: false }),
+    }).request("/event-types/intro");
+    const disabledBody = (await disabledResponse.json()) as { guestsEnabled?: boolean };
+    expect(disabledBody.guestsEnabled).toBeUndefined();
+    expect(Object.keys(disabledBody)).not.toContain("guestsEnabled");
+  });
+
 });

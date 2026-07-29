@@ -28,6 +28,8 @@ export interface CreatedPayload {
   readonly bookingLocation?: BookingLocation;
   /** round-robin decision captured at booking time; absent for solo/group */
   readonly assignment?: AssignmentExplanation;
+  /** invitee-added guests, already normalized by core/booking/guests */
+  readonly guestEmails?: readonly string[];
 }
 
 export interface RescheduledPayload {

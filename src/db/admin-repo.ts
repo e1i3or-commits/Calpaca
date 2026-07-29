@@ -349,6 +349,7 @@ export interface AdminEventType {
   readonly meetingFormats?: ("phone" | "google_meet")[];
   readonly bookingQuestions?: BookingQuestion[];
   readonly emailVerificationRequired?: boolean;
+  readonly guestsEnabled?: boolean;
   readonly locations?: EventLocation[];
   readonly agentPolicy?: {
     readonly enabled: boolean;
@@ -407,6 +408,7 @@ function toAdminEventType(
     meetingFormats: row.meetingFormats,
     bookingQuestions: row.bookingQuestions,
     emailVerificationRequired: row.emailVerificationRequired,
+    guestsEnabled: row.guestsEnabled,
     locations: row.locations,
     agentPolicy: row.agentPolicy,
     hosts,
@@ -473,6 +475,7 @@ export interface EventTypeInput {
   readonly meetingFormats?: ("phone" | "google_meet")[];
   readonly bookingQuestions?: BookingQuestion[];
   readonly emailVerificationRequired?: boolean;
+  readonly guestsEnabled?: boolean;
   readonly locations?: EventLocation[];
   /** Same compatibility behavior as theme for dashboard clients predating agent policy. */
   readonly agentPolicy?: {
@@ -555,6 +558,7 @@ export async function updateEventType(
         meetingFormats: input.meetingFormats,
         bookingQuestions: input.bookingQuestions,
         emailVerificationRequired: input.emailVerificationRequired,
+        guestsEnabled: input.guestsEnabled,
         locations: input.locations,
         agentPolicy: input.agentPolicy,
       })

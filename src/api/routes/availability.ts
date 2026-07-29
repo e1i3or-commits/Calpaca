@@ -348,6 +348,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       ...(eventType.meetingFormats ? { meetingFormats: eventType.meetingFormats } : {}),
       ...(eventType.bookingQuestions ? { bookingQuestions: eventType.bookingQuestions } : {}),
       ...(eventType.emailVerificationRequired ? { emailVerificationRequired: true } : {}),
+      ...(eventType.guestsEnabled ? { guestsEnabled: true } : {}),
       ...(eventType.locations
         ? {
             locations: eventType.locations.length

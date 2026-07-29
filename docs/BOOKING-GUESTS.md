@@ -1,7 +1,9 @@
 # Invitee-added guests
 
-Status: accepted design, not yet implemented. Written before the code so the
-implementation has something to be checked against.
+Status: accepted design, implemented. All six implementation tasks have
+landed. This doc was written before the code so the implementation had
+something to be checked against, and it is kept up to date afterward as the
+durable record of what was actually built.
 
 An event type may let the person booking it add other people to the meeting.
 The toggle is `guestsEnabled` and it is off by default, so no existing booking
@@ -112,8 +114,25 @@ across a reschedule, and the reschedule email copies guests because they are on
 the row. `deleteEvent` uses `sendUpdates=all`, so a cancellation removes the
 event from each guest's calendar, and the cancellation email copies them too.
 
-Guests cannot reschedule or cancel. The tokens belong to the invitee and no
-per-guest link is ever generated.
+Guests can, in practice, use the reschedule and cancel links, and this was
+reviewed and kept deliberately rather than fixed. `buildMail` puts the same
+`reschedule` and `cancel` URLs it gives the invitee into every non-cancelled
+send, and guests are in the `cc` of that message, so they receive both links
+in the HTML buttons and the plaintext fallback. The Google Calendar event
+description carries the identical pair of URLs, and since guests are real
+Google attendees on that event, they can read them there too — there is only
+one description field, shared by every attendee, so there is no way to hand
+the invitee a link Google won't also show the guests. Withholding the links
+from the email specifically would therefore not withhold them at all, only
+make the invitee's copy less convenient. The decision is to treat a guest as
+a trusted participant the invitee chose to add — the same stance Calendly
+takes — rather than pretend a per-recipient secret is achievable when it
+isn't. The honest consequence: `POST /bookings/:id/cancel` (and the
+reschedule route) authenticate on the token alone, with no per-recipient
+identity, so a cancellation or reschedule made from a guest's copy of the
+link cannot be attributed to the guest as opposed to the invitee. Per-guest
+tokens, issued separately from the invitee's, would be the real fix if that
+attribution ever matters.
 
 ## Organizer configuration
 
@@ -144,10 +163,55 @@ something it would reject outright.
 
 After confirmation a guest mailbox that does not exist bounces
 asynchronously, which does not affect delivery to the invitee and already flows
-through the email-delivery webhook. Worth confirming during implementation:
-whether a recipient our validation accepts but the provider rejects at SMTP
-time can fail the whole message rather than that one recipient. If it can, the
-invitee's copy should be sent independently of the guest copies.
+through the email-delivery webhook.
+
+Confirmed during implementation, from this repo's own documented contract
+(there is no SES config to inspect — `src/notifications/mailer.ts` speaks
+generic SMTP via `SMTP_URL`, not a vendor SDK): a recipient our validation
+accepts but the provider rejects at SMTP time (RCPT TO) does not fail the
+whole message for a guest specifically, because the invitee is always in
+`to` and therefore the message always has at least one accepted recipient.
+`SendResult.rejected` is documented as "the recipients the SMTP server
+refused at handoff... while still accepting the message for the rest," and
+`sendInviteMail`'s doc comment states per-recipient rejections do not throw
+— but nodemailer's contract is that it throws when *every* recipient is
+rejected, so this guarantee holds for a bad guest or host cc riding along
+with a good `to`, not for an all-recipients-rejected message.
+
+On a non-cancellation send, `sendInvite` in `src/jobs/invite-email.ts` passes
+`result.rejected` to `recordInviteeRejection`, which returns early when
+`rejected` is empty and, when it is not, only treats the send as failed
+(`invite_failed`) when the invitee's own address is among the rejected
+recipients; a rejected guest or host cc is only `console.warn`ed. On a
+cancellation, `sendInvite` skips this call entirely (it lives inside `if
+(kind !== "cancelled")`), so a rejected cc on a cancellation notice is
+discarded silently — not even warned. A single bad guest address therefore
+cannot cost the invitee their confirmation email, and no second `sendMail`
+call is needed.
+
+## Privacy
+
+Every other address in this system was submitted by its own owner — the
+invitee typed their own email, a host authenticated with theirs. A guest is
+the exception: they never visit the booking page, see no privacy notice, and
+take no action of their own before Google emails them an invitation on the
+invitee's say-so. That makes a guest's address third-party PII arriving
+without a consent step, which is worth naming plainly even though the
+behaviour matches Calendly and is not being changed.
+
+Guest addresses are also the first email addresses this project writes into
+`booking_events`, which is append-only by design. There is no redaction,
+anonymization, or erasure path anywhere in `src/`, so once a guest's address
+is on a booking, neither the guest nor an organizer acting on their behalf
+has any route to having it removed.
+
+Exposure is not limited to what Google shows attendees. The plaintext `Cc`
+header on every Calpaca-sent message carries the same addresses, so a guest,
+the invitee, and all hosts see each other's email address on every send, not
+only via Google's attendee list.
+
+These are recorded consequences of the design as built, not open problems
+tracked for a future fix.
 
 ## Tests
 
@@ -169,4 +233,11 @@ guests change.
 ## Out of scope
 
 Organizer-added guests, editing guests after a booking exists, reading RSVP
-state back from Google, and guests on polls, proposals, or sign-up sheets.
+state back from Google, and guests on polls or sign-up sheets — neither of
+those ever produces a booking, so there is nothing for the guest list to
+attach to. Proposals and one-off offers are not on this list: `proposal-page`
+and `one-off-offer-page` both render `BookingPage` directly, so the guest
+control appears there too whenever the event type has guests enabled, and
+`POST /bookings` already accepts `proposalPublicId` or `offerPublicId`
+alongside `guests` in the same request. Guests work end to end on proposals
+and one-off offers today, not just on ordinary event-type bookings.

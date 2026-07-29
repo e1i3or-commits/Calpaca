@@ -224,6 +224,7 @@ export async function confirmHold(
   offerPublicId?: string,
   expectation?: ConfirmHoldExpectation,
   proposalPublicId?: string,
+  guestEmails?: readonly string[],
 ): Promise<Result<ConfirmedBooking, ConfirmHoldError>> {
   return executor.transaction(async (tx) => {
     const rows = await tx
@@ -362,6 +363,7 @@ export async function confirmHold(
         cancelToken: generateToken(),
         routingAnswers: routingAnswers ?? null,
         bookingAnswers: bookingAnswers ?? {},
+        guestEmails: guestEmails ? [...guestEmails] : [],
       })
       .returning();
     if (!booking) throw new Error("booking insert returned no row");
@@ -378,6 +380,7 @@ export async function confirmHold(
         ...(bookingLocation ? { bookingLocation } : {}),
         ...(meeting ? { meeting } : {}),
         ...(assignmentExplanation ? { assignment: assignmentExplanation } : {}),
+        ...(guestEmails?.length ? { guestEmails } : {}),
       },
       tx,
     );
