@@ -1,7 +1,31 @@
 # Calpaca Founder Strategy
 
 Date: July 23, 2026  
-Status: Proposed category and market strategy
+Status: Proposed category and market strategy  
+Amended: July 28, 2026 — see Amendment 1
+
+## Amendment 1: the wedge is unchanged, the vocabulary is wider
+
+The public copy said "for agencies." This document targets five kinds of firm:
+agency, consulting firm, fractional leadership collective, implementation or
+managed-service team, and specialist professional-services practice. The site
+named one of them, so the other four read "for agencies" and correctly
+concluded the product was not for them. That was a copy error against this
+strategy, not a strategy change.
+
+User-facing copy now says "client-service teams" or "client work" instead of
+"agencies." The four category claims below — a meeting belongs to an ongoing
+relationship, availability has operational cost, correct participants depend on
+context, and scheduling continues past confirmation — are not agency-specific,
+so the thesis loses nothing by dropping the narrower noun.
+
+What did **not** change: the wedge, the 5-to-50-person target, the north-star
+outcome, the feature audit, and every exclusion in the thesis below. This is
+explicitly **not** a move toward horizontal positioning. The argument in "The
+blunt answer" still stands — matching the incumbent checklist remains a losing
+play, and "scheduling for everyone" would surrender the only claim no
+competitor owns. A future session must not re-narrow the copy to "agencies"
+nor widen the strategy to "everyone."
 
 ## The blunt answer
 
@@ -17,7 +41,7 @@ That engine should be built for one market first.
 
 ## Product thesis
 
-> **Calpaca is the best scheduling platform for client-service agencies because it schedules around delivery work, preserves client and project continuity, assembles the right people, and recovers automatically when plans change.**
+> **Calpaca is the best scheduling platform for client-service teams because it schedules around delivery work, preserves client and project continuity, assembles the right people, and recovers automatically when plans change.**
 
 This sentence deliberately excludes:
 
@@ -1202,7 +1226,7 @@ Supporting measures:
 
 Calpaca should not become a scheduling suite for everyone.
 
-It should become the relationship-aware scheduling operations system for client-service agencies.
+It should become the relationship-aware scheduling operations system for client-service teams.
 
 The product should know why a meeting exists, protect the work surrounding it, assemble the right team, carry the relationship forward, and repair the plan when reality changes.
 

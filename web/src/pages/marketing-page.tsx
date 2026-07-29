@@ -61,7 +61,7 @@ const plans = [
   },
   {
     label: "Cloud Pro",
-    title: "For agencies",
+    title: "For teams",
     price: "$7",
     priceNote: "per user / month",
     description: "Team scheduling and shared client work without operational overhead.",
@@ -201,13 +201,13 @@ export function MarketingPage() {
           <div className="mx-auto grid max-w-7xl items-center gap-14 px-5 py-20 sm:px-8 sm:py-28 lg:grid-cols-[1fr_.9fr] lg:gap-20 lg:py-32">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">
-                Relationship-aware scheduling for agencies
+                Relationship-aware scheduling for client work
               </p>
               <h1 className="mt-5 max-w-3xl text-[clamp(2.7rem,6.5vw,6.25rem)] font-semibold leading-[.92] tracking-[-.07em]">
                 Schedule the work, not just the meeting.
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground sm:text-xl">
-                Calpaca keeps every client, project, participant, proposal, and meeting connected so agencies can move work forward without reconstructing context.
+                Calpaca keeps every client, project, participant, proposal, and meeting connected so your team can move work forward without reconstructing context.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <a href={appUrl} className="inline-flex min-h-12 items-center justify-center gap-2 bg-primary px-6 text-sm font-semibold text-primary-foreground transition hover:bg-primary/92">

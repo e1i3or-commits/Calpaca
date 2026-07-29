@@ -1,8 +1,8 @@
 # Calpaca
 
-Calpaca is relationship-aware scheduling for agencies. It keeps clients,
-projects, participants, scheduling proposals, and meetings connected so every
-conversation starts with the right context.
+Calpaca is relationship-aware scheduling for client-service teams. It keeps
+clients, projects, participants, scheduling proposals, and meetings connected so
+every conversation starts with the right context.
 
 Use [Calpaca Cloud](https://app.calpaca.io/sign-in) for a managed workspace or
 self-host the complete Community Edition under the AGPL.
