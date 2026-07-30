@@ -5,8 +5,10 @@ import {
   evaluateRouting,
   getRoutingForm,
   type RoutingAnswers,
+  type PublicRoutingForm,
   type RoutingField,
 } from "@/lib/api";
+import { useTheme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -29,7 +31,9 @@ export function RoutingFormPage({
   workspaceSlug?: string;
 }) {
   const navigate = useNavigate();
-  const [fields, setFields] = useState<RoutingField[] | null>(null);
+  const [form, setForm] = useState<PublicRoutingForm | null>(null);
+  const fields = form?.fields ?? null;
+  useTheme(form?.theme);
   const [answers, setAnswers] = useState<RoutingAnswers>({});
   const [issues, setIssues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +43,7 @@ export function RoutingFormPage({
     let cancelled = false;
     getRoutingForm(slug, workspaceSlug)
       .then((form) => {
-        if (!cancelled) setFields(form.fields);
+        if (!cancelled) setForm(form);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -114,8 +118,11 @@ export function RoutingFormPage({
     <div className="mx-auto max-w-2xl px-4 py-10">
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">{slug.replace(/-/g, " ")}</CardTitle>
-          <CardDescription>Answer a few questions and we'll route you to the right booking page.</CardDescription>
+          <CardTitle className="text-xl">{form?.title ?? slug.replace(/-/g, " ")}</CardTitle>
+          <CardDescription>
+            {form?.description
+              ?? "Answer a few questions and we'll route you to the right booking page."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}

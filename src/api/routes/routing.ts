@@ -5,6 +5,7 @@ import { requireSession, type AuthEnv } from "../../auth/session";
 import type { Condition } from "../../core/routing/condition";
 import { evaluateRouting } from "../../core/routing/evaluate";
 import { validateAnswers } from "../../core/routing/form";
+import { defaultTheme, resolveTheme, themeNames } from "../../core/theming/themes";
 import {
   createRoutingForm,
   deleteRoutingForm,
@@ -104,6 +105,11 @@ const formBodySchema = z
   .object({
     slug: z.string().min(1).max(80).regex(SLUG_RE, "kebab-case only"),
     teamId: z.string().uuid().nullable(),
+    // presentation. Defaulted rather than required so a body written against
+    // the pre-theme contract still validates.
+    title: z.string().trim().min(1).max(200).nullable().default(null),
+    description: z.string().trim().min(1).max(2000).nullable().default(null),
+    theme: z.enum(themeNames).default(defaultTheme),
     fields: z.array(fieldSchema).min(1).max(20),
     rules: z.array(ruleSchema).max(50),
   })
@@ -136,8 +142,15 @@ export function createRoutingRoutes(deps: RoutingDeps = defaultDeps): Hono<AuthE
     }
     const form = await deps.getRoutingFormBySlug(c.req.param("slug"), workspaceId);
     if (!form) return c.json({ error: "form_not_found" }, 404);
-    // rules are private: only the shape the invitee needs to fill in
-    return c.json({ slug: form.slug, fields: form.fields });
+    // rules are private: only the shape the invitee needs to fill in, plus
+    // the presentation the page renders itself with
+    return c.json({
+      slug: form.slug,
+      title: form.title,
+      description: form.description,
+      theme: resolveTheme(form.theme),
+      fields: form.fields,
+    });
   });
 
   router.post("/routing/evaluate", async (c) => {

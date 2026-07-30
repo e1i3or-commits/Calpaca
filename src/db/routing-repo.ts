@@ -25,6 +25,9 @@ export interface RoutingFormRecord {
   readonly ownerUserId: string | null;
   readonly teamId: string | null;
   readonly slug: string;
+  readonly title: string | null;
+  readonly description: string | null;
+  readonly theme: string;
   readonly fields: readonly RoutingField[];
   readonly rules: readonly RoutingRuleRecord[];
 }
@@ -39,6 +42,9 @@ export interface RoutingRuleInputRow {
 export interface RoutingFormInput {
   readonly slug: string;
   readonly teamId: string | null;
+  readonly title: string | null;
+  readonly description: string | null;
+  readonly theme: string;
   readonly fields: readonly RoutingField[];
   readonly rules: readonly RoutingRuleInputRow[];
 }
@@ -76,6 +82,9 @@ function toRecord(
     ownerUserId: row.ownerUserId,
     teamId: row.teamId,
     slug: row.slug,
+    title: row.title,
+    description: row.description,
+    theme: row.theme,
     fields: row.fields as RoutingField[],
     rules,
   };
@@ -185,6 +194,9 @@ export async function createRoutingForm(
         ownerUserId,
         teamId: input.teamId,
         slug: input.slug,
+        title: input.title,
+        description: input.description,
+        theme: input.theme,
         fields: input.fields,
       })
       .returning();
@@ -218,7 +230,14 @@ export async function updateRoutingForm(
     }
     const [row] = await tx
       .update(routingForms)
-      .set({ slug: input.slug, teamId: input.teamId, fields: input.fields })
+      .set({
+        slug: input.slug,
+        teamId: input.teamId,
+        title: input.title,
+        description: input.description,
+        theme: input.theme,
+        fields: input.fields,
+      })
       .where(eq(routingForms.id, id))
       .returning();
     // replace-all rules, same pattern as event type hosts
