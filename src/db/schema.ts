@@ -538,6 +538,11 @@ export const routingForms = pgTable("routing_forms", {
   teamId: uuid("team_id").references(() => teams.id),
   slug: text("slug").notNull(),
   fields: jsonb("fields").notNull(), // form definition
+  // presentation, same three knobs the public booking page already honours;
+  // a null title falls back to the slug at render time
+  title: text("title"),
+  description: text("description"),
+  theme: text("theme").notNull().default("default"),
 }, (t) => [
   uniqueIndex("routing_form_workspace_slug_uq").on(t.workspaceId, t.slug),
 ]);

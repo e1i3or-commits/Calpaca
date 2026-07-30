@@ -4815,6 +4815,9 @@ function fromClauses(clauses: RoutingClause[]): RoutingCondition {
 const DEFAULT_ROUTING_FORM: RoutingFormInput = {
   slug: "",
   teamId: null,
+  title: null,
+  description: null,
+  theme: "default",
   fields: [{ key: "", label: "", type: "text", required: true }],
   rules: [],
 };
@@ -4945,6 +4948,9 @@ function RoutingTab({ users }: { users: DirectoryUser[] }) {
                       form: {
                         slug: f.slug,
                         teamId: f.teamId,
+                        title: f.title,
+                        description: f.description,
+                        theme: f.theme,
                         fields: f.fields,
                         rules: f.rules.map(({ priority, condition, targetEventTypeId, targetHostUserId }) => ({
                           priority,
@@ -5057,6 +5063,41 @@ function RoutingFormEditor({
             ))}
           </select>
         </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="rf-title">Title</Label>
+          <Input
+            id="rf-title"
+            value={form.title ?? ""}
+            onChange={(e) => onChange({ ...form, title: e.target.value === "" ? null : e.target.value })}
+            placeholder="Book time with us"
+          />
+          <p className="text-xs text-muted-foreground">Shown as the heading. Falls back to the slug.</p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="rf-theme">Theme</Label>
+          <select
+            id="rf-theme"
+            className="flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm"
+            value={form.theme}
+            onChange={(e) => onChange({ ...form, theme: e.target.value })}
+          >
+            {themeOptions.map((theme) => (
+              <option key={theme.value} value={theme.value}>
+                {theme.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="rf-description">Intro text</Label>
+        <Textarea
+          id="rf-description"
+          value={form.description ?? ""}
+          onChange={(e) => onChange({ ...form, description: e.target.value === "" ? null : e.target.value })}
+          placeholder="Answer a few questions and we'll route you to the right person."
+        />
       </div>
 
       <div className="flex flex-col gap-2">

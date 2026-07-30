@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createRoutingRoutes, type RoutingDeps } from "../../src/api/routes/routing";
-import type { RoutingFormRecord } from "../../src/db/routing-repo";
+import type { RoutingFormInput, RoutingFormRecord } from "../../src/db/routing-repo";
 
 const U1 = "11111111-1111-4111-8111-111111111111";
 const FORM_ID = "22222222-2222-4222-8222-222222222222";
@@ -13,6 +13,9 @@ const form: RoutingFormRecord = {
   ownerUserId: U1,
   teamId: null,
   slug: "contact-sales",
+  title: "Talk to sales",
+  description: "Two questions, then a time.",
+  theme: "midnight",
   fields: [
     { key: "size", label: "Company size", type: "select", required: true, options: ["1-10", "100+"] },
     { key: "notes", label: "Notes", type: "text", required: false },
@@ -78,8 +81,29 @@ describe("public routing surface", () => {
     expect(body.slug).toBe("contact-sales");
     expect(Array.isArray(body.fields)).toBe(true);
     expect(body.rules).toBeUndefined();
+    // presentation travels with the public read so the page styles itself
+    expect(body.title).toBe("Talk to sales");
+    expect(body.description).toBe("Two questions, then a time.");
+    expect(body.theme).toBe("midnight");
 
     expect((await router.request("/routing/nope")).status).toBe(404);
+  });
+
+  test("a hand-edited theme name renders as the default rather than unstyled", async () => {
+    const router = createRoutingRoutes(
+      makeDeps({ getRoutingFormBySlug: async () => ({ ...form, theme: "not-a-theme" }) }),
+    );
+    const body = (await (await router.request("/routing/contact-sales")).json()) as { theme: string };
+    expect(body.theme).toBe("default");
+  });
+
+  test("an untitled form reports null so the page can fall back to the slug", async () => {
+    const router = createRoutingRoutes(
+      makeDeps({ getRoutingFormBySlug: async () => ({ ...form, title: null, description: null }) }),
+    );
+    const body = (await (await router.request("/routing/contact-sales")).json()) as Record<string, unknown>;
+    expect(body.title).toBeNull();
+    expect(body.description).toBeNull();
   });
 
   test("evaluate routes by rule priority and resolves the event type slug", async () => {
@@ -188,6 +212,49 @@ describe("routing admin surface", () => {
       body: JSON.stringify({ ...validBody, slug: "foreign", teamId: OTHER_TEAM }),
     });
     expect(foreignTeam.status).toBe(404);
+
+    const badTheme = await router.request("/api/me/routing-forms", {
+      method: "POST",
+      body: JSON.stringify({ ...validBody, slug: "bad-theme", theme: "chartreuse" }),
+    });
+    expect(badTheme.status).toBe(400);
+  });
+
+  test("create persists presentation, and a body without it still validates", async () => {
+    const seen: RoutingFormInput[] = [];
+    const router = createRoutingRoutes(
+      makeDeps({
+        createRoutingForm: async (_owner, input) => {
+          seen.push(input);
+          return { ...form, ...input, rules: form.rules };
+        },
+      }),
+    );
+
+    const themed = await router.request("/api/me/routing-forms", {
+      method: "POST",
+      body: JSON.stringify({
+        ...validBody,
+        slug: "themed",
+        title: "Book time with us",
+        description: "Two questions.",
+        theme: "juniper",
+      }),
+    });
+    expect(themed.status).toBe(201);
+    expect(seen[0]).toMatchObject({
+      title: "Book time with us",
+      description: "Two questions.",
+      theme: "juniper",
+    });
+
+    // the pre-theme contract: no title, description or theme in the body
+    const bare = await router.request("/api/me/routing-forms", {
+      method: "POST",
+      body: JSON.stringify({ ...validBody, slug: "bare" }),
+    });
+    expect(bare.status).toBe(201);
+    expect(seen[1]).toMatchObject({ title: null, description: null, theme: "default" });
   });
 
   test("update 404s outside scope; delete works once", async () => {

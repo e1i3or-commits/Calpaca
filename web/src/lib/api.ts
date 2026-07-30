@@ -1362,6 +1362,9 @@ export type RoutingForm = {
   ownerUserId: string | null;
   teamId: string | null;
   slug: string;
+  title: string | null;
+  description: string | null;
+  theme: string;
   fields: RoutingField[];
   rules: (RoutingRule & { id: string })[];
 };
@@ -1369,8 +1372,19 @@ export type RoutingForm = {
 export type RoutingFormInput = {
   slug: string;
   teamId: string | null;
+  title: string | null;
+  description: string | null;
+  theme: string;
   fields: RoutingField[];
   rules: RoutingRule[];
+};
+
+export type PublicRoutingForm = {
+  slug: string;
+  title: string | null;
+  description: string | null;
+  theme: string;
+  fields: RoutingField[];
 };
 
 export type RoutingEvaluation =
@@ -1380,7 +1394,7 @@ export type RoutingEvaluation =
 export function getRoutingForm(
   slug: string,
   workspaceSlug?: string,
-): Promise<{ slug: string; fields: RoutingField[] }> {
+): Promise<PublicRoutingForm> {
   const query = workspaceSlug
     ? `?workspaceSlug=${encodeURIComponent(workspaceSlug)}`
     : "";
