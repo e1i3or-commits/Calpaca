@@ -192,15 +192,16 @@ export function EventTypesTab({
     }
   }, [newFolderName, reloadFolders]);
 
-  const renameFolder = useCallback(async (folderId: string, name: string) => {
+  const renameFolder = useCallback(async (folderId: string, name: string): Promise<boolean> => {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed) return false;
     try {
       await updateEventTypeFolder(folderId, { name: trimmed });
       reloadFolders();
+      return true;
     } catch (e) {
       setError(errorText(e));
-      throw e;
+      return false;
     }
   }, [reloadFolders]);
 
@@ -212,9 +213,12 @@ export function EventTypesTab({
     try {
       await updateEventTypeFolder(current.id, { position: swapWith.position });
       await updateEventTypeFolder(swapWith.id, { position: current.position });
-      reloadFolders();
     } catch (e) {
       setError(errorText(e));
+    } finally {
+      // Duplicate positions are tolerated by the schema (no unique constraint),
+      // so a partial failure just needs a resync, never a rollback.
+      reloadFolders();
     }
   }, [folders, reloadFolders]);
 
@@ -671,7 +675,7 @@ function FolderSection({
   renderRow: (et: AdminEventType) => ReactNode;
   isFirst?: boolean;
   isLast?: boolean;
-  onRename?: (name: string) => Promise<void>;
+  onRename?: (name: string) => Promise<boolean>;
   onMoveUp?: () => Promise<void>;
   onMoveDown?: () => Promise<void>;
   onDelete?: () => Promise<void>;
@@ -681,16 +685,16 @@ function FolderSection({
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   const handleRenameSave = async () => {
     if (!onRename) return;
-    try {
-      await onRename(renameValue);
-      setRenaming(false);
-    } catch {
-      // errorText(e) already surfaced via the parent's error state; keep the
-      // input open so the name can be corrected (e.g. folder_name_taken).
-    }
+    // onRename resolves false both on a guarded no-op (empty/whitespace name)
+    // and on a server rejection (e.g. folder_name_taken, already surfaced via
+    // the parent's error state) — either way the input must stay open rather
+    // than silently closing as though the rename had applied.
+    const success = await onRename(renameValue);
+    if (success) setRenaming(false);
   };
 
   return (
@@ -746,8 +750,16 @@ function FolderSection({
                 setMenuOpen(false);
               }
             }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && menuOpen) {
+                event.stopPropagation();
+                setMenuOpen(false);
+                menuTriggerRef.current?.focus();
+              }
+            }}
           >
             <button
+              ref={menuTriggerRef}
               type="button"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
