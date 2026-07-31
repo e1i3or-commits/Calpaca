@@ -123,6 +123,16 @@ describe("event type folders", () => {
     expect(await missing.json()).toEqual({ error: "folder_not_found" });
   });
 
+  test("rejects an empty patch body", async () => {
+    const res = await createAdminRoutes(makeDeps()).request(`/api/me/event-type-folders/${FOLDER_ID}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("invalid_body");
+  });
+
   test("deletes a folder", async () => {
     const res = await createAdminRoutes(makeDeps())
       .request(`/api/me/event-type-folders/${FOLDER_ID}`, { method: "DELETE" });

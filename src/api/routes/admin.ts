@@ -300,6 +300,8 @@ const folderBodySchema = z.object({ name: z.string().trim().min(1).max(60) });
 const folderPatchSchema = z.object({
   name: z.string().trim().min(1).max(60).optional(),
   position: z.number().int().min(0).max(999).optional(),
+}).refine((p) => p.name !== undefined || p.position !== undefined, {
+  message: "at least one of name or position is required",
 });
 const eventTypeFolderAssignSchema = z.object({
   folderId: z.string().uuid().nullable(),

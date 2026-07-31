@@ -51,8 +51,8 @@ Three decisions worth stating outright:
 
 ## Ordering
 
-`listEventTypesForUser` (`src/db/admin-repo.ts:427`) currently has no `ORDER BY`.
-The list is returned in Postgres heap order, which is arbitrary and can shift
+`listEventTypesForUser` (`src/db/admin-repo.ts`) previously had no `ORDER BY`.
+The list was returned in Postgres heap order, which is arbitrary and can shift
 after any `UPDATE`. This is a live bug independent of folders and gets fixed
 here: the query orders by `title`.
 
@@ -62,22 +62,26 @@ ordering.
 
 ## API
 
-Mirrors the schedules CRUD block at `src/api/routes/admin.ts:542`.
+Mirrors the schedules CRUD block (`createAdminRoutes`, `/api/me/schedules*`) in
+`src/api/routes/admin.ts`.
 
 | Method | Path | Notes |
 | --- | --- | --- |
 | `GET` | `/api/me/event-type-folders` | `{ folders: [{ id, name, position }] }`, position order |
 | `POST` | `/api/me/event-type-folders` | `{ name }` → 201. `position` = current max + 1 |
-| `PUT` | `/api/me/event-type-folders/:id` | `{ name?, position? }` |
+| `PUT` | `/api/me/event-type-folders/:id` | `{ name?, position? }`, at least one required |
 | `DELETE` | `/api/me/event-type-folders/:id` | Un-groups its event types, returns `{ ok: true }` |
 | `PATCH` | `/api/me/event-types/:id/folder` | `{ folderId: uuid \| null }` |
 
-`name` is `z.string().trim().min(1).max(60)`. "Move up" and "Move down" swap
-`position` with the adjacent folder via two `PUT`s; positions stay a dense
-sequence and no reindexing pass is needed.
+`name` is `z.string().trim().min(1).max(60)`. An empty `PUT` body (neither
+field set) is rejected with `invalid_body`, since it would otherwise reach the
+update with nothing to set. "Move up" and "Move down" swap `position` with the
+adjacent folder via two `PUT`s; that swap, not index arithmetic, is why a gap
+left by a deleted folder is harmless — ordering is never derived from
+density, only from the relative `position` values that remain.
 
 `folderId` (`z.string().uuid().nullable().default(null)`) also joins
-`eventTypeBodySchema` at `src/api/routes/admin.ts:266`, so the event type editor
+`eventTypeBodySchema` in `src/api/routes/admin.ts`, so the event type editor
 saves a folder alongside everything else.
 
 The dedicated `PATCH .../folder` endpoint exists so the list row's "Move to"
@@ -89,9 +93,17 @@ New error codes:
 
 - `folder_name_taken` — 409, on create or rename collision within the workspace
 - `folder_not_found` — 404
+- `workspace_not_found` — 404, the session has no workspace. Unreachable in
+  self-hosted deployments: `ensureWorkspaceForUser` (`src/db/workspace-repo.ts`)
+  auto-creates one on session load, so every authenticated request already has
+  a `workspaceId`. Kept because the route handlers check for it defensively,
+  matching every other workspace-scoped route in this file.
+- `event_type_not_found` — 404, from the `PATCH .../folder` endpoint when the
+  event type id doesn't resolve for the caller's workspace
 
-Both need entries in the dashboard's `ERROR_TEXT` map
-(`web/src/pages/dashboard-page.tsx:196`).
+All four need entries in the dashboard's `ERROR_TEXT` map
+(`web/src/lib/error-text.ts`); `folder_name_taken` and `folder_not_found` are
+there today.
 
 Assigning a `folderId` belonging to another workspace returns `folder_not_found`,
 not a foreign key error.
@@ -100,13 +112,24 @@ not a foreign key error.
 
 ### Refactor first
 
-`web/src/pages/dashboard-page.tsx` is 5,944 lines. The event types card moves to
-`web/src/components/event-types-tab.tsx` as a pure lift-and-shift with no
-behavior change, following the existing `engagements-tab.tsx` and
-`proposals-panel.tsx` precedent. Folders land on top of the extracted file.
+`web/src/pages/dashboard-page.tsx` was 5,944 lines. Three refactor commits
+pulled the event types card out before any folder behavior landed, producing
+five files:
 
-Two commits: the move, then the feature. A folder diff tangled into a 5,900-line
-file is not reviewable.
+- `web/src/components/event-types-tab.tsx` — the event types card itself, a
+  lift-and-shift with no behavior change, following the existing
+  `engagements-tab.tsx` and `proposals-panel.tsx` precedent
+- `web/src/components/booking-pages-manager.tsx` — extracted separately to
+  break a circular import: `EventTypesTab` renders `BookingPagesManager`, so
+  the latter could not stay in `dashboard-page.tsx` once the former moved out
+- `web/src/components/dashboard-primitives.tsx` — shared display primitives
+  (`InlineLoading`, `ActionableEmptyState`, `CopyFeedbackLabel`) that both
+  tabs needed
+- `web/src/lib/error-text.ts` — the `ERROR_TEXT` map and `errorText` helper
+- `web/src/lib/format.ts` — `slugify`
+
+Folders land on top of the extracted files. A folder diff tangled into a
+5,900-line file is not reviewable.
 
 ### The list
 
@@ -133,7 +156,8 @@ Deleting a non-empty folder confirms first, and the confirmation says the event
 types will move to Ungrouped rather than be deleted.
 
 Collapse state persists in `localStorage` under `calpaca:et-folders-collapsed`
-as a JSON array of folder ids, following the existing `calpaca:sidebar-collapsed`
+as a JSON array of folder ids plus the literal string `"ungrouped"` for the
+Ungrouped section, following the existing `calpaca:sidebar-collapsed`
 convention. It is a UI preference, not server state.
 
 ### Zero folders is the default and stays comfortable

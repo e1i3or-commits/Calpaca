@@ -392,6 +392,14 @@ export function EventTypesTab({
     );
   }, [copied, embed, onEdit, bookingBase, folders, moveEventType]);
 
+  // An event type's folderId can point at a folder that no longer exists in
+  // `folders` — e.g. for one render tick after deleteFolder's unawaited
+  // reloadFolders() resolves before its reload(), or indefinitely for a
+  // second user in the workspace until their own eventTypes refetch lands.
+  // Treat that as Ungrouped rather than letting the event type vanish.
+  const knownFolderIds = new Set(folders.map((f) => f.id));
+  const isUngrouped = (et: AdminEventType) => !et.folderId || !knownFolderIds.has(et.folderId);
+
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
@@ -456,7 +464,7 @@ export function EventTypesTab({
             </ul>
           </div>
         )}
-        {creatingFolder && (
+        {creatingFolder && !initialEditor && (
           <div className="flex items-center gap-2">
             <Input
               autoFocus
@@ -544,10 +552,10 @@ export function EventTypesTab({
                 onDelete={() => deleteFolder(folder)}
               />
             ))}
-            {eventTypes.some((et) => !et.folderId) && (
+            {eventTypes.some(isUngrouped) && (
               <FolderSection
                 folder={null}
-                eventTypes={eventTypes.filter((et) => !et.folderId)}
+                eventTypes={eventTypes.filter(isUngrouped)}
                 collapsed={collapsed.has("ungrouped")}
                 onToggle={() => toggleFolder("ungrouped")}
                 renderRow={renderRow}
