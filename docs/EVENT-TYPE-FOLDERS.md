@@ -1,6 +1,6 @@
 # Event type folders
 
-Design spec. Status: approved, not yet built.
+Design spec. Status: built.
 
 A workspace accumulates event types faster than it retires them. Past roughly a
 dozen, the dashboard list stops being scannable — you read every row to find the
@@ -147,10 +147,17 @@ opt-in; a workspace with four event types should never pay for this feature.
 
 Two paths, both zero new dependencies:
 
-- **Event type editor** — a "Folder" `<select>` listing folders, "Ungrouped", and
-  "New folder…" (which reveals an inline name input).
-- **List row** — a "Move to" control in the existing action cluster, opening the
-  same choices. Uses `PATCH .../folder`.
+- **Event type editor** — a "Folder" `<select>` listing "Ungrouped" and every
+  folder, with helper text stating folders organize the dashboard only and are
+  never shown to invitees. It deliberately has no "New folder…" option: the
+  header button and the list row's menu already cover creation, and a third
+  creation path inside the form would need its own error handling for a name
+  collision mid-edit.
+- **List row** — a "Move to" control in the existing action cluster, listing
+  every folder plus "Ungrouped" with a check against the row's current folder.
+  When no folders exist yet, it offers a single "New folder…" item that opens
+  the same inline creation input as the header button, so the control is never
+  an empty menu. Uses `PATCH .../folder`.
 
 Drag and drop was rejected: it needs either a new npm dependency, which the
 budget rules in `CLAUDE.md` forbid without justification, or hand-rolled pointer

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  Check,
   ChevronDown,
   Code2,
   Copy,
+  FolderInput,
   FolderPlus,
   MoreHorizontal,
   Pencil,
@@ -22,6 +24,7 @@ import {
   listPresentationOptions,
   listSchedules,
   listTeams,
+  setEventTypeFolder,
   updateEventType,
   updateEventTypeFolder,
   type AdminEventType,
@@ -64,6 +67,7 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   mode: "solo",
   scheduleId: null,
   teamId: null,
+  folderId: null,
   theme: "default",
   layout: "focus",
   logoUrl: null,
@@ -92,6 +96,7 @@ function eventTypeToInput(eventType: AdminEventType): EventTypeInput {
     mode: eventType.mode,
     scheduleId: eventType.scheduleId,
     teamId: eventType.teamId,
+    folderId: eventType.folderId,
     theme: eventType.theme,
     layout: eventType.layout ?? "focus",
     logoUrl: eventType.logoUrl ?? null,
@@ -239,6 +244,15 @@ export function EventTypesTab({
     }
   }, [eventTypes, reloadFolders, reload]);
 
+  const moveEventType = useCallback(async (eventTypeId: string, folderId: string | null) => {
+    try {
+      await setEventTypeFolder(eventTypeId, folderId);
+      reload();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }, [reload]);
+
   useEffect(() => {
     reload();
     reloadFolders();
@@ -371,9 +385,12 @@ export function EventTypesTab({
         onEmbedModeChange={(mode) => setEmbed({ slug: et.slug, mode })}
         embedSnippetText={embedSnippet(et.slug, embedMode)}
         onCopyEmbed={() => copyEmbed(et.slug, embedMode)}
+        folders={folders}
+        onMove={(folderId) => void moveEventType(et.id, folderId)}
+        onNewFolder={() => setCreatingFolder(true)}
       />
     );
-  }, [copied, embed, onEdit, bookingBase]);
+  }, [copied, embed, onEdit, bookingBase, folders, moveEventType]);
 
   return (
     <Card>
@@ -487,6 +504,7 @@ export function EventTypesTab({
             users={users}
             schedules={schedules}
             teams={teams}
+            folders={folders}
             themes={availableThemes}
             layouts={availableLayouts}
             onChange={(form) => {
@@ -561,6 +579,9 @@ function EventTypeRow({
   onEmbedModeChange,
   embedSnippetText,
   onCopyEmbed,
+  folders,
+  onMove,
+  onNewFolder,
 }: {
   eventType: AdminEventType;
   copied: string | null;
@@ -573,7 +594,14 @@ function EventTypeRow({
   onEmbedModeChange: (mode: "inline" | "popup") => void;
   embedSnippetText: string;
   onCopyEmbed: () => void;
+  folders: EventTypeFolder[];
+  onMove: (folderId: string | null) => void;
+  onNewFolder: () => void;
 }) {
+  const [moveMenuOpen, setMoveMenuOpen] = useState(false);
+  const moveMenuRef = useRef<HTMLDivElement>(null);
+  const moveMenuTriggerRef = useRef<HTMLButtonElement>(null);
+
   return (
     <li
       className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
@@ -599,6 +627,96 @@ function EventTypeRow({
           <Code2 className="mr-1 h-3.5 w-3.5" />
           Embed
         </Button>
+        <div
+          ref={moveMenuRef}
+          className="relative"
+          onBlur={(event) => {
+            if (!moveMenuRef.current?.contains(event.relatedTarget as Node | null)) {
+              setMoveMenuOpen(false);
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && moveMenuOpen) {
+              event.stopPropagation();
+              setMoveMenuOpen(false);
+              moveMenuTriggerRef.current?.focus();
+            }
+          }}
+        >
+          <button
+            ref={moveMenuTriggerRef}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={moveMenuOpen}
+            aria-label={`Move ${et.title} to a folder`}
+            className="inline-flex h-11 items-center gap-1 rounded-md px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-8"
+            onClick={() => setMoveMenuOpen((open) => !open)}
+          >
+            <FolderInput className="mr-1 h-3.5 w-3.5" />
+            Move to
+          </button>
+          {moveMenuOpen && (
+            <div
+              role="menu"
+              aria-label={`Move ${et.title} to a folder`}
+              className="absolute right-0 top-full z-10 mt-1 flex w-48 flex-col gap-0.5 rounded-md border border-border bg-card p-1 shadow-md"
+            >
+              {folders.length === 0 ? (
+                <Button
+                  type="button"
+                  role="menuitem"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setMoveMenuOpen(false);
+                    onNewFolder();
+                  }}
+                >
+                  New folder…
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    role="menuitem"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => {
+                      setMoveMenuOpen(false);
+                      onMove(null);
+                    }}
+                  >
+                    <span className="mr-1.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                      {et.folderId === null && <Check className="h-3.5 w-3.5" />}
+                    </span>
+                    Ungrouped
+                  </Button>
+                  {folders.map((folder) => (
+                    <Button
+                      key={folder.id}
+                      type="button"
+                      role="menuitem"
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setMoveMenuOpen(false);
+                        onMove(folder.id);
+                      }}
+                    >
+                      <span className="mr-1.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                        {et.folderId === folder.id && <Check className="h-3.5 w-3.5" />}
+                      </span>
+                      {folder.name}
+                    </Button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
         <Button
           variant="ghost"
           size="sm"
@@ -906,6 +1024,7 @@ function EventTypeForm({
   users,
   schedules,
   teams,
+  folders,
   themes,
   layouts,
   onChange,
@@ -918,6 +1037,7 @@ function EventTypeForm({
   users: DirectoryUser[];
   schedules: Schedule[];
   teams: Team[];
+  folders: EventTypeFolder[];
   themes: PresentationOption[];
   layouts: PresentationOption[];
   onChange: (form: EventTypeInput) => void;
@@ -1505,6 +1625,23 @@ function EventTypeForm({
             ))}
           </select>
           <FieldError field="teamId" />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="et-folder">Folder</Label>
+          <select
+            id="et-folder"
+            className="block h-9 rounded-md border border-border bg-card px-3 text-sm"
+            value={form.folderId ?? ""}
+            onChange={(event) => onChange({ ...form, folderId: event.target.value || null })}
+          >
+            <option value="">Ungrouped</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>{folder.name}</option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Organizes your dashboard list. Invitees never see folders.
+          </p>
         </div>
           </div>
         </EventTypeDisclosure>
