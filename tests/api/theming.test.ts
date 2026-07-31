@@ -138,6 +138,11 @@ function adminDeps(): AdminDeps {
       hosts: adminEventType.hosts,
     }),
     deleteEventType: async () => "not_found",
+    listEventTypeFolders: async () => [],
+    createEventTypeFolder: async () => "name_taken",
+    updateEventTypeFolder: async () => null,
+    deleteEventTypeFolder: async () => "not_found",
+    setEventTypeFolder: async () => null,
   };
 }
 

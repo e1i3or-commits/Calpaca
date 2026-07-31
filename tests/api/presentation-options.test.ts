@@ -30,6 +30,11 @@ function adminDeps(email: string): AdminDeps {
     createEventType: async () => { throw new Error("unused"); },
     updateEventType: async () => null,
     deleteEventType: async () => "not_found",
+    listEventTypeFolders: async () => [],
+    createEventTypeFolder: async () => "name_taken",
+    updateEventTypeFolder: async () => null,
+    deleteEventTypeFolder: async () => "not_found",
+    setEventTypeFolder: async () => null,
   };
 }
 

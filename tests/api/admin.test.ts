@@ -81,6 +81,11 @@ function makeDeps(overrides: Partial<AdminDeps> = {}): AdminDeps {
       input.slug === "intro-call" ? "slug_taken" : { ...eventType, ...input, hosts: eventType.hosts },
     updateEventType: async (id) => (id === ET_ID ? eventType : null),
     deleteEventType: async (id) => (id === ET_ID ? "deleted" : "not_found"),
+    listEventTypeFolders: async () => [],
+    createEventTypeFolder: async () => "name_taken",
+    updateEventTypeFolder: async () => null,
+    deleteEventTypeFolder: async () => "not_found",
+    setEventTypeFolder: async () => null,
     ...overrides,
   };
 }

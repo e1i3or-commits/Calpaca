@@ -12,9 +12,11 @@ import {
 import {
   addTeamMember,
   createEventType,
+  createEventTypeFolder,
   createSchedule,
   createTeam,
   deleteEventType,
+  deleteEventTypeFolder,
   deleteBookingPage,
   deleteSchedule,
   getEventTypeForAdmin,
@@ -22,19 +24,23 @@ import {
   isTeamAdmin,
   isAppAdmin,
   listEventTypesForUser,
+  listEventTypeFolders,
   listBookingPages,
   listSchedulesForUser,
   listTeamMembers,
   listTeamsForUser,
   listUsers,
   removeTeamMember,
+  setEventTypeFolder,
   updateTeamMemberAdmin,
   updateEventType,
+  updateEventTypeFolder,
   updateSchedule,
   saveBookingPage,
   type AdminEventType,
   type BookingPageRecord,
   type DirectoryUser,
+  type EventTypeFolderRecord,
   type EventTypeInput,
   type ScheduleRecord,
   type ScheduleRule,
@@ -116,6 +122,26 @@ export interface AdminDeps {
     workspaceId?: string,
   ) => Promise<AdminEventType | null>;
   readonly deleteEventType: (id: string, userId: string, workspaceId?: string) => Promise<"deleted" | "not_found" | "in_use">;
+  readonly listEventTypeFolders: (workspaceId: string) => Promise<EventTypeFolderRecord[]>;
+  readonly createEventTypeFolder: (
+    workspaceId: string,
+    name: string,
+  ) => Promise<EventTypeFolderRecord | "name_taken">;
+  readonly updateEventTypeFolder: (
+    id: string,
+    workspaceId: string,
+    patch: { name?: string; position?: number },
+  ) => Promise<EventTypeFolderRecord | null | "name_taken">;
+  readonly deleteEventTypeFolder: (
+    id: string,
+    workspaceId: string,
+  ) => Promise<"deleted" | "not_found">;
+  readonly setEventTypeFolder: (
+    eventTypeId: string,
+    userId: string,
+    folderId: string | null,
+    workspaceId?: string,
+  ) => Promise<AdminEventType | null | "folder_not_found">;
   readonly listBookingPages?: (workspaceId: string) => Promise<BookingPageRecord[]>;
   readonly saveBookingPage?: (
     workspaceId: string,
@@ -179,6 +205,13 @@ const defaultDeps: AdminDeps = {
     updateEventType(id, userId, input, undefined, workspaceId),
   deleteEventType: (id, userId, workspaceId) =>
     deleteEventType(id, userId, undefined, workspaceId),
+  listEventTypeFolders: (workspaceId) => listEventTypeFolders(workspaceId),
+  createEventTypeFolder: (workspaceId, name) => createEventTypeFolder(workspaceId, name),
+  updateEventTypeFolder: (id, workspaceId, patch) =>
+    updateEventTypeFolder(id, workspaceId, patch),
+  deleteEventTypeFolder: (id, workspaceId) => deleteEventTypeFolder(id, workspaceId),
+  setEventTypeFolder: (eventTypeId, userId, folderId, workspaceId) =>
+    setEventTypeFolder(eventTypeId, userId, folderId, undefined, workspaceId),
   listBookingPages: (workspaceId) => listBookingPages(workspaceId),
   saveBookingPage: (workspaceId, input, id) => saveBookingPage(workspaceId, input, id),
   deleteBookingPage: (workspaceId, id) => deleteBookingPage(workspaceId, id),
@@ -263,6 +296,15 @@ const scheduleBodySchema = z.object({
   })).max(100).default([]),
 });
 
+const folderBodySchema = z.object({ name: z.string().trim().min(1).max(60) });
+const folderPatchSchema = z.object({
+  name: z.string().trim().min(1).max(60).optional(),
+  position: z.number().int().min(0).max(999).optional(),
+});
+const eventTypeFolderAssignSchema = z.object({
+  folderId: z.string().uuid().nullable(),
+});
+
 const eventTypeBodySchema = z
   .object({
     slug: z.string().min(1).max(80).regex(SLUG_RE, "kebab-case only"),
@@ -278,6 +320,7 @@ const eventTypeBodySchema = z
     mode: z.enum(["solo", "round_robin", "group"]),
     scheduleId: z.string().uuid().nullable(),
     teamId: z.string().uuid().nullable(),
+    folderId: z.string().uuid().nullable().default(null),
     theme: z.enum(themeNames).default("default"),
     layout: z.enum(bookingLayoutNames).default("focus"),
     logoUrl: z.string().url().max(2048).nullable().default(null),
@@ -397,6 +440,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     "/api/me/schedules",
     "/api/me/teams",
     "/api/me/event-types",
+    "/api/me/event-type-folders",
     "/api/me/booking-pages",
     "/api/me/theme-options",
     "/api/me/bookings",
@@ -660,6 +704,16 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   // ---- event types ----
 
+  const folderIsInWorkspace = async (
+    folderId: string | null,
+    workspaceId?: string,
+  ): Promise<boolean> => {
+    if (folderId === null) return true;
+    if (!workspaceId) return false;
+    const folders = await deps.listEventTypeFolders(workspaceId);
+    return folders.some((folder) => folder.id === folderId);
+  };
+
   router.get("/api/me/theme-options", (c) => {
     return c.json({
       themes: themeNames.map((value) => ({ value, label: themeLabels[value] })),
@@ -686,6 +740,9 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     if (parsed.data.teamId && !(await deps.isTeamMember(parsed.data.teamId, user.id))) {
       return c.json({ error: "team_not_found" }, 404);
     }
+    if (!(await folderIsInWorkspace(parsed.data.folderId, user.workspaceId))) {
+      return c.json({ error: "folder_not_found" }, 404);
+    }
     const result = await deps.createEventType(user.id, parsed.data, user.workspaceId);
     if (result === "slug_taken") return c.json({ error: "slug_taken" }, 409);
     return c.json(result, 201);
@@ -697,6 +754,9 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     const user = c.get("user");
     if (parsed.data.teamId && !(await deps.isTeamMember(parsed.data.teamId, user.id))) {
       return c.json({ error: "team_not_found" }, 404);
+    }
+    if (!(await folderIsInWorkspace(parsed.data.folderId, user.workspaceId))) {
+      return c.json({ error: "folder_not_found" }, 404);
     }
     const result = await deps.updateEventType(
       c.req.param("id"),
@@ -718,6 +778,66 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     if (result === "not_found") return c.json({ error: "event_type_not_found" }, 404);
     if (result === "in_use") return c.json({ error: "event_type_in_use" }, 409);
     return c.json({ ok: true });
+  });
+
+  // ---- event type folders ----
+
+  router.get("/api/me/event-type-folders", async (c) => {
+    const workspaceId = c.get("user").workspaceId;
+    return c.json({
+      folders: workspaceId ? await deps.listEventTypeFolders(workspaceId) : [],
+    });
+  });
+
+  router.post("/api/me/event-type-folders", async (c) => {
+    const parsed = folderBodySchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "workspace_not_found" }, 404);
+    const result = await deps.createEventTypeFolder(workspaceId, parsed.data.name);
+    if (result === "name_taken") return c.json({ error: "folder_name_taken" }, 409);
+    return c.json(result, 201);
+  });
+
+  router.put("/api/me/event-type-folders/:id", async (c) => {
+    const parsed = folderPatchSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "workspace_not_found" }, 404);
+    const result = await deps.updateEventTypeFolder(c.req.param("id"), workspaceId, parsed.data);
+    if (result === "name_taken") return c.json({ error: "folder_name_taken" }, 409);
+    if (!result) return c.json({ error: "folder_not_found" }, 404);
+    return c.json(result);
+  });
+
+  router.delete("/api/me/event-type-folders/:id", async (c) => {
+    const workspaceId = c.get("user").workspaceId;
+    if (!workspaceId) return c.json({ error: "workspace_not_found" }, 404);
+    const result = await deps.deleteEventTypeFolder(c.req.param("id"), workspaceId);
+    if (result === "not_found") return c.json({ error: "folder_not_found" }, 404);
+    return c.json({ ok: true });
+  });
+
+  // Narrow endpoint on purpose: the list row's "Move to" must not have to
+  // rebuild a whole event type body from the list projection.
+  router.patch("/api/me/event-types/:id/folder", async (c) => {
+    const parsed = eventTypeFolderAssignSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+    const user = c.get("user");
+    // setEventTypeFolder only scopes the folder-ownership check to a
+    // workspace when one is passed — an undefined workspaceId would let a
+    // sessionless-workspace caller attach a folder from another workspace.
+    const workspaceId = user.workspaceId;
+    if (!workspaceId) return c.json({ error: "workspace_not_found" }, 404);
+    const result = await deps.setEventTypeFolder(
+      c.req.param("id"),
+      user.id,
+      parsed.data.folderId,
+      workspaceId,
+    );
+    if (result === "folder_not_found") return c.json({ error: "folder_not_found" }, 404);
+    if (!result) return c.json({ error: "event_type_not_found" }, 404);
+    return c.json(result);
   });
 
   router.get("/api/me/booking-pages", async (c) => {
