@@ -298,7 +298,7 @@ export function EventTypesTab({
         onCopyEmbed={() => copyEmbed(et.slug, embedMode)}
       />
     );
-  }, [copied, embed, onEdit]);
+  }, [copied, embed, onEdit, bookingBase]);
 
   return (
     <Card>
@@ -569,11 +569,13 @@ function FolderSection({
         <span>{folder?.name ?? "Ungrouped"}</span>
         <span className="text-xs font-normal text-muted-foreground">({eventTypes.length})</span>
       </button>
-      {!collapsed && (
-        <ul id={listId} className="flex flex-col gap-2">
-          {eventTypes.map(renderRow)}
-        </ul>
-      )}
+      <ul
+        id={listId}
+        className={collapsed ? undefined : "flex flex-col gap-2"}
+        hidden={collapsed}
+      >
+        {eventTypes.map(renderRow)}
+      </ul>
     </div>
   );
 }
