@@ -137,6 +137,8 @@ import {
 } from "@/lib/api";
 import { themeOptions } from "@/lib/theme";
 import { useAppearance } from "@/lib/appearance";
+import { errorText } from "@/lib/error-text";
+import { slugify } from "@/lib/format";
 // Pure core module, no server or Temporal dependency — same boundary as
 // @/lib/appearance, which also reads straight from src/core.
 import { composeOfferSnippet } from "../../../src/core/invite/offer-snippet";
@@ -151,6 +153,11 @@ import { TimezoneSelect } from "@/pages/booking-page";
 import { BrandMark } from "@/components/brand-mark";
 import { EngagementsTab } from "@/components/engagements-tab";
 import { ProposalDetail } from "@/components/proposals-panel";
+import {
+  ActionableEmptyState,
+  CopyFeedbackLabel,
+  InlineLoading,
+} from "@/components/dashboard-primitives";
 
 const TABS = [
   { key: "home", label: "Home", icon: Home, group: "primary" },
@@ -192,24 +199,6 @@ export const DASHBOARD_VIEW_PATHS: Record<DashboardView, string> = {
   "one-off": "/app/tools?view=one-off-offers",
   troubleshooter: "/app/workspace/availability?view=troubleshooter",
 };
-
-const ERROR_TEXT: Record<string, string> = {
-  slug_taken: "That slug is already taken.",
-  schedule_in_use: "Event types still use this schedule.",
-  cannot_forward_to_self: "Choose another person for forwarding.",
-  write_destination_required: "Choose another booking destination before disconnecting this calendar.",
-  calendar_not_writable: "Google does not allow this account to create events on that calendar.",
-  event_type_in_use: "This event type has bookings; it can't be deleted.",
-  invalid_body: "Some fields are invalid. Check the form.",
-  team_not_found: "Team not found.",
-  last_team_admin: "Promote another member before removing or demoting the final team admin.",
-  form_not_found: "Routing form not found.",
-};
-
-function errorText(e: unknown): string {
-  if (e instanceof ApiError) return ERROR_TEXT[e.code] ?? `Error: ${e.code}`;
-  return "Could not reach the server.";
-}
 
 export function DashboardPage({
   initialView = "home",
@@ -677,32 +666,6 @@ function DashboardSkeleton() {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {[0, 1, 2, 3].map((item) => <div key={item} className="h-32 animate-pulse rounded-xl bg-muted" />)}
-    </div>
-  );
-}
-
-function InlineLoading({ label }: { label: string }) {
-  return (
-    <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
-      {label}
-    </p>
-  );
-}
-
-function ActionableEmptyState({
-  title,
-  description,
-  action,
-}: {
-  title: string;
-  description: string;
-  action: ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-dashed border-border p-6">
-      <p className="font-medium">{title}</p>
-      <p className="mt-1 max-w-xl text-sm text-muted-foreground">{description}</p>
-      <div className="mt-4">{action}</div>
     </div>
   );
 }
@@ -1416,24 +1379,6 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
       <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{title}</h3>
       {children}
     </section>
-  );
-}
-
-function CopyFeedbackLabel({
-  copied,
-  idle,
-}: {
-  copied: boolean;
-  idle: string;
-}) {
-  return (
-    <>
-      <span aria-hidden="true" className="grid">
-        <span className={`col-start-1 row-start-1 ${copied ? "invisible" : ""}`}>{idle}</span>
-        <span className={`col-start-1 row-start-1 ${copied ? "" : "invisible"}`}>Copied</span>
-      </span>
-      <span className="sr-only" aria-live="polite">{copied ? "Copied" : idle}</span>
-    </>
   );
 }
 
@@ -2671,13 +2616,6 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   guestsEnabled: false,
   hosts: [],
 };
-
-function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 function eventTypeToInput(eventType: AdminEventType): EventTypeInput {
   return {
