@@ -79,6 +79,7 @@ const adminEventType: AdminEventType = {
   id: ET_ID,
   ownerUserId: U1,
   teamId: null,
+  folderId: null,
   slug: "intro-call",
   title: "Intro call",
   durationMinutes: 30,

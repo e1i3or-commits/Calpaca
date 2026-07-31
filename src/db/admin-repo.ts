@@ -1,8 +1,17 @@
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
 import * as schema from "./schema";
-import { bookingPages, eventTypeHosts, eventTypes, schedules, teamMembers, teams, users } from "./schema";
+import {
+  bookingPages,
+  eventTypeFolders,
+  eventTypeHosts,
+  eventTypes,
+  schedules,
+  teamMembers,
+  teams,
+  users,
+} from "./schema";
 import type { ScheduleOverride } from "../core/availability/overrides";
 import type { BookingQuestion } from "../core/booking/questions";
 import type { EventLocation } from "../core/booking/locations";
@@ -330,6 +339,7 @@ export interface AdminEventType {
   readonly id: string;
   readonly ownerUserId: string | null;
   readonly teamId: string | null;
+  readonly folderId: string | null;
   readonly slug: string;
   readonly title: string;
   readonly description?: string | null;
@@ -390,6 +400,7 @@ function toAdminEventType(
     id: row.id,
     ownerUserId: row.ownerUserId,
     teamId: row.teamId,
+    folderId: row.folderId,
     slug: row.slug,
     title: row.title,
     description: row.description,
@@ -427,9 +438,124 @@ export async function listEventTypesForUser(
   const rows = await executor
     .select()
     .from(eventTypes)
-    .where(workspaceId ? and(eq(eventTypes.workspaceId, workspaceId), ownership) : ownership);
+    .where(workspaceId ? and(eq(eventTypes.workspaceId, workspaceId), ownership) : ownership)
+    .orderBy(asc(eventTypes.title));
   const hosts = await hostsFor(executor, rows.map((r) => r.id));
   return rows.map((r) => toAdminEventType(r, hosts.get(r.id) ?? []));
+}
+
+export interface EventTypeFolderRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly position: number;
+}
+
+export async function listEventTypeFolders(
+  workspaceId: string,
+  executor: Db = getDb(),
+): Promise<EventTypeFolderRecord[]> {
+  return executor
+    .select({
+      id: eventTypeFolders.id,
+      name: eventTypeFolders.name,
+      position: eventTypeFolders.position,
+    })
+    .from(eventTypeFolders)
+    .where(eq(eventTypeFolders.workspaceId, workspaceId))
+    .orderBy(asc(eventTypeFolders.position));
+}
+
+export async function createEventTypeFolder(
+  workspaceId: string,
+  name: string,
+  executor: Db = getDb(),
+): Promise<EventTypeFolderRecord | "name_taken"> {
+  return executor.transaction(async (tx) => {
+    const existing = await tx.select({ id: eventTypeFolders.id })
+      .from(eventTypeFolders)
+      .where(and(
+        eq(eventTypeFolders.workspaceId, workspaceId),
+        sql`lower(${eventTypeFolders.name}) = lower(${name})`,
+      ));
+    if (existing.length > 0) return "name_taken";
+    const [nextRow] = await tx
+      .select({ next: sql<number>`coalesce(max(${eventTypeFolders.position}) + 1, 0)` })
+      .from(eventTypeFolders)
+      .where(eq(eventTypeFolders.workspaceId, workspaceId));
+    const [row] = await tx.insert(eventTypeFolders)
+      .values({ workspaceId, name, position: nextRow?.next ?? 0 })
+      .returning({
+        id: eventTypeFolders.id,
+        name: eventTypeFolders.name,
+        position: eventTypeFolders.position,
+      });
+    return row!;
+  });
+}
+
+export async function updateEventTypeFolder(
+  id: string,
+  workspaceId: string,
+  patch: { name?: string; position?: number },
+  executor: Db = getDb(),
+): Promise<EventTypeFolderRecord | null | "name_taken"> {
+  return executor.transaction(async (tx) => {
+    if (patch.name !== undefined) {
+      const clash = await tx.select({ id: eventTypeFolders.id })
+        .from(eventTypeFolders)
+        .where(and(
+          eq(eventTypeFolders.workspaceId, workspaceId),
+          sql`lower(${eventTypeFolders.name}) = lower(${patch.name})`,
+          ne(eventTypeFolders.id, id),
+        ));
+      if (clash.length > 0) return "name_taken";
+    }
+    const [row] = await tx.update(eventTypeFolders)
+      .set(patch)
+      .where(and(eq(eventTypeFolders.id, id), eq(eventTypeFolders.workspaceId, workspaceId)))
+      .returning({
+        id: eventTypeFolders.id,
+        name: eventTypeFolders.name,
+        position: eventTypeFolders.position,
+      });
+    return row ?? null;
+  });
+}
+
+export async function deleteEventTypeFolder(
+  id: string,
+  workspaceId: string,
+  executor: Db = getDb(),
+): Promise<"deleted" | "not_found"> {
+  // event_types.folder_id is ON DELETE SET NULL: the event types survive.
+  const rows = await executor.delete(eventTypeFolders)
+    .where(and(eq(eventTypeFolders.id, id), eq(eventTypeFolders.workspaceId, workspaceId)))
+    .returning({ id: eventTypeFolders.id });
+  return rows.length > 0 ? "deleted" : "not_found";
+}
+
+export async function setEventTypeFolder(
+  eventTypeId: string,
+  userId: string,
+  folderId: string | null,
+  executor: Db = getDb(),
+  workspaceId?: string,
+): Promise<AdminEventType | null | "folder_not_found"> {
+  const current = await getEventTypeForAdmin(eventTypeId, userId, executor, workspaceId);
+  if (!current) return null;
+  if (folderId !== null) {
+    const [folder] = await executor.select({ id: eventTypeFolders.id })
+      .from(eventTypeFolders)
+      .where(and(
+        eq(eventTypeFolders.id, folderId),
+        ...(workspaceId ? [eq(eventTypeFolders.workspaceId, workspaceId)] : []),
+      ));
+    if (!folder) return "folder_not_found";
+  }
+  await executor.update(eventTypes)
+    .set({ folderId })
+    .where(eq(eventTypes.id, eventTypeId));
+  return { ...current, folderId };
 }
 
 /** Load one event type the user may manage (owner, team admin, or workspace admin). */
@@ -468,6 +594,7 @@ export interface EventTypeInput {
   readonly mode: "solo" | "round_robin" | "group";
   readonly scheduleId: string | null;
   readonly teamId: string | null;
+  readonly folderId?: string | null;
   /** undefined keeps the column default (create) or leaves it unchanged (update) */
   readonly theme?: string;
   readonly layout?: string;
@@ -516,6 +643,7 @@ export async function createEventType(
         ownerUserId,
         scheduleId: input.scheduleId,
         teamId: input.teamId,
+        folderId: input.folderId ?? null,
       })
       .returning();
     if (input.hosts.length > 0) {
@@ -552,6 +680,7 @@ export async function updateEventType(
         mode: input.mode,
         scheduleId: input.scheduleId,
         teamId: input.teamId,
+        folderId: input.folderId ?? null,
         theme: input.theme,
         layout: input.layout,
         logoUrl: input.logoUrl,
