@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, Code2, Copy, Pencil, Plus, SearchCheck, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  Code2,
+  Copy,
+  FolderPlus,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  SearchCheck,
+  Trash2,
+} from "lucide-react";
 import {
   ApiError,
   createEventType,
+  createEventTypeFolder,
   deleteEventType,
+  deleteEventTypeFolder,
   getWorkspace,
   listEventTypeFolders,
   listEventTypes,
@@ -11,6 +23,7 @@ import {
   listSchedules,
   listTeams,
   updateEventType,
+  updateEventTypeFolder,
   type AdminEventType,
   type DirectoryUser,
   type EventTypeFolder,
@@ -141,6 +154,8 @@ export function EventTypesTab({
   }>>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [bookingBase, setBookingBase] = useState(window.location.origin);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
 
   const reload = useCallback(() => {
     listEventTypes()
@@ -163,6 +178,62 @@ export function EventTypesTab({
       return next;
     });
   }, []);
+
+  const createFolder = useCallback(async () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    try {
+      await createEventTypeFolder(name);
+      setNewFolderName("");
+      setCreatingFolder(false);
+      reloadFolders();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }, [newFolderName, reloadFolders]);
+
+  const renameFolder = useCallback(async (folderId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      await updateEventTypeFolder(folderId, { name: trimmed });
+      reloadFolders();
+    } catch (e) {
+      setError(errorText(e));
+      throw e;
+    }
+  }, [reloadFolders]);
+
+  const moveFolder = useCallback(async (folderId: string, direction: -1 | 1) => {
+    const index = folders.findIndex((f) => f.id === folderId);
+    const swapWith = folders[index + direction];
+    const current = folders[index];
+    if (!swapWith || !current) return;
+    try {
+      await updateEventTypeFolder(current.id, { position: swapWith.position });
+      await updateEventTypeFolder(swapWith.id, { position: current.position });
+      reloadFolders();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }, [folders, reloadFolders]);
+
+  const deleteFolder = useCallback(async (folder: EventTypeFolder) => {
+    const count = eventTypes?.filter((et) => et.folderId === folder.id).length ?? 0;
+    if (count > 0) {
+      const message = `Delete "${folder.name}"? Its ${count} event ${
+        count === 1 ? "type" : "types"
+      } will move to Ungrouped, not be deleted.`;
+      if (!window.confirm(message)) return;
+    }
+    try {
+      await deleteEventTypeFolder(folder.id);
+      reloadFolders();
+      reload();
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }, [eventTypes, reloadFolders, reload]);
 
   useEffect(() => {
     reload();
@@ -313,6 +384,9 @@ export function EventTypesTab({
               <Copy className="mr-1 h-4 w-4" />
               <CopyFeedbackLabel copied={copied === "booking-page"} idle="Booking page" />
             </Button>
+            <Button size="sm" variant="outline" onClick={() => setCreatingFolder(true)}>
+              <FolderPlus className="mr-1 h-4 w-4" /> New folder
+            </Button>
             <Button size="sm" onClick={() => onEdit("new")}>
               <Plus className="mr-1 h-4 w-4" /> New
             </Button>
@@ -361,6 +435,38 @@ export function EventTypesTab({
             </ul>
           </div>
         )}
+        {creatingFolder && (
+          <div className="flex items-center gap-2">
+            <Input
+              autoFocus
+              aria-label="New folder name"
+              placeholder="Folder name"
+              className="h-8 max-w-xs"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void createFolder();
+                } else if (e.key === "Escape") {
+                  setCreatingFolder(false);
+                  setNewFolderName("");
+                }
+              }}
+            />
+            <Button size="sm" onClick={() => void createFolder()}>Save</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setCreatingFolder(false);
+                setNewFolderName("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
         {editorNotFound ? (
           <ActionableEmptyState
             title="Event type not found"
@@ -400,7 +506,7 @@ export function EventTypesTab({
           </ul>
         ) : (
           <div className="flex flex-col gap-4">
-            {folders.map((folder) => (
+            {folders.map((folder, index) => (
               <FolderSection
                 key={folder.id}
                 folder={folder}
@@ -408,6 +514,12 @@ export function EventTypesTab({
                 collapsed={collapsed.has(folder.id)}
                 onToggle={() => toggleFolder(folder.id)}
                 renderRow={renderRow}
+                isFirst={index === 0}
+                isLast={index === folders.length - 1}
+                onRename={(name) => renameFolder(folder.id, name)}
+                onMoveUp={() => moveFolder(folder.id, -1)}
+                onMoveDown={() => moveFolder(folder.id, 1)}
+                onDelete={() => deleteFolder(folder)}
               />
             ))}
             {eventTypes.some((et) => !et.folderId) && (
@@ -545,30 +657,172 @@ function FolderSection({
   collapsed,
   onToggle,
   renderRow,
+  isFirst,
+  isLast,
+  onRename,
+  onMoveUp,
+  onMoveDown,
+  onDelete,
 }: {
   folder: EventTypeFolder | null;
   eventTypes: AdminEventType[];
   collapsed: boolean;
   onToggle: () => void;
   renderRow: (et: AdminEventType) => ReactNode;
+  isFirst?: boolean;
+  isLast?: boolean;
+  onRename?: (name: string) => Promise<void>;
+  onMoveUp?: () => Promise<void>;
+  onMoveDown?: () => Promise<void>;
+  onDelete?: () => Promise<void>;
 }) {
   const listId = `et-folder-list-${folder?.id ?? "ungrouped"}`;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleRenameSave = async () => {
+    if (!onRename) return;
+    try {
+      await onRename(renameValue);
+      setRenaming(false);
+    } catch {
+      // errorText(e) already surfaced via the parent's error state; keep the
+      // input open so the name can be corrected (e.g. folder_name_taken).
+    }
+  };
+
   return (
     <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        className="flex items-center gap-2 text-left text-sm font-medium"
-        aria-expanded={!collapsed}
-        aria-controls={listId}
-        onClick={onToggle}
-      >
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${collapsed ? "-rotate-90" : ""}`}
-          aria-hidden="true"
-        />
-        <span>{folder?.name ?? "Ungrouped"}</span>
-        <span className="text-xs font-normal text-muted-foreground">({eventTypes.length})</span>
-      </button>
+      <div className="flex items-center gap-2">
+        {renaming ? (
+          <span className="flex items-center gap-1.5">
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <Input
+              autoFocus
+              aria-label="Folder name"
+              className="h-7 w-40 text-sm"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void handleRenameSave();
+                } else if (e.key === "Escape") {
+                  setRenaming(false);
+                }
+              }}
+            />
+            <Button size="sm" variant="outline" onClick={() => void handleRenameSave()}>
+              Save
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setRenaming(false)}>
+              Cancel
+            </Button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="flex items-center gap-2 text-left text-sm font-medium"
+            aria-expanded={!collapsed}
+            aria-controls={listId}
+            onClick={onToggle}
+          >
+            <ChevronDown
+              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${collapsed ? "-rotate-90" : ""}`}
+              aria-hidden="true"
+            />
+            <span>{folder?.name ?? "Ungrouped"}</span>
+            <span className="text-xs font-normal text-muted-foreground">({eventTypes.length})</span>
+          </button>
+        )}
+        {folder !== null && !renaming && (
+          <div
+            ref={menuRef}
+            className="relative ml-auto"
+            onBlur={(event) => {
+              if (!menuRef.current?.contains(event.relatedTarget as Node | null)) {
+                setMenuOpen(false);
+              }
+            }}
+          >
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label={`Folder actions for ${folder.name}`}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {menuOpen && (
+              <div
+                role="menu"
+                aria-label={`${folder.name} folder actions`}
+                className="absolute right-0 top-full z-10 mt-1 flex w-40 flex-col gap-0.5 rounded-md border border-border bg-card p-1 shadow-md"
+              >
+                <Button
+                  type="button"
+                  role="menuitem"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setRenameValue(folder.name);
+                    setRenaming(true);
+                  }}
+                >
+                  Rename
+                </Button>
+                <Button
+                  type="button"
+                  role="menuitem"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  disabled={isFirst}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void onMoveUp?.();
+                  }}
+                >
+                  Move up
+                </Button>
+                <Button
+                  type="button"
+                  role="menuitem"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
+                  disabled={isLast}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void onMoveDown?.();
+                  }}
+                >
+                  Move down
+                </Button>
+                <Button
+                  type="button"
+                  role="menuitem"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start text-destructive hover:text-destructive"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void onDelete?.();
+                  }}
+                >
+                  Delete
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       <ul
         id={listId}
         className={collapsed ? undefined : "flex flex-col gap-2"}
