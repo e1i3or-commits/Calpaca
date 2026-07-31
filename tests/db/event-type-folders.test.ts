@@ -71,9 +71,11 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("event type folders schema", () 
         .values({ workspaceId: acme!.id, name: "Franchise", position: 0 });
 
       await expect(
-        db.insert(schema.eventTypeFolders)
-          .values({ workspaceId: acme!.id, name: "franchise", position: 1 }),
-      ).rejects.toThrow();
+        (async () => {
+          await db.insert(schema.eventTypeFolders)
+            .values({ workspaceId: acme!.id, name: "franchise", position: 1 });
+        })(),
+      ).rejects.toMatchObject({ code: "23505" });
 
       const [elsewhere] = await db.insert(schema.eventTypeFolders)
         .values({ workspaceId: other!.id, name: "Franchise", position: 0 }).returning();
