@@ -319,12 +319,27 @@ export const schedules = pgTable("schedules", {
   }[]>().notNull().default([]),
 });
 
+// Dashboard-only grouping for the event type list. Flat, workspace-scoped;
+// deleting a folder un-groups its event types and deletes none of them.
+export const eventTypeFolders = pgTable("event_type_folders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("event_type_folder_workspace_name_uq")
+    .on(t.workspaceId, sql`lower(${t.name})`),
+]);
+
 export const eventTypes = pgTable("event_types", {
   id: uuid("id").primaryKey().defaultRandom(),
   workspaceId: uuid("workspace_id").notNull().default(sql`NULL`).references(() => workspaces.id),
   engagementId: uuid("engagement_id").references(() => engagements.id, { onDelete: "set null" }),
   ownerUserId: uuid("owner_user_id").references(() => users.id),
   teamId: uuid("team_id").references(() => teams.id),
+  folderId: uuid("folder_id").references(() => eventTypeFolders.id, { onDelete: "set null" }),
   slug: text("slug").notNull(),
   title: text("title").notNull(),
   description: text("description"),
@@ -370,6 +385,7 @@ export const eventTypes = pgTable("event_types", {
 }, (t) => [
   uniqueIndex("event_type_workspace_slug_uq").on(t.workspaceId, t.slug),
   index("event_type_engagement_idx").on(t.engagementId),
+  index("event_type_folder_idx").on(t.workspaceId, t.folderId),
 ]);
 
 export const bookingPages = pgTable("booking_pages", {
