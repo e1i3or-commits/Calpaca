@@ -31,7 +31,7 @@ import {
   CopyFeedbackLabel,
   InlineLoading,
 } from "@/components/dashboard-primitives";
-import { BookingPagesManager } from "@/pages/dashboard-page";
+import { BookingPagesManager } from "@/components/booking-pages-manager";
 
 // ---- event types ----
 
