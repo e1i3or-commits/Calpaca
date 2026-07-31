@@ -861,6 +861,7 @@ export type AdminEventType = {
   id: string;
   ownerUserId: string | null;
   teamId: string | null;
+  folderId: string | null;
   slug: string;
   title: string;
   description?: string | null;
@@ -884,8 +885,9 @@ export type AdminEventType = {
   hosts: (EventTypeHost & { name: string; email: string })[];
 };
 
-export type EventTypeInput = Omit<AdminEventType, "id" | "ownerUserId" | "hosts"> & {
+export type EventTypeInput = Omit<AdminEventType, "id" | "ownerUserId" | "hosts" | "folderId"> & {
   hosts: EventTypeHost[];
+  folderId?: string | null;
 };
 
 export type PresentationOption = { value: string; label: string };
@@ -994,6 +996,47 @@ export function updateEventType(id: string, input: EventTypeInput): Promise<Admi
 
 export function deleteEventType(id: string): Promise<{ ok: true }> {
   return request(`/api/me/event-types/${id}`, { method: "DELETE" });
+}
+
+export type EventTypeFolder = {
+  id: string;
+  name: string;
+  position: number;
+};
+
+export function listEventTypeFolders(): Promise<{ folders: EventTypeFolder[] }> {
+  return request("/api/me/event-type-folders");
+}
+
+export function createEventTypeFolder(name: string): Promise<EventTypeFolder> {
+  return request("/api/me/event-type-folders", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function updateEventTypeFolder(
+  id: string,
+  patch: { name?: string; position?: number },
+): Promise<EventTypeFolder> {
+  return request(`/api/me/event-type-folders/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteEventTypeFolder(id: string): Promise<{ ok: true }> {
+  return request(`/api/me/event-type-folders/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function setEventTypeFolder(
+  eventTypeId: string,
+  folderId: string | null,
+): Promise<AdminEventType> {
+  return request(`/api/me/event-types/${encodeURIComponent(eventTypeId)}/folder`, {
+    method: "PATCH",
+    body: JSON.stringify({ folderId }),
+  });
 }
 
 export type BookingPageRecord = {

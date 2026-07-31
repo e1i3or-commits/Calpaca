@@ -5,6 +5,7 @@ import {
   createEventType,
   deleteEventType,
   getWorkspace,
+  listEventTypeFolders,
   listEventTypes,
   listPresentationOptions,
   listSchedules,
@@ -12,6 +13,7 @@ import {
   updateEventType,
   type AdminEventType,
   type DirectoryUser,
+  type EventTypeFolder,
   type EventTypeInput,
   type PresentationOption,
   type Schedule,
@@ -109,6 +111,15 @@ export function EventTypesTab({
   onCloseEditor: () => void;
 }) {
   const [eventTypes, setEventTypes] = useState<AdminEventType[] | null>(null);
+  const [folders, setFolders] = useState<EventTypeFolder[]>([]);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem("calpaca:et-folders-collapsed");
+      return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      return new Set();
+    }
+  });
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [availableThemes, setAvailableThemes] = useState<PresentationOption[]>([...themeOptions]);
@@ -137,8 +148,25 @@ export function EventTypesTab({
       .catch((e: unknown) => setError(errorText(e)));
   }, []);
 
+  const reloadFolders = useCallback(() => {
+    listEventTypeFolders()
+      .then((r) => setFolders(r.folders))
+      .catch(() => undefined);
+  }, []);
+
+  const toggleFolder = useCallback((folderId: string) => {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      localStorage.setItem("calpaca:et-folders-collapsed", JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     reload();
+    reloadFolders();
     listSchedules().then((r) => setSchedules(r.schedules)).catch(() => undefined);
     listTeams().then((r) => setTeams(r.teams)).catch(() => undefined);
     listPresentationOptions().then((options) => {
@@ -156,7 +184,7 @@ export function EventTypesTab({
         setBookingBase(window.location.origin);
       }
     }).catch(() => undefined);
-  }, [reload]);
+  }, [reload, reloadFolders]);
 
   useEffect(() => {
     if (!initialEditor) {
@@ -250,6 +278,27 @@ export function EventTypesTab({
       setTimeout(() => setCopied(null), 1500);
     }).catch(() => setError("Could not copy the embed code. Try again."));
   };
+
+  const renderRow = useCallback((et: AdminEventType) => {
+    const embedMode = embed?.slug === et.slug ? embed.mode : "inline";
+    return (
+      <EventTypeRow
+        key={et.id}
+        eventType={et}
+        copied={copied}
+        onCopyLink={() => copyLink(et.slug)}
+        onToggleEmbed={() =>
+          setEmbed(embed?.slug === et.slug ? null : { slug: et.slug, mode: "inline" })}
+        onEdit={() => onEdit(et.id)}
+        onRemove={() => void remove(et.id)}
+        embedOpen={embed?.slug === et.slug}
+        embedMode={embedMode}
+        onEmbedModeChange={(mode) => setEmbed({ slug: et.slug, mode })}
+        embedSnippetText={embedSnippet(et.slug, embedMode)}
+        onCopyEmbed={() => copyEmbed(et.slug, embedMode)}
+      />
+    );
+  }, [copied, embed, onEdit]);
 
   return (
     <Card>
@@ -345,89 +394,32 @@ export function EventTypesTab({
             description="Create a bookable meeting with its own duration, hosts, availability, and location."
             action={<Button size="sm" onClick={() => onEdit("new")}><Plus className="h-4 w-4" /> Create an event type</Button>}
           />
-        ) : (
+        ) : folders.length === 0 ? (
           <ul className="flex flex-col gap-2">
-            {eventTypes.map((et) => (
-              <li
-                key={et.id}
-                className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
-              >
-                <span className="min-w-0 grow basis-full sm:basis-0">
-                  <span className="font-medium">{et.title}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    /{et.slug} · {(et.selectableDurations?.length ?? 0) > 1
-                      ? `${et.selectableDurations!.join("/")} min`
-                      : `${et.durationMinutes} min`} · {et.mode.replace("_", " ")}
-                  </span>
-                </span>
-                <span className="flex shrink-0 items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => copyLink(et.slug)}>
-                    <Copy className="mr-1 h-3.5 w-3.5" />
-                    <CopyFeedbackLabel copied={copied === et.slug} idle="Link" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEmbed(embed?.slug === et.slug ? null : { slug: et.slug, mode: "inline" })}
-                  >
-                    <Code2 className="mr-1 h-3.5 w-3.5" />
-                    Embed
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Edit ${et.title}`}
-                    onClick={() => onEdit(et.id)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Delete ${et.title}`}
-                    onClick={() => void remove(et.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </span>
-                {embed?.slug === et.slug && (
-                  <div className="basis-full rounded-lg border border-border bg-muted/35 p-3">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-medium">Add to your website</p>
-                        <p className="text-xs text-muted-foreground">
-                          The booking frame resizes automatically.
-                        </p>
-                      </div>
-                      <div className="flex rounded-md border border-border bg-card p-0.5">
-                        {(["inline", "popup"] as const).map((mode) => (
-                          <button
-                            key={mode}
-                            type="button"
-                            className={`rounded px-2.5 py-1 text-xs font-medium capitalize ${
-                              embed.mode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-                            }`}
-                            onClick={() => setEmbed({ slug: et.slug, mode })}
-                          >
-                            {mode}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <pre className="overflow-x-auto rounded-md bg-foreground p-3 text-xs leading-5 text-background">
-                      <code>{embedSnippet(et.slug, embed.mode)}</code>
-                    </pre>
-                    <div className="mt-3 flex justify-end">
-                      <Button size="sm" variant="outline" onClick={() => copyEmbed(et.slug, embed.mode)}>
-                        <Copy className="mr-1.5 h-3.5 w-3.5" />
-                        <CopyFeedbackLabel copied={copied === `embed-${et.slug}-${embed.mode}`} idle="Copy code" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </li>
-            ))}
+            {eventTypes.map(renderRow)}
           </ul>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {folders.map((folder) => (
+              <FolderSection
+                key={folder.id}
+                folder={folder}
+                eventTypes={eventTypes.filter((et) => et.folderId === folder.id)}
+                collapsed={collapsed.has(folder.id)}
+                onToggle={() => toggleFolder(folder.id)}
+                renderRow={renderRow}
+              />
+            ))}
+            {eventTypes.some((et) => !et.folderId) && (
+              <FolderSection
+                folder={null}
+                eventTypes={eventTypes.filter((et) => !et.folderId)}
+                collapsed={collapsed.has("ungrouped")}
+                onToggle={() => toggleFolder("ungrouped")}
+                renderRow={renderRow}
+              />
+            )}
+          </div>
         )}
         {eventTypes && !editing && !initialEditor && (
           <BookingPagesManager
@@ -438,6 +430,151 @@ export function EventTypesTab({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function EventTypeRow({
+  eventType: et,
+  copied,
+  onCopyLink,
+  onToggleEmbed,
+  onEdit,
+  onRemove,
+  embedOpen,
+  embedMode,
+  onEmbedModeChange,
+  embedSnippetText,
+  onCopyEmbed,
+}: {
+  eventType: AdminEventType;
+  copied: string | null;
+  onCopyLink: () => void;
+  onToggleEmbed: () => void;
+  onEdit: () => void;
+  onRemove: () => void;
+  embedOpen: boolean;
+  embedMode: "inline" | "popup";
+  onEmbedModeChange: (mode: "inline" | "popup") => void;
+  embedSnippetText: string;
+  onCopyEmbed: () => void;
+}) {
+  return (
+    <li
+      className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+    >
+      <span className="min-w-0 grow basis-full sm:basis-0">
+        <span className="font-medium">{et.title}</span>
+        <span className="ml-2 text-xs text-muted-foreground">
+          /{et.slug} · {(et.selectableDurations?.length ?? 0) > 1
+            ? `${et.selectableDurations!.join("/")} min`
+            : `${et.durationMinutes} min`} · {et.mode.replace("_", " ")}
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1">
+        <Button variant="ghost" size="sm" onClick={onCopyLink}>
+          <Copy className="mr-1 h-3.5 w-3.5" />
+          <CopyFeedbackLabel copied={copied === et.slug} idle="Link" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggleEmbed}
+        >
+          <Code2 className="mr-1 h-3.5 w-3.5" />
+          Embed
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`Edit ${et.title}`}
+          onClick={onEdit}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`Delete ${et.title}`}
+          onClick={onRemove}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </span>
+      {embedOpen && (
+        <div className="basis-full rounded-lg border border-border bg-muted/35 p-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="font-medium">Add to your website</p>
+              <p className="text-xs text-muted-foreground">
+                The booking frame resizes automatically.
+              </p>
+            </div>
+            <div className="flex rounded-md border border-border bg-card p-0.5">
+              {(["inline", "popup"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`rounded px-2.5 py-1 text-xs font-medium capitalize ${
+                    embedMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                  }`}
+                  onClick={() => onEmbedModeChange(mode)}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          </div>
+          <pre className="overflow-x-auto rounded-md bg-foreground p-3 text-xs leading-5 text-background">
+            <code>{embedSnippetText}</code>
+          </pre>
+          <div className="mt-3 flex justify-end">
+            <Button size="sm" variant="outline" onClick={onCopyEmbed}>
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              <CopyFeedbackLabel copied={copied === `embed-${et.slug}-${embedMode}`} idle="Copy code" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function FolderSection({
+  folder,
+  eventTypes,
+  collapsed,
+  onToggle,
+  renderRow,
+}: {
+  folder: EventTypeFolder | null;
+  eventTypes: AdminEventType[];
+  collapsed: boolean;
+  onToggle: () => void;
+  renderRow: (et: AdminEventType) => ReactNode;
+}) {
+  const listId = `et-folder-list-${folder?.id ?? "ungrouped"}`;
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        className="flex items-center gap-2 text-left text-sm font-medium"
+        aria-expanded={!collapsed}
+        aria-controls={listId}
+        onClick={onToggle}
+      >
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${collapsed ? "-rotate-90" : ""}`}
+          aria-hidden="true"
+        />
+        <span>{folder?.name ?? "Ungrouped"}</span>
+        <span className="text-xs font-normal text-muted-foreground">({eventTypes.length})</span>
+      </button>
+      {!collapsed && (
+        <ul id={listId} className="flex flex-col gap-2">
+          {eventTypes.map(renderRow)}
+        </ul>
+      )}
+    </div>
   );
 }
 

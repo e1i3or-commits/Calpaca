@@ -11,6 +11,8 @@ export const ERROR_TEXT: Record<string, string> = {
   team_not_found: "Team not found.",
   last_team_admin: "Promote another member before removing or demoting the final team admin.",
   form_not_found: "Routing form not found.",
+  folder_name_taken: "A folder with that name already exists.",
+  folder_not_found: "Folder not found.",
 };
 
 export function errorText(e: unknown): string {
