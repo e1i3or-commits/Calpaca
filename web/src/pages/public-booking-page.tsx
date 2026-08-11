@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Clock } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { CalpacaAttribution } from "@/components/calpaca-attribution";
 import { AlpacaLoader } from "@/components/alpaca-loader";
 import { getPublicBookingPage, type PublicBookingPage as BookingPageData } from "@/lib/api";
 import { useTheme } from "@/lib/theme";
@@ -230,6 +231,7 @@ export function PublicBookingPage({
           </section>
         </div>
       </main>
+      <CalpacaAttribution whitelabel={page.whitelabel} />
     </div>
   );
 }

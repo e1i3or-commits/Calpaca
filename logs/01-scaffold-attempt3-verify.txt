@@ -1,2 +1,0 @@
-error: Script not found "verify"
-VERIFY FAIL: task acceptance command

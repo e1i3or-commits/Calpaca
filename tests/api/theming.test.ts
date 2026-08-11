@@ -44,6 +44,9 @@ describe("public event-type meta", () => {
       title: "Intro call",
       durationMinutes: 30,
       theme: "midnight",
+      // No workspace resolves in this fixture, which is the self-hosted shape:
+      // the Community Edition is never forced to carry attribution.
+      whitelabel: true,
     });
   });
 
@@ -71,7 +74,15 @@ describe("public event-type meta", () => {
       string,
       unknown
     >;
-    expect(Object.keys(body).sort()).toEqual(["durationMinutes", "slug", "theme", "title"]);
+    // Still an exact allowlist, now including the one field the booking page
+    // needs to decide whether to show Calpaca attribution.
+    expect(Object.keys(body).sort()).toEqual([
+      "durationMinutes",
+      "slug",
+      "theme",
+      "title",
+      "whitelabel",
+    ]);
   });
 });
 

@@ -152,6 +152,9 @@ export type EventTypeMeta = {
   theme: string;
   layout?: "focus" | "split" | "compact";
   logoUrl?: string;
+  /** false on plans without white labeling, which show Calpaca attribution.
+   * Absent from pre-whitelabel servers, where attribution is not shown. */
+  whitelabel?: boolean;
   meetingFormats?: ("phone" | "google_meet")[];
   bookingQuestions?: BookingQuestion[];
   emailVerificationRequired?: boolean;
@@ -239,6 +242,8 @@ export type PublicBookingPage = {
   description?: string | null;
   theme?: string;
   logoUrl?: string | null;
+  /** false on plans without white labeling, which show Calpaca attribution. */
+  whitelabel?: boolean;
   hosts?: {
     name: string;
     title: string | null;

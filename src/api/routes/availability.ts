@@ -83,6 +83,10 @@ export interface AvailabilityDeps {
     capability: string,
   ) => Promise<{ busy: { start: string; end: string }[]; expiresAt: Date } | null>;
   readonly inviteeCalendarEnabled?: (workspaceId: string) => Promise<boolean>;
+  /** Whether this workspace may serve booking pages without Calpaca
+   * attribution. Resolved per request from the plan, so a lapsed trial restores
+   * attribution without anything having to be swept. */
+  readonly whitelabelEnabled?: (workspaceId: string) => Promise<boolean>;
   readonly getPublicBookingPage?: (
     workspaceId: string,
     pageSlug?: string,
@@ -107,6 +111,8 @@ const defaultDeps: AvailabilityDeps = {
   getInviteeCalendarSession: (capability) => dbGetInviteeCalendarSession(capability),
   inviteeCalendarEnabled: async (workspaceId) =>
     (await getPublicWorkspaceEntitlements(workspaceId))?.inviteeCalendarOverlay ?? false,
+  whitelabelEnabled: async (workspaceId) =>
+    (await getPublicWorkspaceEntitlements(workspaceId))?.whitelabel ?? false,
   getPublicBookingPage: (workspaceId, pageSlug) => dbGetPublicBookingPage(workspaceId, pageSlug),
 };
 
@@ -292,8 +298,11 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       return c.json({ error: "booking_page_not_found" }, 404);
     }
     const page = await deps.getPublicBookingPage(workspaceId, c.req.query("pageSlug"));
+    const whitelabel = deps.whitelabelEnabled
+      ? await deps.whitelabelEnabled(workspaceId)
+      : false;
     return page
-      ? c.json(page)
+      ? c.json({ ...page, whitelabel })
       : c.json({ error: "booking_page_not_found" }, 404);
   });
 
@@ -334,11 +343,17 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     const inviteeCalendarOverlay = workspaceId && deps.inviteeCalendarEnabled
       ? await deps.inviteeCalendarEnabled(workspaceId)
       : undefined;
+    // Self-hosted installations resolve to whitelabel: true, so the Community
+    // Edition never forces attribution onto someone running their own server.
+    const whitelabel = workspaceId && deps.whitelabelEnabled
+      ? await deps.whitelabelEnabled(workspaceId)
+      : true;
 
     return c.json({
       slug: eventType.slug,
       title: eventType.title ?? eventType.slug,
       durationMinutes: eventType.durationMinutes,
+      whitelabel,
       ...(eventType.selectableDurations?.length
         ? { selectableDurations: eventType.selectableDurations }
         : {}),

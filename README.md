@@ -9,8 +9,8 @@ self-host the complete Community Edition under the AGPL.
 
 [Website](https://calpaca.io) ·
 [Architecture](docs/ARCHITECTURE.md) ·
-[Product specification](docs/CALPACA-PRODUCT-SPECIFICATION.md) ·
 [API reference](docs/API.md) ·
+[Self-hosting](docs/SELF-HOSTING.md) ·
 [MCP setup](docs/MCP.md) ·
 [Cloud and self-hosting](docs/HOSTED.md)
 

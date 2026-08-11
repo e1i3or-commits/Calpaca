@@ -40,7 +40,32 @@ describe("public workspace booking page", () => {
         selectableDurations: [15, 30, 60],
         theme: "default",
       }],
+      // Absent whitelabelEnabled resolves to false, so attribution is shown
+      // rather than quietly dropped when the plan is unknown.
+      whitelabel: false,
     });
+  });
+
+  test("reports white labeling from the workspace plan", async () => {
+    const page = {
+      name: "Acme",
+      slug: "acme",
+      eventTypes: [],
+    };
+    const router = (whitelabel: boolean) => createAvailabilityRoutes({
+      resolveWorkspaceId: async () => "workspace-1",
+      getPublicBookingPage: async () => page,
+      whitelabelEnabled: async () => whitelabel,
+      getEventTypeBySlug: async () => null,
+      getEventTypeHosts: async () => [],
+      getSchedulesForUsers: async () => [],
+      getBusyForUsers: async () => [],
+      now: () => Temporal.Instant.from("2026-07-23T12:00:00Z"),
+    });
+    expect(await (await router(true).request("/booking-page?workspaceSlug=acme")).json())
+      .toMatchObject({ whitelabel: true });
+    expect(await (await router(false).request("/booking-page?workspaceSlug=acme")).json())
+      .toMatchObject({ whitelabel: false });
   });
 
   test("does not expose an unresolved workspace", async () => {

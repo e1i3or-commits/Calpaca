@@ -39,6 +39,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CalpacaAttribution } from "@/components/calpaca-attribution";
 
 type Step =
   | { name: "pick" }
@@ -477,6 +478,7 @@ export function BookingPage({
           )}
         </CardContent>
       </Card>
+      <CalpacaAttribution whitelabel={meta?.whitelabel} />
     </div>
   );
 }

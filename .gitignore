@@ -4,6 +4,25 @@ node_modules/
 .env.local
 dist/
 .env
+
+# Maintainer working files. Kept out of the published repository because they
+# are about how this project is developed and operated, not about how to run
+# Calpaca. Self-hosting needs nothing from here: see README.md and
+# docs/SELF-HOSTING.md.
 AGENTS.md
 CLAUDE.md
+BACKLOG.md
 docs/HANDOFF.md
+scripts/loop.sh
+tasks/
+docs/superpowers/
+
+# Internal product and business material.
+docs/CALPACA-FOUNDER-STRATEGY.md
+docs/CALPACA-IMPLEMENTATION-PLAN.md
+docs/CALPACA-PRODUCT-EXPERIENCE.md
+docs/CALPACA-PRODUCT-SPECIFICATION.md
+docs/CALPACA-UX-STRATEGY.md
+docs/FEATURE-PARITY-ROADMAP.md
+docs/UI-REDESIGN.md
+docs/UI-UX-AUDIT.md
