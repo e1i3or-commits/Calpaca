@@ -31,6 +31,9 @@ export const invitationStatus = pgEnum("invitation_status", [
 export const workspacePlan = pgEnum("workspace_plan", [
   "free", "pro", "business", "self_hosted",
 ]);
+export const planGrantStatus = pgEnum("plan_grant_status", [
+  "pending", "claimed", "revoked",
+]);
 export const domainStatus = pgEnum("domain_status", [
   "pending", "verified",
 ]);
@@ -90,9 +93,42 @@ export const workspaces = pgTable("workspaces", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   plan: workspacePlan("plan").notNull().default("free"),
+  // When a granted plan stops applying. null means it does not expire, which is
+  // the normal case for paying customers and every self-hosted install. An
+  // elapsed value downgrades entitlements only — no data is removed, so a beta
+  // tester whose year runs out keeps their bookings, links, and history.
+  planExpiresAt: timestamp("plan_expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Trials promised to people who have not signed up yet. A hosted workspace is
+// only created on first sign-in, so there is nothing to set a plan on at the
+// moment the invitation goes out; this holds the promise until then, and
+// ensureWorkspaceForUser claims it. Same shape of problem as user_invitations,
+// but the opposite intent: that table pulls someone INTO an existing workspace,
+// this one upgrades the workspace they get for themselves.
+export const planGrants = pgTable("plan_grants", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull(),
+  plan: workspacePlan("plan").notNull(),
+  // Days rather than an absolute end date so the clock starts when the tester
+  // actually signs up, not whenever the grant happened to be written.
+  trialDays: integer("trial_days").notNull(),
+  status: planGrantStatus("status").notNull().default("pending"),
+  note: text("note"),
+  grantedByUserId: uuid("granted_by_user_id").references(() => users.id),
+  claimedByUserId: uuid("claimed_by_user_id").references(() => users.id),
+  claimedWorkspaceId: uuid("claimed_workspace_id")
+    .references(() => workspaces.id, { onDelete: "set null" }),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // One live promise per address, so re-running the grant script is safe and a
+  // tester cannot stack two trials by signing up twice.
+  uniqueIndex("pending_plan_grant_email_uq").on(sql`lower(${t.email})`)
+    .where(sql`status = 'pending'`),
+]);
 
 export const workspaceMembers = pgTable("workspace_members", {
   workspaceId: uuid("workspace_id").notNull()

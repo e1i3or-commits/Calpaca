@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { entitlementsFor, type WorkspacePlan } from "../core/workspace/entitlements";
+import { type WorkspacePlan } from "../core/workspace/entitlements";
+import { resolveWorkspacePlan } from "../core/workspace/plan";
 import { generatedWorkspaceSlug } from "../core/workspace/slug";
 import { getDb } from "./client";
 import * as schema from "./schema";
@@ -33,7 +34,7 @@ export async function ensureWorkspaceForUser(userId: string, executor: Db = getD
     if (existing) return existing;
 
     const [user] = await tx
-      .select({ role: users.appRole, name: users.name })
+      .select({ role: users.appRole, name: users.name, email: users.email })
       .from(users)
       .where(eq(users.id, userId));
     const hosted = installationPlan() === "free";
@@ -73,6 +74,17 @@ export async function ensureWorkspaceForUser(userId: string, executor: Db = getD
       userId,
       role,
     }).onConflictDoNothing();
+    if (hosted && role === "owner" && user?.email) {
+      // Inside this transaction on purpose: a crash between creating the
+      // workspace and applying the promised trial would leave a beta tester
+      // quietly on free, with the grant already looking spent.
+      const { claimPlanGrant } = await import("./plan-grant-repo");
+      await claimPlanGrant(
+        { userId, email: user.email, workspaceId: workspace.id },
+        undefined,
+        tx,
+      );
+    }
     if (!hosted) {
       await tx
         .update(schema.userInvitations)
@@ -102,6 +114,7 @@ export async function getWorkspaceContext(
       name: workspaces.name,
       slug: workspaces.slug,
       plan: workspaces.plan,
+      planExpiresAt: workspaces.planExpiresAt,
       role: workspaceMembers.role,
     })
     .from(workspaceMembers)
@@ -110,7 +123,24 @@ export async function getWorkspaceContext(
       eq(workspaceMembers.workspaceId, workspaceId),
       eq(workspaceMembers.userId, userId),
     ));
-  return row ? { ...row, entitlements: entitlementsFor(row.plan) } : null;
+  if (!row) return null;
+  // Resolved on read rather than swept by a job: a lapsed trial must stop
+  // granting paid capabilities the moment it lapses, with no dependency on a
+  // scheduled downgrade having run.
+  const resolved = resolveWorkspacePlan({
+    plan: row.plan,
+    planExpiresAt: row.planExpiresAt?.toISOString() ?? null,
+  });
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    role: row.role,
+    plan: resolved.plan,
+    grantedPlan: resolved.grantedPlan,
+    trial: resolved.trial,
+    entitlements: resolved.entitlements,
+  };
 }
 
 export async function getPublicWorkspaceEntitlements(
@@ -118,10 +148,15 @@ export async function getPublicWorkspaceEntitlements(
   executor: Db = getDb(),
 ) {
   const [row] = await executor
-    .select({ plan: workspaces.plan })
+    .select({ plan: workspaces.plan, planExpiresAt: workspaces.planExpiresAt })
     .from(workspaces)
     .where(eq(workspaces.id, workspaceId));
-  return row ? entitlementsFor(row.plan) : null;
+  return row
+    ? resolveWorkspacePlan({
+        plan: row.plan,
+        planExpiresAt: row.planExpiresAt?.toISOString() ?? null,
+      }).entitlements
+    : null;
 }
 
 export async function listWorkspaceDomains(workspaceId: string, executor: Db = getDb()) {

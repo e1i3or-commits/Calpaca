@@ -372,6 +372,13 @@
       "when": 1786453183546,
       "tag": "0052_wooden_punisher",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1786462516370,
+      "tag": "0053_flimsy_meteorite",
+      "breakpoints": true
     }
   ]
 }

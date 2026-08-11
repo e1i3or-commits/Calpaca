@@ -72,6 +72,41 @@ the shorter `/book/<event-type>` and `/r/<routing-form>` forms. Organizer link
 and embed generators prefer the primary verified hostname, then the hosted
 namespace.
 
+## Granting a trial
+
+`workspaces.plan_expires_at` gives a granted plan an end date. The effective
+plan is resolved on every read (`resolveWorkspacePlan` in
+`src/core/workspace/plan.ts`), not by a scheduled downgrade, so a lapsed trial
+stops granting paid capabilities the moment it lapses even if no job has run.
+An elapsed trial reads as `free` while `grantedPlan` still reports what was
+given, which is what lets the dashboard say "your Cloud Pro trial ended" rather
+than pretending the workspace was always free.
+
+Expiry removes capabilities, never data. Entitlements are checked at the point
+of use — creating a meeting poll, using invitee calendar overlay, adding a
+custom domain — so existing polls keep working for their invitees, verified
+custom domains keep resolving, and extra members stay members. Note that
+`memberLimit` and `whitelabel` are not enforced anywhere yet; today the
+enforced difference between free and paid is meeting polls, invitee calendar
+overlay, and adding custom domains.
+
+Grant a trial by email with the maintainer script:
+
+```sh
+bun run scripts-dev/grant-trial.ts grant person@example.com
+bun run scripts-dev/grant-trial.ts grant person@example.com --plan business --days 90
+bun run scripts-dev/grant-trial.ts list
+bun run scripts-dev/grant-trial.ts revoke person@example.com
+```
+
+If they already have an account, the workspace they own is upgraded
+immediately. If they do not, the grant is recorded in `plan_grants` and
+`ensureWorkspaceForUser` claims it inside the same transaction that creates
+their workspace at first sign-in — so the trial clock starts when they begin,
+and a crash cannot leave them on free with the grant already spent. Re-granting
+the same address supersedes the earlier pending promise rather than stacking a
+second trial, and a claimed grant is never reapplied.
+
 Set these variables for the public hosted service:
 
 ```env

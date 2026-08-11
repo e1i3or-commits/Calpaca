@@ -26,6 +26,8 @@ function deps(overrides: Partial<WorkspaceDeps> = {}): WorkspaceDeps {
       name: "Example Agency",
       slug: "default",
       plan: "self_hosted",
+      grantedPlan: "self_hosted",
+      trial: null,
       role: "owner",
       entitlements: {
         memberLimit: null,

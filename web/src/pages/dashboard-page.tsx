@@ -746,6 +746,72 @@ function SetupBanner() {
   );
 }
 
+const PLAN_LABELS: Record<string, string> = {
+  free: "Cloud Basic",
+  pro: "Cloud Pro",
+  business: "Cloud Business",
+  self_hosted: "Community Edition",
+};
+
+/** Says out loud what a trial is doing. Without this, a beta tester's Pro
+ * capabilities would simply stop working one morning with no explanation, and
+ * nothing else in the product mentions the expiry date. */
+function TrialBanner() {
+  const [state, setState] = useState<{
+    grantedPlan: string;
+    trial: { endsAt: string; expired: boolean; daysRemaining: number };
+  } | null>(null);
+
+  useEffect(() => {
+    getWorkspace()
+      .then(({ workspace }) => {
+        setState(workspace.trial
+          ? {
+              grantedPlan: workspace.grantedPlan ?? workspace.plan,
+              trial: workspace.trial,
+            }
+          : null);
+      })
+      .catch(() => setState(null));
+  }, []);
+
+  // Quiet for most of the year: a countdown shown every day for 365 days is
+  // noise, not information.
+  if (!state) return null;
+  const { trial, grantedPlan } = state;
+  if (!trial.expired && trial.daysRemaining > 30) return null;
+
+  const planLabel = PLAN_LABELS[grantedPlan] ?? grantedPlan;
+  const endsOn = new Date(trial.endsAt).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  return (
+    <section
+      className={`rounded-xl border px-5 py-4 ${
+        trial.expired
+          ? "border-amber-500/40 bg-amber-500/10"
+          : "border-primary/30 bg-primary/5"
+      }`}
+    >
+      <p className="font-medium">
+        {trial.expired
+          ? `Your ${planLabel} trial ended on ${endsOn}`
+          : `Your ${planLabel} trial ends in ${trial.daysRemaining} ${
+              trial.daysRemaining === 1 ? "day" : "days"
+            }`}
+      </p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {trial.expired
+          ? "Nothing was deleted — your bookings, links, and history are all still here. Meeting polls, custom domains, and invitee calendar overlay are paused until the plan is renewed."
+          : `Meeting polls, custom domains, and invitee calendar overlay stay available until ${endsOn}.`}
+      </p>
+    </section>
+  );
+}
+
 function HomeTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
   const [next, setNext] = useState<AdminBooking | null | undefined>(undefined);
   const [past, setPast] = useState<AdminBooking[]>([]);
@@ -770,6 +836,7 @@ function HomeTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
   return (
     <div className="space-y-5">
       <SetupBanner />
+      <TrialBanner />
       <section className="grid gap-4 lg:grid-cols-[1.45fr_.75fr]">
         <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
           <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">

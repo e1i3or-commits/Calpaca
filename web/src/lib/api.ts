@@ -759,6 +759,9 @@ export type WorkspaceContext = {
   name: string;
   slug: string;
   plan: "free" | "pro" | "business" | "self_hosted";
+  /** What was granted, which outlives a lapsed trial so the UI can name it. */
+  grantedPlan?: "free" | "pro" | "business" | "self_hosted";
+  trial?: { endsAt: string; expired: boolean; daysRemaining: number } | null;
   role: AppRole;
   entitlements: {
     memberLimit: number | null;

@@ -91,6 +91,14 @@ tracked with annotated Git tags named `v<version>`.
 - Workspaces can claim their own public link instead of keeping the generated
   placeholder that first appeared in every hosted booking URL. Reserved words
   and links already in use are rejected while typing.
+- Hosted plans can now carry an end date, so a Cloud Pro or Cloud Business
+  trial can be granted for a fixed period. When a trial ends, paid
+  capabilities stop and nothing is deleted: bookings, links, history, existing
+  polls, and existing custom domains all remain. Home says when a trial ends,
+  and says so again once it has.
+- Trials can be promised to someone before they have an account. The grant
+  applies the first time they sign in, so the clock starts when they begin
+  using Calpaca rather than when the invitation was sent.
 
 ### Accessibility improvements
 
