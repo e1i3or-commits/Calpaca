@@ -14,6 +14,9 @@ RUN bun install --frozen-lockfile --production
 COPY src ./src
 COPY drizzle ./drizzle
 COPY drizzle.config.ts tsconfig.json ./
+# Operator tooling: the image is the only place on the box with bun and the
+# dependencies, so granting a plan trial has to be runnable from in here.
+COPY scripts-dev/grant-trial.ts ./scripts-dev/
 COPY --from=build /app/dist/web ./dist/web
 EXPOSE 3000
 # migrations are idempotent; running them on every boot keeps deploys one-step
