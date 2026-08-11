@@ -43,7 +43,7 @@ const defaults: SuggestionDeps = {
   },
 };
 
-const bodySchema = z.object({
+export const bodySchema = z.object({
   workspaceSlug: z.string().min(1).optional(),
   invitee: z.object({
     email: z.string().email(),

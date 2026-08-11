@@ -266,7 +266,7 @@ const ruleSchema = z
   })
   .refine((r) => r.start < r.end, { message: "start must be before end" });
 
-const scheduleBodySchema = z.object({
+export const scheduleBodySchema = z.object({
   name: z.string().min(1).max(100),
   timezone: z.string().refine(isIanaZone, "must be an IANA timezone"),
   rules: z.array(ruleSchema).max(50),
@@ -307,7 +307,7 @@ const eventTypeFolderAssignSchema = z.object({
   folderId: z.string().uuid().nullable(),
 });
 
-const eventTypeBodySchema = z
+export const eventTypeBodySchema = z
   .object({
     slug: z.string().min(1).max(80).regex(SLUG_RE, "kebab-case only"),
     title: z.string().min(1).max(200),

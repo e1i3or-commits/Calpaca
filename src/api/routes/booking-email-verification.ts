@@ -14,12 +14,12 @@ import { createRateLimitMiddleware } from "../rate-limit";
 import { publicWorkspaceId } from "../public-workspace";
 import { isMailerConfigured, sendInviteMail } from "../../notifications/mailer";
 
-const requestSchema = z.object({
+export const requestSchema = z.object({
   eventTypeSlug: z.string().min(1),
   workspaceSlug: z.string().min(1).optional(),
   email: z.string().trim().email().max(320),
 });
-const verifySchema = z.object({
+export const verifySchema = z.object({
   challengeId: z.string().uuid(),
   code: z.string().regex(/^\d{6}$/),
 });

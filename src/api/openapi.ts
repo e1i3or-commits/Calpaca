@@ -1,5 +1,19 @@
 import { Hono } from "hono";
+import type { ZodTypeAny } from "zod";
 import { CALPACA_VERSION } from "../version";
+import { zodToJsonSchema } from "./zod-to-json-schema";
+import {
+  bookingBodySchema,
+  cancelBodySchema,
+  holdBodySchema,
+  rescheduleBodySchema,
+} from "./routes/bookings";
+import {
+  requestSchema as emailVerificationRequestSchema,
+  verifySchema as emailVerificationVerifySchema,
+} from "./routes/booking-email-verification";
+import { bodySchema as suggestionBodySchema } from "./routes/suggestions";
+import { eventTypeBodySchema, scheduleBodySchema } from "./routes/admin";
 
 type Method = "get" | "post" | "put" | "patch" | "delete";
 type Operation = readonly [
@@ -8,7 +22,30 @@ type Operation = readonly [
   tag: string,
   summary: string,
   auth?: "session" | "bearer" | "personal",
+  /** Name of the entry in `requestSchemas` describing this operation's body.
+   * Operations without one fall back to a permissive object. */
+  requestSchema?: RequestSchemaName,
 ];
+
+/** The request bodies documented from their actual Zod validator, so the
+ * published contract carries the constraints the server enforces. Named here
+ * (rather than inlined per operation) so repeated bodies share one
+ * `components.schemas` entry and the reference stays readable. */
+const requestSchemas = {
+  Hold: holdBodySchema,
+  Booking: bookingBodySchema,
+  Reschedule: rescheduleBodySchema,
+  Cancel: cancelBodySchema,
+  EmailVerificationStart: emailVerificationRequestSchema,
+  EmailVerificationConfirm: emailVerificationVerifySchema,
+  TimeSuggestion: suggestionBodySchema,
+  EventType: eventTypeBodySchema,
+  Schedule: scheduleBodySchema,
+} satisfies Record<string, ZodTypeAny>;
+
+export type RequestSchemaName = keyof typeof requestSchemas;
+
+export const documentedRequestSchemas = requestSchemas;
 
 export const openApiOperations: readonly Operation[] = [
   ["get", "/health", "System", "Check service health"],
@@ -18,14 +55,14 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/event-types/{slug}", "Booking", "Get public event type metadata"],
   ["get", "/booking-page", "Booking", "Get a public workspace booking page"],
   ["get", "/availability", "Booking", "List available and recommended slots"],
-  ["post", "/holds", "Booking", "Temporarily hold one or more host slots"],
-  ["post", "/bookings", "Booking", "Confirm a held booking"],
-  ["post", "/booking-email-verifications/request", "Booking", "Request an invitee email verification code"],
-  ["post", "/booking-email-verifications/verify", "Booking", "Verify an invitee email code"],
+  ["post", "/holds", "Booking", "Temporarily hold one or more host slots", undefined, "Hold"],
+  ["post", "/bookings", "Booking", "Confirm a held booking", undefined, "Booking"],
+  ["post", "/booking-email-verifications/request", "Booking", "Request an invitee email verification code", undefined, "EmailVerificationStart"],
+  ["post", "/booking-email-verifications/verify", "Booking", "Verify an invitee email code", undefined, "EmailVerificationConfirm"],
   ["get", "/bookings/{id}/reschedule-context", "Booking", "Get token-authorized reschedule context"],
-  ["post", "/bookings/{id}/reschedule", "Booking", "Reschedule a booking"],
-  ["post", "/bookings/{id}/cancel", "Booking", "Cancel a booking"],
-  ["post", "/event-types/{slug}/suggestions", "Booking", "Suggest alternate meeting times"],
+  ["post", "/bookings/{id}/reschedule", "Booking", "Reschedule a booking", undefined, "Reschedule"],
+  ["post", "/bookings/{id}/cancel", "Booking", "Cancel a booking", undefined, "Cancel"],
+  ["post", "/event-types/{slug}/suggestions", "Booking", "Suggest alternate meeting times", undefined, "TimeSuggestion"],
   ["get", "/offers/{publicId}", "One-off offers", "Get a public single-use booking offer"],
   ["get", "/api/public/proposals/{publicId}", "Proposals", "Review a public scheduling proposal"],
   ["post", "/api/public/proposals/{publicId}/request-alternative", "Proposals", "Request another proposal time"],
@@ -101,8 +138,8 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/api/me/bookings/{id}/assignment", "Organizer", "Explain round-robin assignment", "session"],
   ["post", "/api/me/bookings/{id}/no-show", "Organizer", "Mark a booking as no-show", "session"],
   ["get", "/api/me/schedules", "Schedules", "List availability schedules", "session"],
-  ["post", "/api/me/schedules", "Schedules", "Create an availability schedule", "session"],
-  ["put", "/api/me/schedules/{id}", "Schedules", "Replace an availability schedule", "session"],
+  ["post", "/api/me/schedules", "Schedules", "Create an availability schedule", "session", "Schedule"],
+  ["put", "/api/me/schedules/{id}", "Schedules", "Replace an availability schedule", "session", "Schedule"],
   ["delete", "/api/me/schedules/{id}", "Schedules", "Delete an availability schedule", "session"],
   ["get", "/api/me/teams", "Teams", "List visible teams", "session"],
   ["post", "/api/me/teams", "Teams", "Create a team", "session"],
@@ -112,8 +149,8 @@ export const openApiOperations: readonly Operation[] = [
   ["delete", "/api/me/teams/{id}/members/{userId}", "Teams", "Remove a team member", "session"],
   ["get", "/api/me/theme-options", "Event types", "List presentation options", "session"],
   ["get", "/api/me/event-types", "Event types", "List manageable event types", "session"],
-  ["post", "/api/me/event-types", "Event types", "Create an event type", "session"],
-  ["put", "/api/me/event-types/{id}", "Event types", "Replace an event type", "session"],
+  ["post", "/api/me/event-types", "Event types", "Create an event type", "session", "EventType"],
+  ["put", "/api/me/event-types/{id}", "Event types", "Replace an event type", "session", "EventType"],
   ["delete", "/api/me/event-types/{id}", "Event types", "Delete an event type", "session"],
   ["get", "/api/me/event-type-folders", "Event types", "List event type folders", "session"],
   ["post", "/api/me/event-type-folders", "Event types", "Create an event type folder", "session"],
@@ -189,13 +226,19 @@ function queryParameters(path: string) {
 
 export function generateOpenApiDocument() {
   const paths: Record<string, Record<string, unknown>> = {};
-  for (const [method, path, tag, summary, auth] of openApiOperations) {
+  for (const [method, path, tag, summary, auth, requestSchema] of openApiOperations) {
     const body = !["get", "delete"].includes(method)
       ? {
           requestBody: {
             required: true,
             content: {
-              "application/json": { schema: { type: "object", additionalProperties: true } },
+              "application/json": {
+                // A documented operation points at its real validator; the rest
+                // stay permissive rather than claiming a shape nobody checked.
+                schema: requestSchema
+                  ? { $ref: `#/components/schemas/${requestSchema}Request` }
+                  : { type: "object", additionalProperties: true },
+              },
             },
           },
         }
@@ -269,6 +312,14 @@ export function generateOpenApiDocument() {
             issues: { type: "array", items: { type: "object", additionalProperties: true } },
           },
         },
+        // Generated from the same Zod validators the routes parse with, so the
+        // documented constraints cannot drift from the enforced ones.
+        ...Object.fromEntries(
+          Object.entries(requestSchemas).map(([name, schema]) => [
+            `${name}Request`,
+            zodToJsonSchema(schema),
+          ]),
+        ),
       },
       responses: Object.fromEntries([
         ["BadRequest", "Invalid request"],

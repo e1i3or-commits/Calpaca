@@ -414,8 +414,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/HoldRequest"
               }
             }
           }
@@ -460,8 +459,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/BookingRequest"
               }
             }
           }
@@ -506,8 +504,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/EmailVerificationStartRequest"
               }
             }
           }
@@ -552,8 +549,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/EmailVerificationConfirmRequest"
               }
             }
           }
@@ -653,8 +649,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/RescheduleRequest"
               }
             }
           }
@@ -709,8 +704,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/CancelRequest"
               }
             }
           }
@@ -764,8 +758,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/TimeSuggestionRequest"
               }
             }
           }
@@ -4624,8 +4617,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/ScheduleRequest"
               }
             }
           }
@@ -4685,8 +4677,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/ScheduleRequest"
               }
             }
           }
@@ -5187,8 +5178,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/EventTypeRequest"
               }
             }
           }
@@ -5248,8 +5238,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true
+                "$ref": "#/components/schemas/EventTypeRequest"
               }
             }
           }
@@ -6892,6 +6881,824 @@
             }
           }
         }
+      },
+      "HoldRequest": {
+        "type": "object",
+        "properties": {
+          "eventTypeSlug": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workspaceSlug": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start": {
+            "type": "string",
+            "minLength": 1
+          },
+          "end": {
+            "type": "string",
+            "minLength": 1
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "optionalHosts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "offerPublicId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "proposalPublicId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "agent": {
+            "const": true
+          }
+        },
+        "required": [
+          "eventTypeSlug",
+          "start",
+          "end"
+        ],
+        "additionalProperties": false
+      },
+      "BookingRequest": {
+        "type": "object",
+        "properties": {
+          "eventTypeSlug": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workspaceSlug": {
+            "type": "string",
+            "minLength": 1
+          },
+          "holdIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          },
+          "invitee": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "timezone": {
+                "type": "string",
+                "minLength": 1
+              },
+              "notes": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "email",
+              "name",
+              "timezone"
+            ],
+            "additionalProperties": false
+          },
+          "meetingFormat": {
+            "type": "string",
+            "enum": [
+              "phone",
+              "google_meet"
+            ]
+          },
+          "locationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "offerPublicId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "proposalPublicId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "emailVerificationToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "inviteePhone": {
+            "type": "string",
+            "minLength": 7,
+            "maxLength": 40
+          },
+          "routingAnswers": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 1000
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "maxItems": 50
+                }
+              ]
+            }
+          },
+          "bookingAnswers": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "maxItems": 50
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "default": {}
+          },
+          "guests": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 320
+            },
+            "maxItems": 50,
+            "default": []
+          },
+          "agent": {
+            "const": true
+          }
+        },
+        "required": [
+          "eventTypeSlug",
+          "holdIds",
+          "invitee"
+        ],
+        "additionalProperties": false
+      },
+      "RescheduleRequest": {
+        "type": "object",
+        "properties": {
+          "rescheduleToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start": {
+            "type": "string",
+            "minLength": 1
+          },
+          "end": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "rescheduleToken",
+          "start",
+          "end"
+        ],
+        "additionalProperties": false
+      },
+      "CancelRequest": {
+        "type": "object",
+        "properties": {
+          "cancelToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cancelToken"
+        ],
+        "additionalProperties": false
+      },
+      "EmailVerificationStartRequest": {
+        "type": "object",
+        "properties": {
+          "eventTypeSlug": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workspaceSlug": {
+            "type": "string",
+            "minLength": 1
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 320
+          }
+        },
+        "required": [
+          "eventTypeSlug",
+          "email"
+        ],
+        "additionalProperties": false
+      },
+      "EmailVerificationConfirmRequest": {
+        "type": "object",
+        "properties": {
+          "challengeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          }
+        },
+        "required": [
+          "challengeId",
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "TimeSuggestionRequest": {
+        "type": "object",
+        "properties": {
+          "workspaceSlug": {
+            "type": "string",
+            "minLength": 1
+          },
+          "invitee": {
+            "type": "object",
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "timezone": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "email",
+              "name",
+              "timezone"
+            ],
+            "additionalProperties": false
+          },
+          "proposedSlots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "end": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 3
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "invitee",
+          "proposedSlots"
+        ],
+        "additionalProperties": false
+      },
+      "EventTypeRequest": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 480
+          },
+          "selectableDurations": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 5,
+              "maximum": 480
+            },
+            "minItems": 1,
+            "maxItems": 12
+          },
+          "capacity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 1
+          },
+          "bufferBeforeMin": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 240
+          },
+          "bufferAfterMin": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 240
+          },
+          "minimumNoticeMin": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10080
+          },
+          "rollingWindowDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "solo",
+              "round_robin",
+              "group"
+            ]
+          },
+          "scheduleId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "teamId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "folderId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "theme": {
+            "type": "string",
+            "enum": [
+              "default",
+              "calpaca",
+              "midnight",
+              "sand",
+              "juniper",
+              "solstice",
+              "cobalt",
+              "paper"
+            ],
+            "default": "default"
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "focus",
+              "split",
+              "compact"
+            ],
+            "default": "focus"
+          },
+          "logoUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "meetingFormats": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "phone",
+                "google_meet"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 2,
+            "default": [
+              "google_meet"
+            ]
+          },
+          "bookingQuestions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "textarea",
+                    "select",
+                    "multiselect",
+                    "phone",
+                    "checkbox"
+                  ]
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "hidden": {
+                  "type": "boolean"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "maxItems": 50
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "type",
+                "required",
+                "hidden"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 20,
+            "default": []
+          },
+          "emailVerificationRequired": {
+            "type": "boolean",
+            "default": false
+          },
+          "guestsEnabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "google_meet",
+                    "phone",
+                    "in_person",
+                    "custom_url"
+                  ]
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "address": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "instructions": {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "url": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048
+                },
+                "phoneNumber": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "phoneDirection": {
+                  "type": "string",
+                  "enum": [
+                    "organizer_calls_invitee",
+                    "invitee_calls_organizer"
+                  ]
+                },
+                "hostOverrides": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "address": {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      "instructions": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "url": {
+                        "type": "string",
+                        "format": "uri",
+                        "maxLength": 2048
+                      },
+                      "phoneNumber": {
+                        "type": "string",
+                        "maxLength": 80
+                      },
+                      "phoneDirection": {
+                        "type": "string",
+                        "enum": [
+                          "organizer_calls_invitee",
+                          "invitee_calls_organizer"
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "agentPolicy": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "autoExpireHoldsMin": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1440
+              }
+            },
+            "required": [
+              "enabled"
+            ],
+            "additionalProperties": false
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "member",
+                    "required",
+                    "optional"
+                  ]
+                },
+                "weight": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000
+                }
+              },
+              "required": [
+                "userId",
+                "role",
+                "weight"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 50
+          }
+        },
+        "required": [
+          "slug",
+          "title",
+          "durationMinutes",
+          "bufferBeforeMin",
+          "bufferAfterMin",
+          "minimumNoticeMin",
+          "rollingWindowDays",
+          "mode",
+          "scheduleId",
+          "teamId",
+          "hosts"
+        ],
+        "additionalProperties": false
+      },
+      "ScheduleRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "dow": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 6
+                },
+                "start": {
+                  "type": "string",
+                  "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                },
+                "end": {
+                  "type": "string",
+                  "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                }
+              },
+              "required": [
+                "dow",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "startDate": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "endDate": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "available",
+                    "unavailable"
+                  ]
+                },
+                "start": {
+                  "type": "string",
+                  "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                },
+                "end": {
+                  "type": "string",
+                  "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                },
+                "forwardToUserId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "startDate",
+                "endDate",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 100,
+            "default": []
+          }
+        },
+        "required": [
+          "name",
+          "timezone",
+          "rules"
+        ],
+        "additionalProperties": false
       }
     },
     "responses": {

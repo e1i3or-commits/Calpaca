@@ -206,7 +206,7 @@ const defaultDeps: BookingDeps = {
 const HOLD_TTL_MINUTES = 10;
 const RATE_LIMIT_WINDOW_SECONDS = 60;
 
-const holdBodySchema = z.object({
+export const holdBodySchema = z.object({
   eventTypeSlug: z.string().min(1),
   workspaceSlug: z.string().min(1).optional(),
   start: z.string().min(1),
@@ -218,7 +218,7 @@ const holdBodySchema = z.object({
   agent: z.literal(true).optional(),
 });
 
-const bookingBodySchema = z.object({
+export const bookingBodySchema = z.object({
   eventTypeSlug: z.string().min(1),
   workspaceSlug: z.string().min(1).optional(),
   holdIds: z.array(z.string().min(1)).min(1),
@@ -255,13 +255,13 @@ const bookingBodySchema = z.object({
   agent: z.literal(true).optional(),
 });
 
-const rescheduleBodySchema = z.object({
+export const rescheduleBodySchema = z.object({
   rescheduleToken: z.string().min(1),
   start: z.string().min(1),
   end: z.string().min(1),
 });
 
-const cancelBodySchema = z.object({
+export const cancelBodySchema = z.object({
   cancelToken: z.string().min(1),
   reason: z.string().optional(),
 });
