@@ -55,6 +55,18 @@ https://calpaca.io/book/<workspace>/<event-type>
 https://calpaca.io/r/<workspace>/<routing-form>
 ```
 
+A first hosted sign-in creates the workspace with a placeholder slug
+(`workspace-<random>`), which is unusable as a link anyone would click. The
+first-run flow at `/onboarding` is where a new customer replaces it: the slug is
+validated against the reserved path segments the public router depends on (`p`,
+`book`, `r`, and the rest of `RESERVED_WORKSPACE_SLUGS`) and claimed against the
+unique index, so a lost race answers `slug_taken` rather than silently
+reassigning someone else's link. The same flow confirms timezone, chooses which
+calendars block time and which receives events, and creates the first schedule
+and event type. `GET /api/me/onboarding` reports progress; completion is stored
+per user and is never inferred from data, so deleting a starter event type does
+not reopen setup.
+
 On a verified custom hostname the workspace comes from the hostname, keeping
 the shorter `/book/<event-type>` and `/r/<routing-form>` forms. Organizer link
 and embed generators prefer the primary verified hostname, then the hosted

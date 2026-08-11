@@ -29,7 +29,9 @@ export function SignInPage() {
     setBusy(true);
     setError(null);
     try {
-      window.location.href = await signInWithGoogle("/dashboard");
+      // Everyone returns to /onboarding; it forwards finished hosts straight to
+      // the dashboard, so a new customer never has to find setup themselves.
+      window.location.href = await signInWithGoogle("/onboarding");
     } catch (cause) {
       setError(
         cause instanceof ApiError

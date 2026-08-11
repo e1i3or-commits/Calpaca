@@ -15,6 +15,7 @@ import { DashboardPage, type DashboardView } from "@/pages/dashboard-page";
 import { ReschedulePage } from "@/pages/reschedule-page";
 import { RoutingFormPage } from "@/pages/routing-form-page";
 import { SignInPage } from "@/pages/sign-in-page";
+import { OnboardingPage } from "@/pages/onboarding-page";
 import { PollPage } from "@/pages/poll-page";
 import { SignupSheetPage } from "@/pages/signup-sheet-page";
 import { PublicBookingPage } from "@/pages/public-booking-page";
@@ -267,6 +268,14 @@ const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sign-in",
   component: SignInPage,
+});
+
+// The OAuth callback lands here for every organizer; the page itself forwards
+// hosts who already finished setup on to the dashboard.
+const onboardingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/onboarding",
+  component: OnboardingPage,
 });
 
 // Linked from the Google OAuth consent screen, so these paths are effectively
@@ -622,6 +631,7 @@ const router = createRouter({
     rescheduleRoute,
     cancelRoute,
     signInRoute,
+    onboardingRoute,
     privacyRoute,
     termsRoute,
     pollRoute,

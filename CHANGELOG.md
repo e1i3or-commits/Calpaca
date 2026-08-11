@@ -83,6 +83,14 @@ tracked with annotated Git tags named `v<version>`.
 - Existing event types can now open the availability troubleshooter with the
   event and duration already selected. Diagnostic links open separately to
   preserve unsaved editor changes, and can also prefill a specific time.
+- New customers now get a guided first-run setup instead of landing in the full
+  organizer. Signing in confirms name and timezone, explains which calendars
+  block time and which receives new events, claims a memorable booking link,
+  and creates a working 30-minute meeting type to preview and copy. Setup
+  resumes where it was left, and Home offers a way back until it is finished.
+- Workspaces can claim their own public link instead of keeping the generated
+  placeholder that first appeared in every hosted booking URL. Reserved words
+  and links already in use are rejected while typing.
 
 ### Accessibility improvements
 

@@ -69,6 +69,12 @@ export const users = pgTable("users", {
   timezone: text("timezone").notNull().default("UTC"), // IANA
   appRole: appRole("app_role").notNull().default("member"),
   status: userStatus("status").notNull().default("active"),
+  // First-run wizard progress. Identity and timezone leave no trace in the
+  // data, so the furthest-step marker is what makes that step resumable and
+  // answerable; completion is an explicit act, never inferred from rows, or a
+  // host who deletes their starter event type would be dragged back in.
+  onboardingStep: text("onboarding_step"),
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
   // scoring preferences
   prefs: jsonb("prefs").$type<{
     morningWeight?: number;       // 0..1, default 1

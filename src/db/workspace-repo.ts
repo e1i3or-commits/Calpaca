@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { entitlementsFor, type WorkspacePlan } from "../core/workspace/entitlements";
+import { generatedWorkspaceSlug } from "../core/workspace/slug";
 import { getDb } from "./client";
 import * as schema from "./schema";
 import {
@@ -51,7 +52,7 @@ export async function ensureWorkspaceForUser(userId: string, executor: Db = getD
             ? `${user?.name ?? "My"} workspace`
             : process.env.CALPACA_WORKSPACE_NAME ?? "Calpaca",
           slug: hosted
-            ? `workspace-${crypto.randomUUID().slice(0, 12)}`
+            ? generatedWorkspaceSlug(crypto.randomUUID())
             : DEFAULT_WORKSPACE_SLUG,
           plan: installationPlan(),
         })
@@ -148,6 +149,38 @@ export async function updateWorkspaceName(
     .where(eq(workspaces.id, workspaceId))
     .returning({ id: workspaces.id, name: workspaces.name });
   return row ?? null;
+}
+
+export async function workspaceSlugTaken(slug: string, executor: Db = getDb()) {
+  const [row] = await executor
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(eq(workspaces.slug, slug))
+    .limit(1);
+  return row !== undefined;
+}
+
+/** Claims the public slug. Returns "slug_taken" on the unique-index violation
+ * rather than pre-checking: two hosts claiming the same slug at once is exactly
+ * the race a pre-check loses, and the index is the real arbiter. */
+export async function updateWorkspaceSlug(
+  workspaceId: string,
+  slug: string,
+  executor: Db = getDb(),
+): Promise<{ id: string; name: string; slug: string } | "slug_taken" | null> {
+  try {
+    const [row] = await executor
+      .update(workspaces)
+      .set({ slug, updatedAt: new Date() })
+      .where(eq(workspaces.id, workspaceId))
+      .returning({ id: workspaces.id, name: workspaces.name, slug: workspaces.slug });
+    return row ?? null;
+  } catch (cause) {
+    if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "23505") {
+      return "slug_taken";
+    }
+    throw cause;
+  }
 }
 
 export async function addWorkspaceDomain(

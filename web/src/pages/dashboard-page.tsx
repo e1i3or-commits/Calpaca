@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
+  ArrowRight,
   Calendar,
   CalendarDays,
   CalendarCheck,
@@ -55,6 +56,7 @@ import {
   getAnalytics,
   getBookingAssignment,
   getUserManagement,
+  getOnboarding,
   getProfile,
   getWorkspace,
   inviteUser,
@@ -704,6 +706,46 @@ function localDateTimeValue(utc: string, timezone = viewerTimezone()): string {
   return `${parts["year"]}-${parts["month"]}-${parts["day"]}T${parts["hour"]}:${parts["minute"]}`;
 }
 
+/** A host who abandons the first-run wizard mid-flow would otherwise have no
+ * route back to it — the redirect only fires at sign-in. Renders nothing once
+ * setup is finished, and stays silent if the request fails. */
+function SetupBanner() {
+  const [pending, setPending] = useState<{ nextStep: string | null } | null>(null);
+
+  useEffect(() => {
+    getOnboarding()
+      .then((state) => setPending(state.required ? { nextStep: state.nextStep } : null))
+      .catch(() => setPending(null));
+  }, []);
+
+  if (!pending) return null;
+
+  const labels: Record<string, string> = {
+    profile: "confirm your name and timezone",
+    calendars: "choose which calendars block your time",
+    link: "claim your booking link",
+    publish: "publish your first booking link",
+  };
+  const next = pending.nextStep ? labels[pending.nextStep] : null;
+
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-5 py-4">
+      <div>
+        <p className="font-medium">Finish setting up Calpaca</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {next ? `Next: ${next}.` : "A few steps left before your link is ready."}
+        </p>
+      </div>
+      <a
+        href="/onboarding"
+        className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+      >
+        Resume setup <ArrowRight className="h-4 w-4" />
+      </a>
+    </section>
+  );
+}
+
 function HomeTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
   const [next, setNext] = useState<AdminBooking | null | undefined>(undefined);
   const [past, setPast] = useState<AdminBooking[]>([]);
@@ -727,6 +769,7 @@ function HomeTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
 
   return (
     <div className="space-y-5">
+      <SetupBanner />
       <section className="grid gap-4 lg:grid-cols-[1.45fr_.75fr]">
         <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
           <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">

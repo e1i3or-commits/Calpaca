@@ -52,6 +52,12 @@ function deps(overrides: Partial<WorkspaceDeps> = {}): WorkspaceDeps {
     }),
     removeDomain: async (_workspaceId, id) => id === DOMAIN_ID,
     updateName: async (_workspaceId, name) => ({ id: WORKSPACE_ID, name }),
+    updateSlug: async (_workspaceId, slug) => ({
+      id: WORKSPACE_ID,
+      name: "Example Agency",
+      slug,
+    }),
+    slugTaken: async (slug) => slug === "taken-slug",
     getDomainForVerification: async (_workspaceId, id) => id === DOMAIN_ID
       ? {
           id: DOMAIN_ID,
@@ -145,6 +151,100 @@ describe("workspace routes", () => {
       method: "PATCH",
       body: JSON.stringify({ name: "Nope" }),
     })).status).toBe(403);
+  });
+
+  test("reports a free slug as available, normalized", async () => {
+    const response = await createWorkspaceRoutes(deps())
+      .request("/api/me/workspace/slug-available?slug=TourScale%20Leadership");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      slug: "tourscale-leadership",
+      available: true,
+      reason: null,
+    });
+  });
+
+  test("reports taken and reserved candidates without failing the request", async () => {
+    const router = createWorkspaceRoutes(deps());
+    expect(await (await router.request("/api/me/workspace/slug-available?slug=taken-slug")).json())
+      .toEqual({ slug: "taken-slug", available: false, reason: "taken" });
+    expect(await (await router.request("/api/me/workspace/slug-available?slug=booking")).json())
+      .toEqual({ slug: null, available: false, reason: "reserved" });
+    expect(await (await router.request("/api/me/workspace/slug-available?slug=%21%21")).json())
+      .toEqual({ slug: null, available: false, reason: "invalid_characters" });
+  });
+
+  // Re-opening the wizard on the slug step must not report the host's own slug
+  // as taken by someone else.
+  test("treats the workspace's current slug as available to itself", async () => {
+    const response = await createWorkspaceRoutes(deps({
+      slugTaken: async () => true,
+    })).request("/api/me/workspace/slug-available?slug=default");
+    expect(await response.json()).toEqual({ slug: "default", available: true, reason: null });
+  });
+
+  test("claims a slug through PATCH and normalizes it first", async () => {
+    const claimed: string[] = [];
+    const response = await createWorkspaceRoutes(deps({
+      updateSlug: async (_workspaceId, slug) => {
+        claimed.push(slug);
+        return { id: WORKSPACE_ID, name: "Example Agency", slug };
+      },
+    })).request("/api/me/workspace", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: "  TourScale  " }),
+    });
+    expect(response.status).toBe(200);
+    expect(claimed).toEqual(["tourscale"]);
+  });
+
+  test("rejects a reserved slug before it reaches the database", async () => {
+    let called = false;
+    const response = await createWorkspaceRoutes(deps({
+      updateSlug: async (_workspaceId, slug) => {
+        called = true;
+        return { id: WORKSPACE_ID, name: "Example Agency", slug };
+      },
+    })).request("/api/me/workspace", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: "p" }),
+    });
+    expect(response.status).toBe(400);
+    expect(called).toBe(false);
+    expect(await response.json()).toEqual({ error: "invalid_slug", reason: "reserved" });
+  });
+
+  test("surfaces the unique-index race as a conflict", async () => {
+    const response = await createWorkspaceRoutes(deps({
+      updateSlug: async () => "slug_taken",
+    })).request("/api/me/workspace", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: "tourscale" }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "slug_taken" });
+  });
+
+  test("still accepts a name-only rename", async () => {
+    const response = await createWorkspaceRoutes(deps()).request("/api/me/workspace", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Renamed" }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ workspace: { id: WORKSPACE_ID, name: "Renamed" } });
+  });
+
+  test("requires at least one field to change", async () => {
+    const response = await createWorkspaceRoutes(deps()).request("/api/me/workspace", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(400);
   });
 
   test("verifies the TXT proof before provisioning the hostname", async () => {

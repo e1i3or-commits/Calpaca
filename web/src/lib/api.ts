@@ -794,6 +794,64 @@ export function updateWorkspace(name: string): Promise<{
   });
 }
 
+export type WorkspaceSlugCheck = {
+  slug: string | null;
+  available: boolean;
+  reason: "empty" | "too_short" | "too_long" | "invalid_characters" | "reserved" | "taken" | null;
+};
+
+export function checkWorkspaceSlug(slug: string): Promise<WorkspaceSlugCheck> {
+  return request(`/api/me/workspace/slug-available?slug=${encodeURIComponent(slug)}`);
+}
+
+export function claimWorkspaceSlug(slug: string): Promise<{
+  workspace: { id: string; name: string; slug: string };
+}> {
+  return request("/api/me/workspace", {
+    method: "PATCH",
+    body: JSON.stringify({ slug }),
+  });
+}
+
+export type OnboardingStepId = "profile" | "calendars" | "link" | "publish";
+
+export type OnboardingState = {
+  steps: { id: OnboardingStepId; complete: boolean }[];
+  nextStep: OnboardingStepId | null;
+  resumeStep: OnboardingStepId;
+  required: boolean;
+  complete: boolean;
+  canComplete: boolean;
+  completedAt: string | null;
+  workspace: {
+    slug: string;
+    slugIsPlaceholder: boolean;
+    suggestedSlug: string | null;
+  };
+  calendars: {
+    connectedCount: number;
+    blockingCount: number;
+    hasWriteDestination: boolean;
+  };
+  scheduleCount: number;
+  eventTypeCount: number;
+};
+
+export function getOnboarding(): Promise<OnboardingState> {
+  return request("/api/me/onboarding");
+}
+
+export function recordOnboardingStep(step: OnboardingStepId): Promise<OnboardingState> {
+  return request("/api/me/onboarding/step", {
+    method: "PATCH",
+    body: JSON.stringify({ step }),
+  });
+}
+
+export function completeOnboarding(): Promise<OnboardingState> {
+  return request("/api/me/onboarding/complete", { method: "POST" });
+}
+
 export function addWorkspaceDomain(hostname: string): Promise<{
   domain: WorkspaceDomain & {
     dnsRecord: { type: "TXT"; name: string; value: string };
