@@ -12,6 +12,10 @@ docs
 logs
 scripts
 scripts-dev
+# Operator scripts have to be runnable where production actually lives. The
+# image is the only place with bun and node_modules on the box, so excluding
+# this made the documented trial-granting procedure impossible to run.
+!scripts-dev/grant-trial.ts
 tasks
 tests
 AGENTS.md
