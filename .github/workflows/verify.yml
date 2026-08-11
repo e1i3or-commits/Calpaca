@@ -64,9 +64,9 @@ jobs:
 
       - name: Confirm the checked-in OpenAPI document is current
         run: |
-          bun run scripts-dev/generate-openapi.ts
+          bun run openapi:generate
           git diff --exit-code docs/openapi.json \
-            || { echo "::error::docs/openapi.json is stale — run bun run scripts-dev/generate-openapi.ts"; exit 1; }
+            || { echo "::error::docs/openapi.json is stale — run bun run openapi:generate"; exit 1; }
 
       - name: Confirm the web bundle builds
         run: bun run build:web

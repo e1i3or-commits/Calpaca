@@ -42,10 +42,24 @@ const foundations = [
   "Google Calendar conflict checking and write-through",
   "Solo, round robin, collective, and capacity scheduling",
   "Meeting polls with calendar-aware suggestions and live results",
+  "Eight booking themes and three page layouts, with your logo and colors",
+  "Your own domain, with Calpaca's name off the page entirely",
   "Routing forms, one-off offers, and sign-up sheets",
   "Email verification, signed webhooks, and append-only booking history",
   "Public API and MCP tools for controlled scheduling automation",
 ];
+
+const branding = {
+  title: "It should look like you, not like your scheduling tool",
+  text: "Choose from eight themes and three page layouts, add your own logo and colors, and serve every booking link from your own verified domain. On Pro and Business, Calpaca's name comes off the page completely.",
+  points: [
+    "Eight themes, from understated to high contrast",
+    "Focus, split, and compact page layouts",
+    "Your logo and colors on booking pages and lifecycle emails",
+    "Your own domain with automatic certificates",
+    "Full white labeling: no Calpaca attribution on paid plans",
+  ],
+};
 
 const plans = [
   {
@@ -54,7 +68,9 @@ const plans = [
     price: "$0",
     priceNote: "forever",
     description: "The relationship-aware workspace for one person.",
-    points: ["One user", "Google Calendar sync", "Engagements, booking pages, and meeting polls"],
+    // Meeting polls are a paid entitlement (memberLimit 1, meetingPolls false),
+    // so listing them here promised something the free plan blocks.
+    points: ["One user", "Google Calendar sync", "Engagements, booking pages, and themes"],
     action: "Start for free",
     href: appUrl,
     featured: false,
@@ -65,7 +81,12 @@ const plans = [
     price: "$7",
     priceNote: "per user / month",
     description: "Team scheduling and shared client work without operational overhead.",
-    points: ["Teams and shared booking pages", "Round robin and group scheduling", "Managed updates, email, backups, and support"],
+    points: [
+      "Teams and shared booking pages",
+      "Meeting polls and invitee calendar overlay",
+      "White labeling and your own domain",
+      "Managed updates, email, backups, and support",
+    ],
     action: "Start with Pro",
     href: appUrl,
     featured: true,
@@ -155,6 +176,7 @@ export function MarketingPage() {
           <nav className="hidden items-center gap-7 md:flex" aria-label="Main navigation">
             <a href="#product" className="text-sm text-muted-foreground transition hover:text-foreground">Product</a>
             <a href="#capabilities" className="text-sm text-muted-foreground transition hover:text-foreground">Capabilities</a>
+            <a href="#branding" className="text-sm text-muted-foreground transition hover:text-foreground">Branding</a>
             <a href="#plans" className="text-sm text-muted-foreground transition hover:text-foreground">Plans</a>
             <a href="#open-source" className="text-sm text-muted-foreground transition hover:text-foreground">Open source</a>
           </nav>
@@ -181,6 +203,7 @@ export function MarketingPage() {
               {[
                 ["Product", "#product"],
                 ["Capabilities", "#capabilities"],
+                ["Branding", "#branding"],
                 ["Plans", "#plans"],
                 ["Open source", "#open-source"],
               ].map(([label, href]) => (
@@ -272,7 +295,29 @@ export function MarketingPage() {
           </div>
         </section>
 
-        <section id="plans" className="scroll-mt-20 px-5 py-20 sm:px-8 sm:py-28">
+        <section id="branding" className="scroll-mt-20 px-5 py-20 sm:px-8 sm:py-28">
+          <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-2 lg:gap-24">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Themes and white labeling</p>
+              <h2 className="mt-4 text-4xl font-semibold tracking-[-.055em] sm:text-5xl">
+                {branding.title}
+              </h2>
+              <p className="mt-5 max-w-xl text-base leading-7 text-muted-foreground">
+                {branding.text}
+              </p>
+            </div>
+            <ul className="grid gap-0 border-t border-border">
+              {branding.points.map((item) => (
+                <li key={item} className="flex gap-3 border-b border-border py-4 text-sm leading-6">
+                  <Check className="mt-1 h-4 w-4 shrink-0 text-primary" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section id="plans" className="scroll-mt-20 border-t border-border px-5 py-20 sm:px-8 sm:py-28">
           <div className="mx-auto max-w-7xl">
             <div className="max-w-2xl">
               <p className="text-xs font-semibold uppercase tracking-[.18em] text-primary">Choose how to run Calpaca</p>
