@@ -79,6 +79,16 @@ const DEFAULT_EVENT_TYPE: EventTypeInput = {
   hosts: [],
 };
 
+// The duration field pollutes `selectableDurations` while it is being typed
+// (every keystroke is a Number(), so "45" passes through 4). Normalize at the
+// API boundary instead: keep only in-range choices and always include the
+// default, which the server requires.
+function normalizeDurations(form: EventTypeInput): EventTypeInput {
+  const choices = [...(form.selectableDurations ?? []), form.durationMinutes]
+    .filter((minutes) => Number.isInteger(minutes) && minutes >= 5 && minutes <= 480);
+  return { ...form, selectableDurations: [...new Set(choices)].sort((a, b) => a - b) };
+}
+
 function eventTypeToInput(eventType: AdminEventType): EventTypeInput {
   return {
     slug: eventType.slug,
@@ -306,8 +316,9 @@ export function EventTypesTab({
     setError(null);
     setValidationIssues([]);
     try {
-      if (editing.id) await updateEventType(editing.id, editing.form);
-      else await createEventType(editing.form);
+      const form = normalizeDurations(editing.form);
+      if (editing.id) await updateEventType(editing.id, form);
+      else await createEventType(form);
       reload();
       onCloseEditor();
     } catch (e) {
@@ -1173,16 +1184,7 @@ function EventTypeForm({
             min={5}
             max={480}
             value={form.durationMinutes}
-            onChange={(e) => {
-              const durationMinutes = Number(e.target.value);
-              onChange({
-                ...form,
-                durationMinutes,
-                selectableDurations: [
-                  ...new Set([...(form.selectableDurations ?? []), durationMinutes]),
-                ].sort((a, b) => a - b),
-              });
-            }}
+            onChange={(e) => set("durationMinutes", Number(e.target.value))}
           />
           <FieldError field="durationMinutes" />
         </div>
@@ -1190,8 +1192,9 @@ function EventTypeForm({
           <Label>Invitee duration choices</Label>
           <div className="flex flex-wrap gap-2">
             {[15, 30, 45, 60, 90, 120].map((minutes) => {
-              const selected = (form.selectableDurations ?? [form.durationMinutes]).includes(minutes);
               const isDefault = minutes === form.durationMinutes;
+              const selected = isDefault
+                || (form.selectableDurations ?? []).includes(minutes);
               return (
                 <Button
                   key={minutes}
