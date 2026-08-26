@@ -12,13 +12,15 @@ export const themeOptions = [
   { value: "cobalt", label: "Cobalt" },
   { value: "paper", label: "Paper" },
 ] as const;
-const allThemeNames: readonly string[] = themeOptions.map((theme) => theme.value);
+// A deployment may serve private themes (/themes/private.css) whose names this
+// bundle cannot know, so the shape of the name is what is checked here. A name
+// with no matching token block simply inherits the default tokens.
+const THEME_NAME_RE = /^[a-z][a-z0-9-]{1,30}$/;
 
-/** Applies a bundled theme by setting [data-theme] on <html>; the token
- * blocks in themes.css do the rest. Unknown names fall back to default. */
+/** Applies a theme by setting [data-theme] on <html>; the token blocks in
+ * themes.css — or the deployment's private stylesheet — do the rest. */
 export function applyTheme(theme: string | undefined): void {
-  const known = theme && allThemeNames.includes(theme);
-  if (known && theme !== "default") {
+  if (theme && theme !== "default" && THEME_NAME_RE.test(theme)) {
     document.documentElement.dataset["theme"] = theme;
   } else {
     delete document.documentElement.dataset["theme"];

@@ -5,7 +5,8 @@ import { requireSession, type AuthEnv } from "../../auth/session";
 import type { Condition } from "../../core/routing/condition";
 import { evaluateRouting } from "../../core/routing/evaluate";
 import { validateAnswers } from "../../core/routing/form";
-import { defaultTheme, resolveTheme, themeNames } from "../../core/theming/themes";
+import { defaultTheme, resolveTheme } from "../../core/theming/themes";
+import { privateThemeNames, themeNameSchema } from "../private-themes";
 import {
   createRoutingForm,
   deleteRoutingForm,
@@ -109,7 +110,7 @@ const formBodySchema = z
     // the pre-theme contract still validates.
     title: z.string().trim().min(1).max(200).nullable().default(null),
     description: z.string().trim().min(1).max(2000).nullable().default(null),
-    theme: z.enum(themeNames).default(defaultTheme),
+    theme: themeNameSchema.default(defaultTheme),
     fields: z.array(fieldSchema).min(1).max(20),
     rules: z.array(ruleSchema).max(50),
   })
@@ -148,7 +149,7 @@ export function createRoutingRoutes(deps: RoutingDeps = defaultDeps): Hono<AuthE
       slug: form.slug,
       title: form.title,
       description: form.description,
-      theme: resolveTheme(form.theme),
+      theme: resolveTheme(form.theme, privateThemeNames()),
       fields: form.fields,
     });
   });

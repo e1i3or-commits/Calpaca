@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
+import { privateThemeOptions, themeNameSchema } from "../private-themes";
 import { Temporal } from "@js-temporal/polyfill";
 import { requireSession, type AuthEnv } from "../../auth/session";
 import {
@@ -323,7 +324,7 @@ export const eventTypeBodySchema = z
     scheduleId: z.string().uuid().nullable(),
     teamId: z.string().uuid().nullable(),
     folderId: z.string().uuid().nullable().default(null),
-    theme: z.enum(themeNames).default("default"),
+    theme: themeNameSchema.default("default"),
     layout: z.enum(bookingLayoutNames).default("focus"),
     logoUrl: z.string().url().max(2048).nullable().default(null),
     meetingFormats: z.array(z.enum(["phone", "google_meet"])).min(1).max(2)
@@ -428,7 +429,7 @@ const bookingPageBodySchema = z.object({
   slug: z.string().min(1).max(80).regex(SLUG_RE, "kebab-case only"),
   title: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).nullable().default(null),
-  theme: z.enum(themeNames).default("default"),
+  theme: themeNameSchema.default("default"),
   logoUrl: z.string().url().max(2048).nullable().default(null),
   eventTypeIds: z.array(z.string().uuid()).min(1).max(100)
     .refine((ids) => new Set(ids).size === ids.length, "event types must be unique"),
@@ -718,7 +719,10 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
 
   router.get("/api/me/theme-options", (c) => {
     return c.json({
-      themes: themeNames.map((value) => ({ value, label: themeLabels[value] })),
+      themes: [
+        ...themeNames.map((value) => ({ value, label: themeLabels[value] })),
+        ...privateThemeOptions(),
+      ],
       publicThemes: [...publicThemeNames],
       layouts: [
         { value: "focus", label: "Focus" },

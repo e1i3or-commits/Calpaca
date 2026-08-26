@@ -69,6 +69,33 @@ smtp://username:password@smtp.example.com:587
 
 Keep credentials URL-encoded and store `.env` with restrictive permissions.
 
+## Private themes
+
+An installation can carry themes that are not part of the bundled registry —
+useful when a deployment is white-labelled and its brand tokens should not live
+in this repository. Set `CALPACA_PRIVATE_THEMES` to a JSON array:
+
+```json
+[
+  {
+    "name": "acme",
+    "label": "Acme",
+    "tokens": {
+      "--primary": "oklch(0.36 0.11 265)",
+      "--background": "oklch(0.98 0.006 264)",
+      "--radius": "0.5rem"
+    }
+  }
+]
+```
+
+`name` is kebab-case and must not collide with a bundled theme; `label` is what
+the dashboard shows. Tokens are the same custom properties `web/src/themes.css`
+defines, and unspecified ones fall back to the default theme's value. The
+values are validated (colors, lengths and font stacks only) and served at
+`GET /themes/private.css`, which `index.html` always links. At most eight
+themes; a malformed pack is logged and ignored rather than failing requests.
+
 ## Upgrade
 
 Back up the database, fetch the desired revision, and rebuild:

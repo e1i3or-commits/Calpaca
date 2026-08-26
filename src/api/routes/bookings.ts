@@ -55,6 +55,7 @@ import type { RoutingAnswers } from "../../core/routing/condition";
 import { ok, type Result } from "../../lib/result";
 import { suggestEmailDomain } from "../../lib/email-typo";
 import { resolveTheme } from "../../core/theming/themes";
+import { privateThemeNames } from "../private-themes";
 import { enqueueInviteEmail as jobsEnqueueInviteEmail, emitBookingWebhook as jobsEmitBookingWebhook } from "../../jobs/index";
 import { bucketStart, decide, type RateLimitDecision } from "../../core/ratelimit/window";
 import { incrementRateLimit } from "../../db/rate-limit-repo";
@@ -806,7 +807,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       start: renderInstant(booking.startsAt, booking.inviteeTimezone),
       end: renderInstant(booking.endsAt, booking.inviteeTimezone),
       inviteeTimezone: booking.inviteeTimezone,
-      theme: resolveTheme(eventType.theme),
+      theme: resolveTheme(eventType.theme, privateThemeNames()),
     });
   });
 

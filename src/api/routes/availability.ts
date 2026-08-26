@@ -39,6 +39,7 @@ import {
 } from "../../core/availability/provenance";
 import { groupAvailability, type GroupHost } from "../../core/availability/group";
 import { resolveBookingLayout, resolveTheme } from "../../core/theming/themes";
+import { privateThemeNames } from "../private-themes";
 import { publicWorkspaceId } from "../public-workspace";
 import { legacyLocations } from "../../core/booking/locations";
 import { allowedDurations } from "../../core/booking/durations";
@@ -357,7 +358,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       ...(eventType.selectableDurations?.length
         ? { selectableDurations: eventType.selectableDurations }
         : {}),
-      theme: resolveTheme(eventType.theme),
+      theme: resolveTheme(eventType.theme, privateThemeNames()),
       ...(eventType.description ? { description: eventType.description } : {}),
       ...(eventType.logoUrl ? { logoUrl: eventType.logoUrl } : {}),
       ...(eventType.meetingFormats ? { meetingFormats: eventType.meetingFormats } : {}),

@@ -230,6 +230,41 @@
         }
       }
     },
+    "/themes/private.css": {
+      "get": {
+        "operationId": "getThemesPrivateCss",
+        "tags": [
+          "System"
+        ],
+        "summary": "Download deployment-configured theme tokens",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/event-types/{slug}": {
       "get": {
         "operationId": "getEventTypesSlug",
@@ -7327,16 +7362,7 @@
           },
           "theme": {
             "type": "string",
-            "enum": [
-              "default",
-              "calpaca",
-              "midnight",
-              "sand",
-              "juniper",
-              "solstice",
-              "cobalt",
-              "paper"
-            ],
+            "maxLength": 31,
             "default": "default"
           },
           "layout": {

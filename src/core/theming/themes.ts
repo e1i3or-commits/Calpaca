@@ -39,9 +39,15 @@ export function isThemeName(value: string): value is ThemeName {
 }
 
 /** Anything not in the registry renders as the default theme — a stale or
- * hand-edited value must never leave a public page unstyled. */
-export function resolveTheme(value: string | null | undefined): ThemeName {
-  return value && isThemeName(value) ? value : defaultTheme;
+ * hand-edited value must never leave a public page unstyled. `extraNames`
+ * carries the deployment's private themes (src/api/private-themes.ts), whose
+ * tokens are served separately but are just as valid. */
+export function resolveTheme(
+  value: string | null | undefined,
+  extraNames: readonly string[] = [],
+): string {
+  if (!value) return defaultTheme;
+  return isThemeName(value) || extraNames.includes(value) ? value : defaultTheme;
 }
 
 export const bookingLayoutNames = ["focus", "split", "compact"] as const;

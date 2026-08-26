@@ -52,6 +52,7 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/version", "System", "Get the running Calpaca version"],
   ["get", "/openapi.json", "System", "Download the OpenAPI document"],
   ["get", "/api/auth/error", "Authentication", "Return an authentication failure to sign-in"],
+  ["get", "/themes/private.css", "System", "Download deployment-configured theme tokens"],
   ["get", "/event-types/{slug}", "Booking", "Get public event type metadata"],
   ["get", "/booking-page", "Booking", "Get a public workspace booking page"],
   ["get", "/availability", "Booking", "List available and recommended slots"],
