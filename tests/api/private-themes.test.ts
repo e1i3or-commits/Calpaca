@@ -25,7 +25,7 @@ describe("GET /themes/private.css", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/css");
     const css = await response.text();
-    expect(css).toContain('[data-theme="acme"]');
+    expect(css).toContain(':root[data-theme="acme"]');
     expect(css).toContain("--primary: oklch(0.36 0.11 265);");
   });
 

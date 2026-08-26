@@ -116,14 +116,21 @@ export function parsePrivateThemes(
   return ok(themes);
 }
 
-/** The stylesheet a browser loads alongside the bundled themes.css. */
+/**
+ * The stylesheet a browser loads alongside the bundled themes.css. Blocks are
+ * written as `:root[data-theme=...]` rather than the bare `[data-theme=...]`
+ * themes.css uses: this file is a separate <link> whose position relative to
+ * the bundle is decided by the build, and a bare attribute selector ties with
+ * the bundle's `:root` defaults on specificity, so whichever loads last would
+ * win. The `:root` prefix settles it on specificity instead of order.
+ */
 export function privateThemeCss(themes: readonly PrivateTheme[]): string {
   return themes
     .map((theme) => {
       const declarations = Object.entries(theme.tokens)
         .map(([token, value]) => `  ${token}: ${value};`)
         .join("\n");
-      return `[data-theme="${theme.name}"] {\n${declarations}\n}`;
+      return `:root[data-theme="${theme.name}"] {\n${declarations}\n}`;
     })
     .join("\n\n");
 }

@@ -110,9 +110,18 @@ describe("privateThemeCss", () => {
       { name: "zenith", label: "Zenith", tokens: { "--radius": "0.25rem" } },
     ];
     expect(privateThemeCss(themes)).toBe(
-      '[data-theme="acme"] {\n  --primary: oklch(0.36 0.11 265);\n}\n\n'
-        + '[data-theme="zenith"] {\n  --radius: 0.25rem;\n}',
+      ':root[data-theme="acme"] {\n  --primary: oklch(0.36 0.11 265);\n}\n\n'
+        + ':root[data-theme="zenith"] {\n  --radius: 0.25rem;\n}',
     );
+  });
+
+  // The stylesheet is a separate <link>; a bare [data-theme] block ties with
+  // the bundle's :root defaults and loses whenever the bundle loads later.
+  test("outranks the bundle's :root defaults on specificity, not order", () => {
+    const css = privateThemeCss([
+      { name: "acme", label: "Acme", tokens: { "--primary": "red" } },
+    ]);
+    expect(css.startsWith(':root[data-theme="acme"]')).toBe(true);
   });
 
   test("no themes means no stylesheet", () => {
