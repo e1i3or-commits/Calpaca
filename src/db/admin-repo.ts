@@ -431,14 +431,27 @@ export async function listEventTypesForUser(
   executor: Db = getDb(),
   workspaceId?: string,
 ): Promise<AdminEventType[]> {
-  const memberTeams = (await listTeamsForUser(userId, executor, workspaceId)).map((t) => t.id);
-  const ownership = memberTeams.length > 0
-    ? or(eq(eventTypes.ownerUserId, userId), inArray(eventTypes.teamId, memberTeams))
-    : eq(eventTypes.ownerUserId, userId);
+  // A workspace admin orchestrates every booking link in the workspace,
+  // including a teammate's personal ones — getEventTypeForAdmin already lets
+  // them edit those, so hiding them from the list only made the dashboard
+  // disagree with the API. Widening requires a workspace to scope to, so a
+  // call without one can never reach across workspaces.
+  const admin = workspaceId !== undefined
+    && await isAppAdmin(userId, executor, workspaceId);
+  const memberTeams = admin
+    ? []
+    : (await listTeamsForUser(userId, executor, workspaceId)).map((t) => t.id);
+  const ownership = admin
+    ? undefined
+    : memberTeams.length > 0
+      ? or(eq(eventTypes.ownerUserId, userId), inArray(eventTypes.teamId, memberTeams))
+      : eq(eventTypes.ownerUserId, userId);
   const rows = await executor
     .select()
     .from(eventTypes)
-    .where(workspaceId ? and(eq(eventTypes.workspaceId, workspaceId), ownership) : ownership)
+    .where(workspaceId
+      ? and(eq(eventTypes.workspaceId, workspaceId), ...(ownership ? [ownership] : []))
+      : ownership)
     .orderBy(asc(eventTypes.title));
   const hosts = await hostsFor(executor, rows.map((r) => r.id));
   return rows.map((r) => toAdminEventType(r, hosts.get(r.id) ?? []));

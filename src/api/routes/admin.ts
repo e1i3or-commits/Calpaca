@@ -717,6 +717,21 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     return folders.some((folder) => folder.id === folderId);
   };
 
+  /**
+   * Attaching an event type to a team is allowed for that team's members and
+   * for workspace admins: an admin orchestrates the whole workspace's booking
+   * links, which is the same rule getEventTypeForAdmin already applies when
+   * loading one for edit.
+   */
+  const mayManageTeam = async (
+    teamId: string | null,
+    user: { id: string; workspaceId?: string },
+  ): Promise<boolean> => {
+    if (!teamId) return true;
+    return await deps.isTeamMember(teamId, user.id)
+      || await deps.isAppAdmin(user.id, user.workspaceId);
+  };
+
   router.get("/api/me/theme-options", (c) => {
     return c.json({
       themes: [
@@ -743,7 +758,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     const parsed = eventTypeBodySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
     const user = c.get("user");
-    if (parsed.data.teamId && !(await deps.isTeamMember(parsed.data.teamId, user.id))) {
+    if (!(await mayManageTeam(parsed.data.teamId, user))) {
       return c.json({ error: "team_not_found" }, 404);
     }
     if (!(await folderIsInWorkspace(parsed.data.folderId, user.workspaceId))) {
@@ -758,7 +773,7 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     const parsed = eventTypeBodySchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
     const user = c.get("user");
-    if (parsed.data.teamId && !(await deps.isTeamMember(parsed.data.teamId, user.id))) {
+    if (!(await mayManageTeam(parsed.data.teamId, user))) {
       return c.json({ error: "team_not_found" }, 404);
     }
     if (!(await folderIsInWorkspace(parsed.data.folderId, user.workspaceId))) {

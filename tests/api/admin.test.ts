@@ -250,6 +250,28 @@ describe("admin routes", () => {
     )).status).toBe(201);
   });
 
+  // The repo already lets a workspace admin load any event type for edit
+  // (getEventTypeForAdmin), so the route guard refusing them was the odd one out.
+  test("workspace admins may attach event types to teams they do not belong to", async () => {
+    // a slug the fixture does not report as taken
+    const teamBody = { ...validEventTypeBody, slug: "team-call", teamId: OTHER_TEAM };
+
+    const nonMember = createAdminRoutes(makeDeps({
+      isTeamMember: async () => false,
+      isAppAdmin: async () => false,
+    }));
+    expect((await post(nonMember, "/api/me/event-types", teamBody)).status).toBe(404);
+    expect((await post(nonMember, `/api/me/event-types/${ET_ID}`, teamBody, "PUT")).status).toBe(404);
+
+    const admin = createAdminRoutes(makeDeps({
+      isTeamMember: async () => false,
+      isTeamAdmin: async () => false,
+      isAppAdmin: async () => true,
+    }));
+    expect((await post(admin, "/api/me/event-types", teamBody)).status).toBe(201);
+    expect((await post(admin, `/api/me/event-types/${ET_ID}`, teamBody, "PUT")).status).toBe(200);
+  });
+
   test("event type create enforces solo=1 host, slug shape, and team membership", async () => {
     const router = createAdminRoutes(makeDeps());
 
