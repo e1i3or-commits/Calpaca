@@ -834,6 +834,7 @@ export type OnboardingState = {
   workspace: {
     slug: string;
     slugIsPlaceholder: boolean;
+    canManage: boolean;
     suggestedSlug: string | null;
   };
   calendars: {

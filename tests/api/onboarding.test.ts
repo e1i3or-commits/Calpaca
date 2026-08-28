@@ -69,6 +69,33 @@ describe("GET /api/me/onboarding", () => {
     });
   });
 
+  test("marks the workspace manageable for an owner", async () => {
+    const response = await createOnboardingRoutes(deps()).request("/api/me/onboarding");
+    expect(await response.json()).toMatchObject({ workspace: { canManage: true } });
+  });
+
+  // A member sent to the claim form met a 403 from PATCH /api/me/workspace and
+  // could not finish setup at all.
+  test("marks the workspace unmanageable for a member of someone else's workspace", async () => {
+    const routes = createOnboardingRoutes(deps({
+      requireAuth: async (c, next) => {
+        c.set("user", {
+          id: USER_ID,
+          email: "jake@tourscale.test",
+          name: "Jake",
+          workspaceId: WORKSPACE_ID,
+          workspaceRole: "member",
+        });
+        await next();
+      },
+      getFacts: async () => facts({ workspace: { slug: "tourscale" } }),
+    }));
+    const response = await routes.request("/api/me/onboarding");
+    expect(await response.json()).toMatchObject({
+      workspace: { slug: "tourscale", slugIsPlaceholder: false, canManage: false },
+    });
+  });
+
   test("suggests a slug from the signed-in identity while the placeholder stands", async () => {
     const response = await createOnboardingRoutes(deps()).request("/api/me/onboarding");
     expect(await response.json()).toMatchObject({

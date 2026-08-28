@@ -64,7 +64,14 @@ const SLUG_REASONS: Record<NonNullable<WorkspaceSlugCheck["reason"]>, string> = 
 
 function errorText(cause: unknown): string {
   if (cause instanceof ApiError) {
-    if (cause.status === 401 || cause.status === 403) return "Your session expired. Sign in again.";
+    if (cause.status === 401) return "Your session expired. Sign in again.";
+    // A 403 is a permission answer, not a stale cookie — telling a member to
+    // sign in again just loops them back to the same wall.
+    if (cause.status === 403) {
+      return cause.code === "account_inactive"
+        ? "This account is not active. Ask a workspace owner to re-enable it."
+        : "You do not have permission to change that. Ask a workspace owner.";
+    }
     if (cause.code === "slug_taken") return "That link was just claimed. Try another.";
     if (cause.code === "no_google_connection") return "Google is not connected to this account.";
     if (cause.code === "google_unreachable") return "Google did not respond. Try again in a moment.";
@@ -109,7 +116,9 @@ export function OnboardingPage() {
       }
       setStep((current) => current ?? next.resumeStep);
     } catch (cause) {
-      if (cause instanceof ApiError && (cause.status === 401 || cause.status === 403)) {
+      // Only an actually-missing session belongs on the sign-in page; bouncing
+      // a 403 there sends the host round a loop signing in to no effect.
+      if (cause instanceof ApiError && cause.status === 401) {
         window.location.replace("/sign-in");
         return;
       }
@@ -531,6 +540,40 @@ function LinkStep({
       setBusy(false);
     }
   };
+
+  // A host who joined an existing workspace has no slug to claim and no
+  // permission to change the one that is there. Showing them the claim form
+  // walked them into a 403 with no way forward, so show the link instead.
+  if (!state.workspace.canManage) {
+    return (
+      <Card className="w-full rounded-2xl">
+        <CardHeader>
+          <span className="mb-3 grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Link2 className="h-5 w-5" />
+          </span>
+          <CardTitle className="text-2xl tracking-[-0.035em]">Your team's link</CardTitle>
+          <CardDescription>
+            Your workspace already has its booking address, and every link you
+            create lives under it. A workspace owner can change it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid gap-2">
+            <Label>Your link</Label>
+            <p className="rounded-lg border bg-muted/40 px-3 py-2 font-mono text-sm">
+              calpaca.io/book/{state.workspace.slug}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button className="h-11 rounded-xl" onClick={() => onDone(state.workspace.slug)}>
+              Continue <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+            <Button variant="ghost" className="h-11" onClick={onBack}>Back</Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full rounded-2xl">

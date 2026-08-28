@@ -38,7 +38,14 @@ const defaultDeps: OnboardingDeps = {
 
 const stepBodySchema = z.object({ step: z.enum(ONBOARDING_STEPS) });
 
-function serialize(facts: OnboardingFacts, user: { name: string; email: string }) {
+function canManageWorkspace(role: string | undefined): boolean {
+  return role === "owner" || role === "admin";
+}
+
+function serialize(
+  facts: OnboardingFacts,
+  user: { name: string; email: string; workspaceRole?: "owner" | "admin" | "member" },
+) {
   return {
     steps: onboardingSteps(facts),
     nextStep: nextOnboardingStep(facts),
@@ -50,6 +57,9 @@ function serialize(facts: OnboardingFacts, user: { name: string; email: string }
     workspace: {
       slug: facts.workspace.slug,
       slugIsPlaceholder: isGeneratedWorkspaceSlug(facts.workspace.slug),
+      // A host who joined someone else's workspace cannot rename it, and the
+      // link step must not ask them to: PATCH /api/me/workspace would 403.
+      canManage: canManageWorkspace(user.workspaceRole),
       // Only a suggestion for the empty field — the host still has to accept it.
       suggestedSlug: isGeneratedWorkspaceSlug(facts.workspace.slug)
         ? suggestWorkspaceSlug({ name: user.name, email: user.email })
