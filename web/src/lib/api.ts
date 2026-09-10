@@ -1610,7 +1610,19 @@ export type EngagementSummary = {
   updatedAt: string;
 };
 
+export type OnboardingPlan = {
+  cadence: "weekly" | "biweekly" | "monthly"; revision: number;
+  attendance: { kickoff: {userId: string; role: "required"|"optional"}[]; followup: {userId: string; role: "required"|"optional"}[] };
+  kickoffDurationMinutes: number; followupDurationMinutes: number;
+  sourceWorkspaceId: string; sourceProjectKey: string; locationKey: string;
+  franchiseeId: string; businessUnitId: string; primaryContactId: string; workdriveFolderId: string|null;
+  schedulingState: "not_published";
+};
+export function updateOnboardingCadence(id: string, revision: number, cadence: OnboardingPlan["cadence"]) {
+  return request(`/api/me/engagements/${encodeURIComponent(id)}/onboarding-cadence`, {method: "PATCH", body: JSON.stringify({revision, cadence})});
+}
 export type EngagementDetail = EngagementSummary & {
+  onboarding?: OnboardingPlan | null;
   createdAt: string;
   canManage: boolean;
   people: { userId: string; name: string; email: string; role: string }[];

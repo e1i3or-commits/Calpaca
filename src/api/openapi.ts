@@ -1,3 +1,4 @@
+import { franchiseOnboardingInput, onboardingCadenceUpdate } from "../core/engagement/franchise-onboarding";
 import { Hono } from "hono";
 import type { ZodTypeAny } from "zod";
 import { CALPACA_VERSION } from "../version";
@@ -32,6 +33,8 @@ type Operation = readonly [
  * (rather than inlined per operation) so repeated bodies share one
  * `components.schemas` entry and the reference stays readable. */
 const requestSchemas = {
+  FranchiseOnboarding: franchiseOnboardingInput,
+  OnboardingCadence: onboardingCadenceUpdate,
   Hold: holdBodySchema,
   Booking: bookingBodySchema,
   Reschedule: rescheduleBodySchema,
@@ -48,6 +51,9 @@ export type RequestSchemaName = keyof typeof requestSchemas;
 export const documentedRequestSchemas = requestSchemas;
 
 export const openApiOperations: readonly Operation[] = [
+  ["post", "/api/automation/franchise-onboarding", "Engagements", "Create or recover a franchise onboarding draft (workspace admin)", "personal", "FranchiseOnboarding"],
+  ["get", "/api/automation/franchise-onboarding/{sourceWorkspaceId}/{projectKey}", "Engagements", "Recover onboarding by source launch (workspace admin)", "personal"],
+  ["patch", "/api/me/engagements/{id}/onboarding-cadence", "Engagements", "Change the planned onboarding cadence with revision checking", "personal", "OnboardingCadence"],
   ["get", "/health", "System", "Check service health"],
   ["get", "/version", "System", "Get the running Calpaca version"],
   ["get", "/openapi.json", "System", "Download the OpenAPI document"],

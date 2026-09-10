@@ -265,8 +265,17 @@ export async function getEngagement(
         .where(inArray(schema.bookings.eventTypeId, eventTypeIds))
         .orderBy(desc(schema.bookings.startsAt))
         .limit(20);
+  const [onboarding] = await executor.select().from(schema.franchiseOnboarding).where(and(
+    eq(schema.franchiseOnboarding.workspaceId, workspaceId), eq(schema.franchiseOnboarding.engagementId, engagementId),
+  ));
   return {
     ...engagement,
+    onboarding: onboarding ? { cadence: onboarding.cadence, revision: onboarding.revision, attendance: onboarding.attendance,
+      kickoffDurationMinutes: onboarding.input.kickoffDurationMinutes, followupDurationMinutes: onboarding.input.followupDurationMinutes,
+      sourceWorkspaceId: onboarding.sourceWorkspaceId, sourceProjectKey: onboarding.sourceProjectKey, locationKey: onboarding.input.locationKey,
+      franchiseeId: onboarding.input.franchiseeId, businessUnitId: onboarding.input.businessUnitId,
+      primaryContactId: onboarding.input.primaryContactId, workdriveFolderId: onboarding.input.workdriveFolderId ?? null,
+      schedulingState: "not_published" as const } : null,
     people,
     eventTypes,
     meetings,

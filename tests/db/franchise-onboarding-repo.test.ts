@@ -1,0 +1,62 @@
+import { describe, expect, test } from "bun:test";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { Pool } from "pg";
+import { eq, sql } from "drizzle-orm";
+import { provisionFranchiseOnboarding, getFranchiseOnboarding, updateOnboardingCadence } from "../../src/db/franchise-onboarding-repo";
+import { getEngagement } from "../../src/db/engagement-repo";
+import { franchiseOnboardingInput } from "../../src/core/engagement/franchise-onboarding";
+import * as s from "../../src/db/schema";
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("franchise onboarding repository", () => {
+ test("concurrent create, scoped recovery, client identity and cadence revisions", async () => {
+  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL});const db=drizzle(pool,{schema:s});
+  try {
+   await migrate(db,{migrationsFolder:"drizzle"});
+   await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);
+   const people=await db.insert(s.users).values(["Kai Kaapro","Andrew Cole","Jake Halbert","Andres Duque","Santiago Yanine","Cal Alte","Other admin","Outsider"].map((name,i)=>({name,email:`onboarding-${i}@example.test`}))).returning();
+   const [ws,other]=await db.insert(s.workspaces).values([{name:"TourScale",slug:"onboarding-test"},{name:"Other",slug:"other-onboarding-test"}]).returning();
+   await db.insert(s.workspaceMembers).values(people.map(person=>({workspaceId:ws!.id,userId:person.id,role:person===people[0]?"admin" as const:"member" as const})));
+   const actor={userId:people[0]!.id,workspaceRole:"admin" as const};
+   const input=franchiseOnboardingInput.parse({sourceWorkspaceId:crypto.randomUUID(),sourceProjectKey:"new-location",locationKey:crypto.randomUUID(),franchiseeId:"5854883000000000001",businessUnitId:"5854883000000000002",primaryContactId:"5854883000000000003",clientName:"Sample Entity",locationName:"Sample City",franchiseSuccessUserIds:people.slice(2,6).map(p=>p.id),kaiUserId:people[0]!.id,andrewUserId:people[1]!.id,accountLeadUserId:people[2]!.id,organizerUserId:people[2]!.id});
+   const result=await Promise.all([provisionFranchiseOnboarding(ws!.id,actor,input,db),provisionFranchiseOnboarding(ws!.id,actor,input,db)]);
+   expect(result.map(r=>r.kind).sort()).toEqual(["created","reused"]);
+   const created=result.find(r=>r.kind==="created");if(!created || created.kind!=="created")throw new Error("not created");
+   const plan=created.onboarding;
+   expect(plan).toMatchObject({franchiseeId:input.franchiseeId,businessUnitId:input.businessUnitId,primaryContactId:input.primaryContactId});
+   expect(plan.cadence).toBe("biweekly");expect(plan.kickoffBookingUrl).toBeNull();
+   expect(await db.select().from(s.engagements)).toHaveLength(1);expect(await db.select().from(s.eventTypes)).toHaveLength(0);expect(await db.select().from(s.bookings)).toHaveLength(0);
+   const detail=await getEngagement(ws!.id,actor,plan.engagementId,db);
+   expect(detail?.people).toHaveLength(6);expect(detail?.status).toBe("draft");expect(detail?.onboarding?.attendance.followup.filter(h=>h.role==="optional")).toHaveLength(2);
+   expect(await getEngagement(ws!.id,{userId:people[7]!.id,workspaceRole:"member"},plan.engagementId,db)).toBeNull();
+   expect((await getFranchiseOnboarding(other!.id,actor,input.sourceWorkspaceId,input.sourceProjectKey,db)).kind).toBe("not_found");
+   expect((await provisionFranchiseOnboarding(ws!.id,{...actor,workspaceRole:"member"},input,db)).kind).toBe("forbidden");
+   expect((await provisionFranchiseOnboarding(ws!.id,actor,{...input,businessUnitId:"5854883000000000009"},db)).kind).toBe("source_conflict");
+   const lead={userId:people[2]!.id,workspaceRole:"member" as const};
+   expect((await updateOnboardingCadence(ws!.id,{userId:people[3]!.id,workspaceRole:"member"},plan.engagementId,{revision:1,cadence:"weekly"},db)).kind).toBe("forbidden");
+   const edits=await Promise.all([updateOnboardingCadence(ws!.id,lead,plan.engagementId,{revision:1,cadence:"weekly"},db),updateOnboardingCadence(ws!.id,lead,plan.engagementId,{revision:1,cadence:"monthly"},db)]);
+   expect(edits.map(e=>e.kind).sort()).toEqual(["revision_conflict","updated"]);
+   const current=await getFranchiseOnboarding(ws!.id,actor,input.sourceWorkspaceId,input.sourceProjectKey,db);if(current.kind!=="found")throw new Error("missing");
+   expect(current.onboarding.revision).toBe(2);
+   const replay=await provisionFranchiseOnboarding(ws!.id,actor,{...input,franchiseSuccessUserIds:[...input.franchiseSuccessUserIds].reverse()},db);
+   expect(replay.kind).toBe("reused");if(replay.kind==="reused")expect(replay.onboarding.cadence).toBe(current.onboarding.cadence);
+   expect((await updateOnboardingCadence(ws!.id,lead,plan.engagementId,{revision:2,cadence:"biweekly"},db)).kind).toBe("updated");
+   expect(await db.select().from(s.franchiseOnboardingChanges)).toHaveLength(3);
+   const second=await provisionFranchiseOnboarding(ws!.id,actor,{...input,sourceProjectKey:"second-location",locationKey:crypto.randomUUID(),businessUnitId:"5854883000000000004",clientName:"Changed display name"},db);
+   expect(second.kind).toBe("created");expect(await db.select().from(s.clients)).toHaveLength(1);
+   expect((await provisionFranchiseOnboarding(ws!.id,actor,{...input,sourceProjectKey:"different-entity",franchiseeId:"5854883000000000005"},db)).kind).toBe("client_identity_review_required");
+   await db.update(s.users).set({status:"inactive"}).where(eq(s.users.id,people[5]!.id));
+   expect((await provisionFranchiseOnboarding(ws!.id,actor,{...input,sourceProjectKey:"inactive-member"},db)).kind).toBe("invalid_participant");
+   expect(await db.select().from(s.franchiseOnboarding)).toHaveLength(2);
+   await db.update(s.users).set({status:"active"}).where(eq(s.users.id,people[5]!.id));
+   await db.execute(sql`create function reject_onboarding_change() returns trigger language plpgsql as $$ begin raise exception 'synthetic persistence failure'; end $$`);
+   await db.execute(sql`create trigger reject_onboarding_change before insert on franchise_onboarding_changes for each row execute function reject_onboarding_change()`);
+   try {
+    await expect(provisionFranchiseOnboarding(ws!.id,actor,{...input,sourceProjectKey:"rollback",clientName:"Rollback Entity",franchiseeId:"5854883000000000008"},db)).rejects.toThrow();
+    expect(await db.select().from(s.franchiseOnboarding)).toHaveLength(2);expect(await db.select().from(s.clients)).toHaveLength(1);
+   } finally {await db.execute(sql`drop trigger reject_onboarding_change on franchise_onboarding_changes`);await db.execute(sql`drop function reject_onboarding_change()`);}
+   await db.update(s.engagements).set({status:"completed"}).where(eq(s.engagements.id,plan.engagementId));
+   expect((await updateOnboardingCadence(ws!.id,lead,plan.engagementId,{revision:3,cadence:"monthly"},db)).kind).toBe("engagement_closed");
+  } finally {await pool.end();}
+ });
+});

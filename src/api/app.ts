@@ -1,3 +1,4 @@
+import { franchiseOnboardingRoutes } from "./routes/franchise-onboarding";
 import { Hono } from "hono";
 import { getAuth } from "../auth/index";
 import { adminRoutes } from "./routes/admin";
@@ -81,5 +82,6 @@ app.route("/", oneOffOfferRoutes);
 app.route("/", availabilityTroubleshooterRoutes);
 app.route("/", bookingEmailVerificationRoutes);
 app.route("/", engagementRoutes);
+app.route("/", franchiseOnboardingRoutes);
 app.route("/", conversationRoutes);
 app.route("/", proposalRoutes);

@@ -783,3 +783,33 @@ export const signupRegistrations = pgTable("signup_registrations", {
   index("signup_registration_sheet_idx").on(t.sheetId, t.createdAt),
   index("signup_registration_cancel_idx").on(t.cancelToken),
 ]);
+
+// Source identifiers are scoped independently of Calpaca's workspace identity.
+export const franchiseOnboarding = pgTable("franchise_onboarding", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id),
+  sourceWorkspaceId: uuid("source_workspace_id").notNull(),
+  sourceProjectKey: text("source_project_key").notNull(),
+  engagementId: uuid("engagement_id").notNull().references(() => engagements.id),
+  franchiseeId: text("franchisee_id").notNull(),
+  input: jsonb("input").$type<import("../core/engagement/franchise-onboarding").FranchiseOnboardingInput>().notNull(),
+  attendance: jsonb("attendance").$type<import("../core/engagement/franchise-onboarding").OnboardingAttendance>().notNull(),
+  cadence: text("cadence").$type<import("../core/engagement/franchise-onboarding").OnboardingCadence>().notNull().default("biweekly"),
+  revision: integer("revision").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [
+  uniqueIndex("franchise_onboarding_source_uq").on(t.workspaceId, t.sourceWorkspaceId, t.sourceProjectKey),
+  uniqueIndex("franchise_onboarding_engagement_uq").on(t.engagementId),
+  index("franchise_onboarding_franchisee_idx").on(t.workspaceId, t.franchiseeId),
+]);
+export const franchiseOnboardingChanges = pgTable("franchise_onboarding_changes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id),
+  onboardingId: uuid("onboarding_id").notNull().references(() => franchiseOnboarding.id),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id),
+  revision: integer("revision").notNull(),
+  kind: text("kind").notNull(),
+  cadence: text("cadence").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => [uniqueIndex("franchise_onboarding_change_revision_uq").on(t.onboardingId, t.revision)]);

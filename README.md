@@ -171,3 +171,6 @@ Calpaca is licensed under the
 [GNU Affero General Public License v3.0](LICENSE).
 If you modify Calpaca and provide it as a network service, the AGPL requires
 you to offer the corresponding source code to users of that service.
+
+Franchise onboarding draft integration and its scheduling boundary are documented
+in [docs/FRANCHISE-ONBOARDING.md](docs/FRANCHISE-ONBOARDING.md).

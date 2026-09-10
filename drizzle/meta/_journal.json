@@ -379,6 +379,13 @@
       "when": 1786462516370,
       "tag": "0053_flimsy_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1789077609444,
+      "tag": "0054_franchise_onboarding",
+      "breakpoints": true
     }
   ]
 }

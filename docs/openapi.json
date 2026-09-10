@@ -17,6 +17,9 @@
   ],
   "tags": [
     {
+      "name": "Engagements"
+    },
+    {
       "name": "System"
     },
     {
@@ -59,9 +62,6 @@
       "name": "Onboarding"
     },
     {
-      "name": "Engagements"
-    },
-    {
       "name": "Conversations"
     },
     {
@@ -90,6 +90,184 @@
     }
   ],
   "paths": {
+    "/api/automation/franchise-onboarding": {
+      "post": {
+        "operationId": "postApiAutomationFranchiseOnboarding",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Create or recover a franchise onboarding draft (workspace admin)",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FranchiseOnboardingRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/automation/franchise-onboarding/{sourceWorkspaceId}/{projectKey}": {
+      "get": {
+        "operationId": "getApiAutomationFranchiseOnboardingSourceWorkspaceIdProjectKey",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Recover onboarding by source launch (workspace admin)",
+        "parameters": [
+          {
+            "name": "sourceWorkspaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "projectKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/me/engagements/{id}/onboarding-cadence": {
+      "patch": {
+        "operationId": "patchApiMeEngagementsIdOnboardingCadence",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Change the planned onboarding cadence with revision checking",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingCadenceRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -6916,6 +7094,129 @@
             }
           }
         }
+      },
+      "FranchiseOnboardingRequest": {
+        "type": "object",
+        "properties": {
+          "sourceWorkspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceProjectKey": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "maxLength": 64
+          },
+          "locationKey": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "franchiseeId": {
+            "type": "string",
+            "pattern": "^[0-9]{10,30}$"
+          },
+          "businessUnitId": {
+            "type": "string",
+            "pattern": "^[0-9]{10,30}$"
+          },
+          "primaryContactId": {
+            "type": "string",
+            "pattern": "^[0-9]{10,30}$"
+          },
+          "clientName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+          },
+          "locationName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+          },
+          "existingClientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workdriveFolderId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9]{10,100}$"
+          },
+          "franchiseSuccessUserIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "kaiUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "andrewUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "accountLeadUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizerUserId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kickoffDurationMinutes": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 240,
+            "default": 45
+          },
+          "followupDurationMinutes": {
+            "type": "integer",
+            "minimum": 5,
+            "maximum": 240,
+            "default": 45
+          }
+        },
+        "required": [
+          "sourceWorkspaceId",
+          "sourceProjectKey",
+          "locationKey",
+          "franchiseeId",
+          "businessUnitId",
+          "primaryContactId",
+          "clientName",
+          "locationName",
+          "franchiseSuccessUserIds",
+          "kaiUserId",
+          "andrewUserId",
+          "accountLeadUserId",
+          "organizerUserId"
+        ],
+        "additionalProperties": false
+      },
+      "OnboardingCadenceRequest": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cadence": {
+            "type": "string",
+            "enum": [
+              "weekly",
+              "biweekly",
+              "monthly"
+            ]
+          }
+        },
+        "required": [
+          "revision",
+          "cadence"
+        ],
+        "additionalProperties": false
       },
       "HoldRequest": {
         "type": "object",
