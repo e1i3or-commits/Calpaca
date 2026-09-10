@@ -1,6 +1,6 @@
 import {
   pgTable, uuid, text, integer, boolean, timestamp, date, jsonb,
-  pgEnum, uniqueIndex, index, primaryKey,
+  pgEnum, uniqueIndex, index, primaryKey, serial,
 } from "drizzle-orm/pg-core";
 import type { BookingAnswers, BookingQuestion } from "../core/booking/questions";
 import type { BookingLocation, EventLocation } from "../core/booking/locations";
@@ -823,3 +823,50 @@ export const onboardingKickoffs = pgTable("onboarding_kickoffs", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   publishedAt: timestamp("published_at", { withTimezone: true }),
 }, t => [uniqueIndex("onboarding_kickoff_event_type_uq").on(t.eventTypeId)]);
+
+export const kickoffDeliveries = pgTable("kickoff_deliveries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sequence: serial("sequence").notNull(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id),
+  onboardingId: uuid("onboarding_id").notNull().references(() => franchiseOnboarding.id),
+  bookingId: uuid("booking_id").notNull().references(() => bookings.id),
+  sourceEventId: uuid("source_event_id").notNull().references(() => bookingEvents.id),
+  kind: text("kind").$type<"created"|"rescheduled"|"cancelled"|"reminder">().notNull(),
+  snapshot: jsonb("snapshot").$type<import("./kickoff-delivery-repo").StoredInviteContext>().notNull(),
+  recipients: jsonb("recipients").$type<import("../core/invite/kickoff-delivery").KickoffRecipient[]>().notNull(),
+  status: text("status").$type<import("../core/invite/kickoff-delivery").KickoffDeliveryStatus>().notNull().default("queued"),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
+  messageId: text("message_id").notNull().unique(),
+  calendarId: text("calendar_id"),
+  googleEventId: text("google_event_id").notNull(),
+  calendarVerifiedAt: timestamp("calendar_verified_at", {withTimezone:true}),
+  mailStartedAt: timestamp("mail_started_at", {withTimezone:true}),
+  mailAcceptedAt: timestamp("mail_accepted_at", {withTimezone:true}),
+  attemptId: uuid("attempt_id"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  leaseUntil: timestamp("lease_until", {withTimezone:true}),
+  nextAttemptAt: timestamp("next_attempt_at", {withTimezone:true}).notNull().defaultNow(),
+  deadlineAt: timestamp("deadline_at", {withTimezone:true}).notNull(),
+  issueCode: text("issue_code"),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", {withTimezone:true}).notNull().defaultNow(),
+}, t => [uniqueIndex("kickoff_delivery_source_uq").on(t.sourceEventId,t.kind),index("kickoff_delivery_queue_idx").on(t.status,t.nextAttemptAt)]);
+
+export const kickoffDeliveryEvents = pgTable("kickoff_delivery_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  deliveryId: uuid("delivery_id").notNull().references(() => kickoffDeliveries.id),
+  kind: text("kind").notNull(),
+  code: text("code"),
+  attemptId: uuid("attempt_id"),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+});
+export const kickoffDeliveryReceipts = pgTable("kickoff_delivery_receipts", {
+  providerEventId: text("provider_event_id").primaryKey(),
+  deliveryId: uuid("delivery_id").notNull().references(() => kickoffDeliveries.id),
+  payload: jsonb("payload").$type<import("../core/invite/kickoff-delivery").KickoffReceipt>().notNull(),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+});
+export const kickoffDeliveryWorker = pgTable("kickoff_delivery_worker", {
+  name: text("name").primaryKey(),
+  lastSweepAt: timestamp("last_sweep_at", {withTimezone:true}).notNull(),
+});

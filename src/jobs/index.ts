@@ -4,6 +4,7 @@ import { getAuth } from "../auth/index";
 import { syncConnection } from "../sync/engine";
 import { listEvents, watchEvents } from "../sync/google";
 import { REMINDER_LEAD, sendInvite, sendReminder } from "./invite-email";
+import { runKickoffDeliveryBatch } from "./kickoff-delivery";
 import type { InviteKind } from "../core/invite/email";
 import { listBookingsNeedingReminder } from "../db/booking-repo";
 import {
@@ -280,6 +281,9 @@ export async function startJobs(): Promise<void> {
   await b.createQueue(SYNC_QUEUE);
   await b.createQueue(SWEEP_QUEUE);
   await b.createQueue(INVITE_QUEUE);
+  await b.createQueue("kickoff-delivery-sweep");
+  await b.work("kickoff-delivery-sweep",async()=>{await runKickoffDeliveryBatch();});
+  await b.schedule("kickoff-delivery-sweep","* * * * *");
   await b.createQueue(SUGGESTION_EMAIL_QUEUE);
   await b.createQueue(POLL_FINALIZATION_EMAIL_QUEUE);
   await b.createQueue(POLL_INVITE_EMAIL_QUEUE);

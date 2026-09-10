@@ -4,6 +4,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { guardKickoffBooking } from "./kickoff-booking-guard";
 import { kickoffHosts, loadKickoffContext } from "./kickoff-context";
 import { sameRoster } from "../core/engagement/kickoff-booking";
+import { queueKickoffDelivery } from "./kickoff-delivery-repo";
 import { getDb } from "./client";
 import { bookingEvents, bookings, eventTypes, teamMembers, users } from "./schema";
 import * as schema from "./schema";
@@ -166,10 +167,27 @@ export async function appendEvent<K extends BookingEventKind>(
   kind: K,
   payload: BookingEventPayload<K>,
   executor: Db = getDb(),
+  verifiedDeliveryId?: string,
 ): Promise<Result<BookingState, BookingStateError>> {
   let event = { kind, payload } as BookingEvent;
 
   return executor.transaction(async (tx) => {
+    const [deliveryBooking]=await tx.select({eventTypeId:bookings.eventTypeId}).from(bookings).where(eq(bookings.id,bookingId));
+    const deliveryKickoff=deliveryBooking?await loadKickoffContext(deliveryBooking.eventTypeId,tx):null;
+    if(deliveryKickoff) {
+      for(const hostId of [...kickoffHosts(deliveryKickoff)].sort())await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${hostId}, 0))`);
+      await tx.select({id:bookings.id}).from(bookings).where(eq(bookings.id,bookingId)).for("update");
+      if(["invite_sent","invite_delivered","invite_failed","reminder_sent"].includes(kind)) {
+        const [verified]=verifiedDeliveryId?await tx.select().from(schema.kickoffDeliveries).where(and(eq(schema.kickoffDeliveries.id,verifiedDeliveryId),eq(schema.kickoffDeliveries.bookingId,bookingId))):[];
+        if(!verified?.calendarVerifiedAt||!verified.mailAcceptedAt
+          ||(kind==="invite_delivered"&&verified.status!=="delivered")
+          ||(kind==="invite_failed"&&!verified.recipients.some(person=>person.status==="failed"))) {
+          return err({kind,reason:"kickoff_delivery_receipt_required"});
+        }
+        const [latestDeliverySource]=await tx.select({id:schema.kickoffDeliveries.sourceEventId}).from(schema.kickoffDeliveries).where(and(eq(schema.kickoffDeliveries.bookingId,bookingId),inArray(schema.kickoffDeliveries.kind,["created","rescheduled","cancelled"]))).orderBy(desc(schema.kickoffDeliveries.sequence)).limit(1);
+        if(latestDeliverySource?.id!==verified.sourceEventId)return err({kind,reason:"kickoff_delivery_superseded"});
+      }
+    }
     const events = await loadEvents(tx, bookingId);
     const stateResult = currentStateResult(events);
     if (!stateResult.ok) return stateResult;
@@ -190,12 +208,15 @@ export async function appendEvent<K extends BookingEventKind>(
       }
     }
 
-    await tx.insert(bookingEvents).values({
+    const [recorded]=await tx.insert(bookingEvents).values({
       bookingId,
       kind,
       payload: serializePayload(event),
-    });
+    }).returning({id:bookingEvents.id});
     await writeProjection(tx, bookingId, result.value);
+    if(deliveryKickoff && recorded && (kind==="created"||kind==="rescheduled"||kind==="cancelled")) {
+      await queueKickoffDelivery(bookingId,recorded.id,kind,tx);
+    }
 
     return ok(result.value);
   });

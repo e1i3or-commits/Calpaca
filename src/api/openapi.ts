@@ -1,4 +1,5 @@
 import { franchiseOnboardingInput, onboardingCadenceUpdate } from "../core/engagement/franchise-onboarding";
+import { kickoffReceiptInput } from "../core/invite/kickoff-delivery";
 import { Hono } from "hono";
 import type { ZodTypeAny } from "zod";
 import { CALPACA_VERSION } from "../version";
@@ -37,6 +38,7 @@ const requestSchemas = {
   FranchiseOnboarding: franchiseOnboardingInput,
   OnboardingCadence: onboardingCadenceUpdate,
   PrepareKickoff: prepareKickoffInput,
+  KickoffReceipt: kickoffReceiptInput,
   Hold: holdBodySchema,
   Booking: bookingBodySchema,
   Reschedule: rescheduleBodySchema,
@@ -53,6 +55,9 @@ export type RequestSchemaName = keyof typeof requestSchemas;
 export const documentedRequestSchemas = requestSchemas;
 
 export const openApiOperations: readonly Operation[] = [
+  ["get","/api/automation/kickoff-deliveries","Engagements","Inspect workspace kickoff delivery failures and worker heartbeat","personal"],
+  ["post","/api/automation/kickoff-deliveries/{id}/retry","Engagements","Retry a kickoff delivery before email dispatch (workspace admin)","personal"],
+  ["post","/api/webhooks/kickoff-delivery","Webhooks","Record recipient-level kickoff delivery evidence","bearer","KickoffReceipt"],
   ["post", "/api/automation/franchise-onboarding/{engagementId}/kickoff", "Engagements", "Prepare a protected unpublished kickoff (workspace admin; empty body)", "personal", "PrepareKickoff"],
   ["post", "/api/automation/franchise-onboarding", "Engagements", "Create or recover a franchise onboarding draft (workspace admin)", "personal", "FranchiseOnboarding"],
   ["get", "/api/automation/franchise-onboarding/{sourceWorkspaceId}/{projectKey}", "Engagements", "Recover onboarding by source launch (workspace admin)", "personal"],

@@ -12,6 +12,7 @@ import {
 import { getWritableConnectionForUser } from "../db/sync-repo";
 import { deleteEvent, insertEvent, patchEventTime } from "../sync/google";
 import { isMailerConfigured, sendInviteMail } from "../notifications/mailer";
+import { isKickoffDeliveryBooking, queueKickoffReminder } from "../db/kickoff-delivery-repo";
 
 /** Lazy import avoids an initialization cycle: jobs/index owns pg-boss and
  * imports this module to register the invite worker. */
@@ -91,6 +92,10 @@ function locationText(ctx: InviteContext): string {
 }
 
 export async function sendInvite(bookingId: string, kind: InviteKind): Promise<void> {
+  if(await isKickoffDeliveryBooking(bookingId)) {
+    const {runKickoffDeliveryBatch}=await import("./kickoff-delivery");
+    await runKickoffDeliveryBatch();return;
+  }
   if (!isMailerConfigured()) {
     console.log(`[jobs] invite ${kind} for ${bookingId} skipped: SMTP not configured`);
     return;
@@ -248,6 +253,11 @@ export async function recordInviteeRejection(
  * next sweep instead of firing at the wrong time.
  */
 export async function sendReminder(bookingId: string): Promise<void> {
+  if(await isKickoffDeliveryBooking(bookingId)) {
+    await queueKickoffReminder(bookingId);
+    const {runKickoffDeliveryBatch}=await import("./kickoff-delivery");
+    await runKickoffDeliveryBatch();return;
+  }
   if (!isMailerConfigured()) {
     console.log(`[jobs] reminder for ${bookingId} skipped: SMTP not configured`);
     return;

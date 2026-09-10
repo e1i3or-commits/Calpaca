@@ -42,6 +42,7 @@ export interface InviteMail {
 }
 
 export interface SendResult {
+  readonly accepted?: readonly string[];
   /** Recipients the SMTP server refused at handoff (RCPT TO rejection) while
    * still accepting the message for the rest. */
   readonly rejected: readonly string[];
@@ -78,5 +79,6 @@ export async function sendInviteMail(mail: InviteMail): Promise<SendResult> {
   const rejected = (info.rejected ?? []).map((r: string | { address: string }) =>
     typeof r === "string" ? r : r.address,
   );
-  return { rejected };
+  const accepted=(info.accepted??[]).map((r:string|{address:string})=>typeof r==="string"?r:r.address);
+  return { accepted, rejected };
 }

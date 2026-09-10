@@ -20,6 +20,9 @@
       "name": "Engagements"
     },
     {
+      "name": "Webhooks"
+    },
+    {
       "name": "System"
     },
     {
@@ -80,9 +83,6 @@
       "name": "Analytics"
     },
     {
-      "name": "Webhooks"
-    },
-    {
       "name": "Users"
     },
     {
@@ -90,6 +90,163 @@
     }
   ],
   "paths": {
+    "/api/automation/kickoff-deliveries": {
+      "get": {
+        "operationId": "getApiAutomationKickoffDeliveries",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Inspect workspace kickoff delivery failures and worker heartbeat",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/automation/kickoff-deliveries/{id}/retry": {
+      "post": {
+        "operationId": "postApiAutomationKickoffDeliveriesIdRetry",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Retry a kickoff delivery before email dispatch (workspace admin)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/webhooks/kickoff-delivery": {
+      "post": {
+        "operationId": "postApiWebhooksKickoffDelivery",
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Record recipient-level kickoff delivery evidence",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KickoffReceiptRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/automation/franchise-onboarding/{engagementId}/kickoff": {
       "post": {
         "operationId": "postApiAutomationFranchiseOnboardingEngagementIdKickoff",
@@ -7284,6 +7441,46 @@
       "PrepareKickoffRequest": {
         "type": "object",
         "properties": {},
+        "additionalProperties": false
+      },
+      "KickoffReceiptRequest": {
+        "type": "object",
+        "properties": {
+          "deliveryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "messageId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "providerEventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "recipient": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 320
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "delivered",
+              "bounced",
+              "complained"
+            ]
+          }
+        },
+        "required": [
+          "deliveryId",
+          "messageId",
+          "providerEventId",
+          "recipient",
+          "status"
+        ],
         "additionalProperties": false
       },
       "HoldRequest": {

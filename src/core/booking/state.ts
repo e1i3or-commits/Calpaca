@@ -84,6 +84,8 @@ export interface BookingState {
 }
 
 export type BookingStateErrorReason =
+  | "kickoff_delivery_receipt_required"
+  | "kickoff_delivery_superseded"
   | KickoffBookingError
   | "already_created"
   | "not_created"
@@ -130,7 +132,7 @@ export function applyEvent(
     case "rescheduled": {
       if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
       if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
-      return ok({ ...state, startsAt: event.payload.startsAt, endsAt: event.payload.endsAt });
+      return ok({ ...state, startsAt: event.payload.startsAt, endsAt: event.payload.endsAt, inviteStatus: "none" });
     }
 
     case "cancelled": {
@@ -167,7 +169,7 @@ export function applyEvent(
     case "invite_failed": {
       if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
       if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
-      if (state.inviteStatus !== "sent") return illegal(event.kind, "invite_not_sent");
+      if (state.inviteStatus !== "sent" && state.inviteStatus !== "delivered") return illegal(event.kind, "invite_not_sent");
       return ok({ ...state, inviteStatus: "failed" });
     }
 

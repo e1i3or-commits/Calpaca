@@ -69,6 +69,12 @@ smtp://username:password@smtp.example.com:587
 
 Keep credentials URL-encoded and store `.env` with restrictive permissions.
 
+Protected franchise onboarding kickoffs use a durable delivery queue instead
+of the generic email skip behavior. Missing mail, feedback or public URL
+configuration records an assigned `needs_attention` operation. See
+[kickoff delivery](KICKOFF-DELIVERY.md) for feedback authentication, health
+checks, recovery limits and the remaining publication requirements.
+
 ## Private themes
 
 An installation can carry themes that are not part of the bundled registry —
