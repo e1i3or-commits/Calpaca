@@ -1617,6 +1617,12 @@ export type OnboardingPlan = {
   sourceWorkspaceId: string; sourceProjectKey: string; locationKey: string;
   franchiseeId: string; businessUnitId: string; primaryContactId: string; workdriveFolderId: string|null;
   schedulingState: "not_published";
+  kickoffReadiness?: {
+    checkedAt: string; calendarSetupReady: boolean; canPublish: false; kickoffBookingUrl: null;
+    participants: {userId: string; name: string; required: true; ready: boolean; issues: {code: string; message: string}[]}[];
+    organizer: {userId: string; ready: boolean; issues: {code: string; message: string}[]};
+    remainingSteps: string[];
+  };
 };
 export function updateOnboardingCadence(id: string, revision: number, cadence: OnboardingPlan["cadence"]) {
   return request(`/api/me/engagements/${encodeURIComponent(id)}/onboarding-cadence`, {method: "PATCH", body: JSON.stringify({revision, cadence})});

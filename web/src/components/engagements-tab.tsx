@@ -353,6 +353,7 @@ function PlaybookEditor({
 
 function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDetail; reload: () => Promise<void>}) {
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string|null>(null);
   const plan = engagement.onboarding;
   if (!plan) return null;
@@ -372,6 +373,27 @@ function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDeta
     </dl>
     <label className="mt-4 grid max-w-xs gap-2 text-sm">Planned follow-up cadence<select className="min-h-11 rounded-lg border border-input bg-background px-3" value={plan.cadence} disabled={saving || !engagement.canManage || ["archived", "completed"].includes(engagement.status)} onChange={event => void change(event.target.value as "weekly"|"biweekly"|"monthly")}><option value="weekly">Every week</option><option value="biweekly">Every two weeks</option><option value="monthly">Every month</option></select></label>
     {saving && <p role="status" className="mt-2 text-sm">Saving cadence…</p>}{error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
+    <div className="mt-6 rounded-lg border border-border p-4" aria-labelledby="kickoff-setup-title">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 id="kickoff-setup-title" className="text-sm font-medium">Kickoff calendar setup</h4>
+        <button className="min-h-11 text-sm text-primary disabled:opacity-50" disabled={refreshing} onClick={async () => {
+          setRefreshing(true);
+          try { await reload(); } finally { setRefreshing(false); }
+        }}>{refreshing ? "Checking calendars…" : "Refresh calendar checks"}</button>
+      </div>
+      {plan.kickoffReadiness ? <>
+        <p className="mt-1 text-sm text-muted-foreground">{plan.kickoffReadiness.calendarSetupReady ? "Calendar setup checks pass. Booking and invitation delivery still need to be connected." : "Complete the items below before publishing kickoff booking."}</p>
+        <ul className="mt-3 divide-y divide-border">
+          {plan.kickoffReadiness.participants.map(person => <li key={person.userId} className="py-3 text-sm">
+            <p className="font-medium">{person.name} <span className="font-normal text-muted-foreground">· Required · {person.ready ? "Calendar setup ready" : "Needs setup"}</span></p>
+            {person.issues.length > 0 && <ul className="mt-1 list-disc pl-5 text-muted-foreground">{person.issues.map(issue => <li key={issue.code}>{issue.message}</li>)}</ul>}
+          </li>)}
+        </ul>
+        <p className="mt-3 text-sm font-medium">Organizer: {engagement.people.find(person => person.userId === plan.kickoffReadiness?.organizer.userId)?.name ?? "Unavailable participant"}</p>
+        {plan.kickoffReadiness.organizer.issues.length > 0 ? <ul className="mt-1 list-disc pl-5 text-sm text-muted-foreground">{plan.kickoffReadiness.organizer.issues.map(issue => <li key={issue.code}>{issue.message}</li>)}</ul> : <p className="mt-1 text-sm text-muted-foreground">Organizing calendar setup ready. Invitation delivery has not been verified.</p>}
+        <p className="mt-3 text-xs text-muted-foreground">Checked {new Date(plan.kickoffReadiness.checkedAt).toLocaleString()}. Availability will be checked again when a time is booked.</p>
+      </> : <p role="status" className="mt-2 text-sm text-muted-foreground">Calendar setup has not been checked.</p>}
+    </div>
     <div className="mt-4 flex flex-wrap gap-4 text-sm">
       <a className="text-primary" href={`https://tyger.tourscale.com/launch/${encodeURIComponent(plan.sourceProjectKey)}`} target="_blank" rel="noopener noreferrer">Launch context in Tyger</a>
       <a className="text-primary" href={`https://crm.zoho.com/crm/org829549357/tab/CustomModule6/${plan.franchiseeId}`} target="_blank" rel="noopener noreferrer">Franchisee in CRM</a>

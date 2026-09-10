@@ -5,6 +5,7 @@ import type { EngagementActor } from "../core/engagement/permissions";
 import { getDb } from "./client";
 import { getEngagement, normalizeClientName } from "./engagement-repo";
 import * as s from "./schema";
+import { getKickoffReadiness } from "./kickoff-readiness-repo";
 type Db = NodePgDatabase<typeof s>;
 const admin = (actor: EngagementActor) => actor.workspaceRole === "owner" || actor.workspaceRole === "admin";
 
@@ -86,7 +87,7 @@ export async function getFranchiseOnboarding(workspaceId: string, actor: Engagem
   if (!admin(actor)) return { kind: "forbidden" as const };
   const [row] = await db.select().from(s.franchiseOnboarding).where(and(eq(s.franchiseOnboarding.workspaceId, workspaceId),
     eq(s.franchiseOnboarding.sourceWorkspaceId, sourceWorkspaceId), eq(s.franchiseOnboarding.sourceProjectKey, sourceProjectKey)));
-  return row ? { kind: "found" as const, onboarding: onboardingOutput(row) } : { kind: "not_found" as const };
+  return row ? { kind: "found" as const, onboarding: { ...onboardingOutput(row), kickoffReadiness: await getKickoffReadiness(row, db) } } : { kind: "not_found" as const };
 }
 
 export async function updateOnboardingCadence(workspaceId: string, actor: EngagementActor, engagementId: string, raw: {revision: number; cadence: string}, db: Db = getDb()) {

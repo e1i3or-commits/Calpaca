@@ -114,6 +114,31 @@ function baseParams(slug: string): URLSearchParams {
 }
 
 describe("GET /availability", () => {
+  test("configured groups intersect all required hosts without caller-supplied host selection", async () => {
+    const deps = { ...makeDeps(), getEventTypeBySlug: async () => ({ ...groupEventType, mode: "group" as const, publicSelectableHostIds: [] }) };
+    const response = await createAvailabilityRoutes(deps).request(`/availability?${baseParams("group-60")}`);
+    expect(response.status).toBe(200);
+    const body = await json(response);
+    expect(body.all).toHaveLength(1);
+    expect(body.all[0]?.start.utc).toBe("2027-01-04T11:00:00Z");
+    const blocked = createAvailabilityRoutes({ ...deps, getBusyForUsers: async () => [{ userId: "host-c", intervals: [{start: NOW, end: NOW.add({hours:24})}] }] });
+    const unavailable = await blocked.request(`/availability?${baseParams("group-60")}`);
+    expect(await unavailable.json()).toMatchObject({ all: [], curated: [] });
+    const fallback = await blocked.request(`/availability?${baseParams("group-60")}`);
+    expect(await fallback.json()).not.toHaveProperty("quorum");
+  });
+
+  test("a missing required schedule blocks group availability instead of omitting that person", async () => {
+    for (const explicitSelection of [false, true]) {
+      const params = baseParams("group-60");
+      if (explicitSelection) { params.append("hosts", "host-b"); params.append("hosts", "host-c"); }
+      const app = createAvailabilityRoutes({ ...makeDeps(), getEventTypeBySlug: async () => ({...groupEventType, mode:"group"}),
+        getSchedulesForUsers: async () => [schedulesByUserId["host-b"]!] });
+      const response = await app.request(`/availability?${params}`);
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({error:"required_host_schedule_missing"});
+    }
+  });
   test("invitee overlay marks and prioritizes mutual times without hiding conflicts", async () => {
     const router = createAvailabilityRoutes({
       ...makeDeps(),

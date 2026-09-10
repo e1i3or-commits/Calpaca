@@ -446,8 +446,9 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       return c.json({ error: "duration_not_allowed" }, 400);
     }
 
-    const isGroup = requestedHosts !== undefined && requestedHosts.length > 0;
-    if (isGroup) {
+    const hasHostSelection = requestedHosts !== undefined && requestedHosts.length > 0;
+    const isGroup = eventType.mode === "group" || hasHostSelection;
+    if (hasHostSelection) {
       const disallowed = requestedHosts.filter((id) => !eventType.publicSelectableHostIds.includes(id));
       if (disallowed.length > 0) {
         return c.json({ error: "hosts_not_selectable", hosts: disallowed }, 403);
@@ -455,7 +456,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     }
 
     const allHosts = await deps.getEventTypeHosts(eventType.id);
-    const selectedHosts = isGroup
+    const selectedHosts = hasHostSelection
       ? allHosts
           .filter((h) => requestedHosts.includes(h.userId))
           .map((host) =>
@@ -486,6 +487,13 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
         );
     const schedulesByUser = new Map(scheduleRows.map((s) => [s.userId, s]));
     const busyByUser = new Map(busyRows.map((b) => [b.userId, b.intervals]));
+
+    // Missing schedules must not turn a required group member into an omitted
+    // member. Return an explicit setup failure rather than plausible slots.
+    if (isGroup && (selectedHosts.length === 0 || selectedHosts.some(host =>
+      groupHostRole(host.role) === "required" && !schedulesByUser.has(host.userId)))) {
+      return c.json({ error: "required_host_schedule_missing" }, 409);
+    }
 
     const now = deps.now();
     const evidenceRows = deps.getAvailabilityEvidenceForUsers
@@ -547,7 +555,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       const groupResult = groupAvailability(groupHosts, groupConfig, now);
       scoredSlots = [...groupResult.full];
       const [bestFallback] = groupResult.fallback;
-      if (scoredSlots.length === 0 && bestFallback) {
+      if (hasHostSelection && scoredSlots.length === 0 && bestFallback) {
         const missingHost = selectedHosts.find(
           (host) => host.userId === bestFallback.missingUserId,
         );

@@ -63,6 +63,9 @@ function context(c: { get: (key: "user") => AuthEnv["Variables"]["user"] }) {
 
 export function createEngagementRoutes(deps: EngagementDeps = defaultDeps) {
   const router = new Hono<AuthEnv>();
+  for (const path of ["/api/me/engagements", "/api/me/engagements/*"]) {
+    router.use(path, async (c, next) => { c.header("Cache-Control", "no-store"); await next(); });
+  }
   router.use("/api/me/engagements", deps.requireAuth);
   router.use("/api/me/engagements/*", deps.requireAuth);
 
