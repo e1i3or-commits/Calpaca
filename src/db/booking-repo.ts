@@ -1,10 +1,13 @@
 import { and, asc, count, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
+import { guardKickoffBooking } from "./kickoff-booking-guard";
+import { kickoffHosts, loadKickoffContext } from "./kickoff-context";
+import { sameRoster } from "../core/engagement/kickoff-booking";
 import { getDb } from "./client";
 import { bookingEvents, bookings, eventTypes, teamMembers, users } from "./schema";
 import * as schema from "./schema";
-import { ok, type Result } from "../lib/result";
+import { ok, err, type Result } from "../lib/result";
 import {
   applyEvent,
   projectState,
@@ -164,15 +167,28 @@ export async function appendEvent<K extends BookingEventKind>(
   payload: BookingEventPayload<K>,
   executor: Db = getDb(),
 ): Promise<Result<BookingState, BookingStateError>> {
-  const event = { kind, payload } as BookingEvent;
+  let event = { kind, payload } as BookingEvent;
 
   return executor.transaction(async (tx) => {
     const events = await loadEvents(tx, bookingId);
     const stateResult = currentStateResult(events);
     if (!stateResult.ok) return stateResult;
 
-    const result = applyEvent(stateResult.value, event);
+    let result = applyEvent(stateResult.value, event);
     if (!result.ok) return result;
+
+    if(kind==="created" || kind==="reassigned" || kind==="rescheduled") {
+      const [booking]=await tx.select({eventTypeId:bookings.eventTypeId}).from(bookings).where(eq(bookings.id,bookingId));
+      if(booking) {
+        const guarded=await guardKickoffBooking(booking.eventTypeId,result.value.hostUserIds,{start:result.value.startsAt,end:result.value.endsAt},tx,bookingId);
+        if(guarded.kind==="blocked")return err({kind,reason:guarded.error});
+        if(guarded.kind==="allowed" && (event.kind==="created" || event.kind==="reassigned")) {
+          event={...event,payload:{...event.payload,hostUserIds:guarded.hostUserIds}} as BookingEvent;
+          result=applyEvent(stateResult.value,event);
+          if(!result.ok)return result;
+        }
+      }
+    }
 
     await tx.insert(bookingEvents).values({
       bookingId,
@@ -329,6 +345,11 @@ export async function getInviteContext(
     const row = byId.get(id);
     return row ? [{ id: row.id, name: row.name, email: row.email, timezone: row.timezone }] : [];
   });
+  const kickoff=await loadKickoffContext(booking.eventTypeId,executor);
+  if(kickoff && (!sameRoster(hosts.map(host=>host.id),kickoffHosts(kickoff))
+    || hosts[0]?.id!==kickoff.onboarding.input.organizerUserId)) {
+    throw new Error("kickoff_invitation_roster_unavailable");
+  }
 
   const rescheduled = await executor
     .select({ id: bookingEvents.id })

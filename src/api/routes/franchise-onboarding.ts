@@ -3,13 +3,16 @@ import { z } from "zod";
 import { requireSession, type AuthEnv } from "../../auth/session";
 import { franchiseOnboardingInput, onboardingCadenceUpdate } from "../../core/engagement/franchise-onboarding";
 import { provisionFranchiseOnboarding, getFranchiseOnboarding, updateOnboardingCadence } from "../../db/franchise-onboarding-repo";
+import { prepareOnboardingKickoff } from "../../db/prepare-kickoff-repo";
+export const prepareKickoffInput=z.object({}).strict();
 export interface FranchiseOnboardingDeps {
   requireAuth: MiddlewareHandler<AuthEnv>;
   provision: typeof provisionFranchiseOnboarding;
   get: typeof getFranchiseOnboarding;
   updateCadence: typeof updateOnboardingCadence;
+  prepareKickoff: typeof prepareOnboardingKickoff;
 }
-const defaults: FranchiseOnboardingDeps = { requireAuth: requireSession, provision: provisionFranchiseOnboarding, get: getFranchiseOnboarding, updateCadence: updateOnboardingCadence };
+const defaults: FranchiseOnboardingDeps = { requireAuth: requireSession, provision: provisionFranchiseOnboarding, get: getFranchiseOnboarding, updateCadence: updateOnboardingCadence, prepareKickoff: prepareOnboardingKickoff };
 export function createFranchiseOnboardingRoutes(deps: FranchiseOnboardingDeps = defaults) {
   const router = new Hono<AuthEnv>();
   for (const path of ["/api/automation/franchise-onboarding", "/api/automation/franchise-onboarding/*", "/api/me/engagements/:id/onboarding-cadence"]) {
@@ -17,6 +20,16 @@ export function createFranchiseOnboardingRoutes(deps: FranchiseOnboardingDeps = 
   }
   const current = (user: AuthEnv["Variables"]["user"]) => user.workspaceId && user.workspaceRole
     ? { workspaceId: user.workspaceId, actor: { userId: user.id, workspaceRole: user.workspaceRole } } : null;
+  router.post("/api/automation/franchise-onboarding/:engagementId/kickoff", async c => {
+    const ctx=current(c.get("user")); if(!ctx)return c.json({error:"workspace_not_found"},404);
+    if(!["owner","admin"].includes(ctx.actor.workspaceRole))return c.json({error:"forbidden"},403);
+    if(!z.string().uuid().safeParse(c.req.param("engagementId")).success)return c.json({error:"invalid_input"},400);
+    const body=await c.req.text();
+    if(body && !prepareKickoffInput.safeParse((()=>{try{return JSON.parse(body);}catch{return null;}})()).success)return c.json({error:"invalid_input"},400);
+    const result=await deps.prepareKickoff(ctx.workspaceId,ctx.actor,c.req.param("engagementId"));
+    if(result.kind==="created" || result.kind==="reused")return c.json(result,result.kind==="created"?201:200);
+    return c.json({error:result.kind},result.kind==="forbidden"?403:result.kind==="not_found"?404:409);
+  });
   router.post("/api/automation/franchise-onboarding", async c => {
     const ctx = current(c.get("user")); if (!ctx) return c.json({ error: "workspace_not_found" }, 404);
     if (!["owner", "admin"].includes(ctx.actor.workspaceRole)) return c.json({ error: "forbidden" }, 403);

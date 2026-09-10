@@ -1,4 +1,4 @@
-import { and, eq, gt, gte, inArray, lt } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, lt, notExists } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
@@ -9,10 +9,12 @@ import type { WeeklyRule } from "../core/availability/rules";
 import type { ScheduleOverride } from "../core/availability/overrides";
 import type { BookingQuestion } from "../core/booking/questions";
 import type { EventLocation } from "../core/booking/locations";
+import { kickoffPubliclyAvailable, loadKickoffContext } from "./kickoff-context";
 
 type Db = NodePgDatabase<typeof schema>;
 
 export interface EventTypeConfig {
+  readonly fixedRoster?: boolean;
   readonly id: string;
   readonly slug: string;
   // optional so injected test fixtures predating theming stay valid;
@@ -112,6 +114,7 @@ export async function getPublicBookingPage(
     .from(eventTypes)
     .where(and(
       eq(eventTypes.workspaceId, workspaceId),
+      notExists(executor.select({id:schema.onboardingKickoffs.eventTypeId}).from(schema.onboardingKickoffs).where(eq(schema.onboardingKickoffs.eventTypeId,eventTypes.id))),
       ...(configuredPage?.eventTypeIds.length
         ? [inArray(eventTypes.id, configuredPage.eventTypeIds)]
         : []),
@@ -162,6 +165,7 @@ export async function getPublicBookingPage(
 /** Booking-endpoint view of an event type: adds the assignment mode the
  * availability endpoint has no use for, and drops the fields only it needs. */
 export interface BookingEventTypeConfig {
+  readonly fixedRoster?: boolean;
   readonly id: string;
   readonly slug: string;
   /** optional for the same fixture-compatibility reason as EventTypeConfig */
@@ -262,7 +266,10 @@ export async function getEventTypeBySlug(
   );
   if (!row) return null;
 
+  if(!await kickoffPubliclyAvailable(row.id,executor))return null;
+
   return {
+    fixedRoster: (await loadKickoffContext(row.id,executor))!==null,
     id: row.id,
     slug: row.slug,
     title: row.title,
@@ -303,7 +310,8 @@ export async function getEventTypeForBooking(
       ? and(eq(eventTypes.slug, slug), eq(eventTypes.workspaceId, workspaceId))
       : eq(eventTypes.slug, slug),
   );
-  return row ? toBookingEventTypeConfig(row) : null;
+  if(!row || !await kickoffPubliclyAvailable(row.id,executor))return null;
+  return {...toBookingEventTypeConfig(row),fixedRoster:(await loadKickoffContext(row.id,executor))!==null};
 }
 
 /** Same shape as getEventTypeForBooking, keyed by id (reschedule looks up the
@@ -313,7 +321,8 @@ export async function getEventTypeForBookingById(
   executor: Db = getDb(),
 ): Promise<BookingEventTypeConfig | null> {
   const [row] = await executor.select().from(eventTypes).where(eq(eventTypes.id, id));
-  return row ? toBookingEventTypeConfig(row) : null;
+  if(!row || !await kickoffPubliclyAvailable(row.id,executor))return null;
+  return {...toBookingEventTypeConfig(row),fixedRoster:(await loadKickoffContext(row.id,executor))!==null};
 }
 
 /** Public identity of who the invitee is booking with: the team name when the

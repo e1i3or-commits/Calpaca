@@ -7,6 +7,8 @@ import * as schema from "./schema";
 import { ok, err, type Result } from "../lib/result";
 import { generateToken } from "../lib/id";
 import { appendEvent } from "./booking-repo";
+import { guardKickoffBooking } from "./kickoff-booking-guard";
+import type { KickoffBookingError } from "../core/engagement/kickoff-booking";
 import {
   buildAssignmentExplanation,
   type AssignmentCandidate,
@@ -34,7 +36,7 @@ export interface HoldRecord {
   readonly hostUserId: string;
 }
 
-export type CreateHoldError = { readonly kind: "slot_taken" };
+export type CreateHoldError = { readonly kind: "slot_taken" | KickoffBookingError };
 
 export interface Invitee {
   readonly email: string;
@@ -55,7 +57,8 @@ export type ConfirmHoldError =
   | { readonly kind: "expired" }
   | { readonly kind: "not_active" }
   | { readonly kind: "offer_unavailable" }
-  | { readonly kind: "proposal_unavailable" };
+  | { readonly kind: "proposal_unavailable" }
+  | { readonly kind: KickoffBookingError };
 
 export interface ConfirmedBooking {
   readonly bookingId: string;
@@ -92,6 +95,8 @@ export async function createHold(
   const slotEnd = toDate(slot.end);
 
   const inserted = await executor.transaction(async (tx) => {
+      const kickoff=await guardKickoffBooking(eventTypeId,hostUserIds,slot,tx);
+      if(kickoff.kind==="blocked")return {error:kickoff.error};
       // Event-type locking protects capacity, while stable per-host advisory
       // locks serialize claims across every event type without a lock table.
       for (const hostUserId of [...new Set(hostUserIds)].sort()) {
@@ -157,6 +162,7 @@ export async function createHold(
       }
       return records;
     });
+  if(inserted && "error" in inserted)return err({kind:inserted.error});
   return inserted ? ok(inserted) : err({ kind: "slot_taken" });
 }
 
@@ -316,6 +322,12 @@ export async function confirmHold(
     if (!eventType) return err({ kind: "not_found" });
 
     let hostUserIds = rows.map((row) => row.hostUserId);
+    const kickoff=await guardKickoffBooking(first.eventTypeId,hostUserIds,{start:startsAt,end:endsAt},tx);
+    if(kickoff.kind==="blocked")return err({kind:kickoff.error});
+    if(kickoff.kind==="allowed") {
+      if(assignment)return err({kind:"kickoff_roster_mismatch"});
+      hostUserIds=kickoff.hostUserIds;
+    }
     let holdIdsToConfirm = [...holdIds];
     let assignmentExplanation: AssignmentExplanation | undefined;
 
@@ -467,10 +479,12 @@ export async function confirmReschedule(
     const startsAt = toInstant(first.slotStart);
     const endsAt = toInstant(first.slotEnd);
 
+    const kickoff=await guardKickoffBooking(first.eventTypeId,rows.map(row=>row.hostUserId),{start:startsAt,end:endsAt},tx,bookingId);
+    if(kickoff.kind==="blocked")return err({kind:kickoff.error});
     const rescheduled = await appendEvent(bookingId, "rescheduled", { startsAt, endsAt }, tx);
     if (!rescheduled.ok) return rescheduled;
 
-    const nextHostUserIds = [...new Set(rows.map((row) => row.hostUserId))];
+    const nextHostUserIds = kickoff.kind==="allowed"?kickoff.hostUserIds:[...new Set(rows.map((row) => row.hostUserId))];
     const hostsChanged =
       nextHostUserIds.length !== rescheduled.value.hostUserIds.length ||
       nextHostUserIds.some((id, index) => id !== rescheduled.value.hostUserIds[index]);

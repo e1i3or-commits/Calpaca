@@ -386,6 +386,13 @@
       "when": 1789077609444,
       "tag": "0054_franchise_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1789081428046,
+      "tag": "0055_onboarding_kickoffs",
+      "breakpoints": true
     }
   ]
 }

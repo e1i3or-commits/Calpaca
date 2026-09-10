@@ -15,6 +15,7 @@ import {
 } from "./routes/booking-email-verification";
 import { bodySchema as suggestionBodySchema } from "./routes/suggestions";
 import { eventTypeBodySchema, scheduleBodySchema } from "./routes/admin";
+import { prepareKickoffInput } from "./routes/franchise-onboarding";
 
 type Method = "get" | "post" | "put" | "patch" | "delete";
 type Operation = readonly [
@@ -35,6 +36,7 @@ type Operation = readonly [
 const requestSchemas = {
   FranchiseOnboarding: franchiseOnboardingInput,
   OnboardingCadence: onboardingCadenceUpdate,
+  PrepareKickoff: prepareKickoffInput,
   Hold: holdBodySchema,
   Booking: bookingBodySchema,
   Reschedule: rescheduleBodySchema,
@@ -51,6 +53,7 @@ export type RequestSchemaName = keyof typeof requestSchemas;
 export const documentedRequestSchemas = requestSchemas;
 
 export const openApiOperations: readonly Operation[] = [
+  ["post", "/api/automation/franchise-onboarding/{engagementId}/kickoff", "Engagements", "Prepare a protected unpublished kickoff (workspace admin; empty body)", "personal", "PrepareKickoff"],
   ["post", "/api/automation/franchise-onboarding", "Engagements", "Create or recover a franchise onboarding draft (workspace admin)", "personal", "FranchiseOnboarding"],
   ["get", "/api/automation/franchise-onboarding/{sourceWorkspaceId}/{projectKey}", "Engagements", "Recover onboarding by source launch (workspace admin)", "personal"],
   ["patch", "/api/me/engagements/{id}/onboarding-cadence", "Engagements", "Change the planned onboarding cadence with revision checking", "personal", "OnboardingCadence"],

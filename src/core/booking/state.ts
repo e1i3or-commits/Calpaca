@@ -4,6 +4,7 @@ import type { RoutingAnswers } from "../routing/condition";
 import type { AssignmentExplanation } from "../assignment/round-robin";
 import type { BookingAnswers } from "./questions";
 import type { BookingLocation } from "./locations";
+import type { KickoffBookingError } from "../engagement/kickoff-booking";
 
 /** Mirrors docs/SCHEMA.md `booking_event_kind`. Duplicated, not imported from
  * src/db/schema: core must not depend on the database layer. */
@@ -83,6 +84,7 @@ export interface BookingState {
 }
 
 export type BookingStateErrorReason =
+  | KickoffBookingError
   | "already_created"
   | "not_created"
   | "already_cancelled"

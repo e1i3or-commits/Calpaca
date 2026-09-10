@@ -437,6 +437,9 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     if (!eventType) {
       return c.json({ error: "event_type_not_found" }, 404);
     }
+    if(eventType.fixedRoster && (requestedHosts!==undefined || requestedOptionalHosts.length>0 || overrideHostRoles)) {
+      return c.json({error:"kickoff_roster_locked"},400);
+    }
     const configuredDurations = allowedDurations(
       eventType.durationMinutes,
       eventType.selectableDurations,

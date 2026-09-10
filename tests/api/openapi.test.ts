@@ -67,8 +67,15 @@ describe("documented request schemas", () => {
       const schema = schemas[`${name}Request`];
       expect(schema).toBeDefined();
       expect(schema!.type).toBe("object");
-      // A placeholder would have no properties and permit anything.
-      expect(Object.keys(schema!.properties as object).length).toBeGreaterThan(0);
+      // Kickoff preparation deliberately accepts no settings: its roster
+      // comes from the approved source plan, never request overrides.
+      if(name==="PrepareKickoff") {
+        expect(schema!.properties).toEqual({});
+        expect(documentedRequestSchemas.PrepareKickoff.safeParse({}).success).toBe(true);
+        expect(documentedRequestSchemas.PrepareKickoff.safeParse({publishedAt:"now"}).success).toBe(false);
+      } else {
+        expect(Object.keys(schema!.properties as object).length).toBeGreaterThan(0);
+      }
       expect(schema!.additionalProperties).toBe(false);
     }
   });

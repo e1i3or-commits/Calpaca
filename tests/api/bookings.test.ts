@@ -292,6 +292,15 @@ describe("POST /holds", () => {
     expect(body.holdIds.slice().sort()).toEqual(["hold-host-b", "hold-host-c"]);
   });
 
+  test("protected kickoff holds reject host subsets, role overrides and alternate selection paths", async () => {
+    for(const extra of [{hosts:["host-b"]},{optionalHosts:["host-c"]},{offerPublicId:"offer"},{proposalPublicId:"proposal"}]) {
+      let called=false;
+      const deps={...makeDeps({onCreateHold:()=>{called=true;}}),getEventTypeForBooking:async()=>({...groupEventType,fixedRoster:true})};
+      const response=await post(createBookingRoutes(deps),"/holds",{eventTypeSlug:"group-60",start:"2027-01-04T11:00:00Z",end:"2027-01-04T12:00:00Z",...extra});
+      expect(response.status).toBe(400);expect(await response.json()).toEqual({error:"kickoff_roster_locked"});expect(called).toBe(false);
+    }
+  });
+
   test("group: 409 when one required host is busy", async () => {
     const deps = makeDeps({ busyByUserId: { "host-c": [iv("2027-01-04T11:00:00Z", "2027-01-04T12:00:00Z")] } });
     const router = createBookingRoutes(deps);

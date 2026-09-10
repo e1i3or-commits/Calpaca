@@ -114,6 +114,13 @@ function baseParams(slug: string): URLSearchParams {
 }
 
 describe("GET /availability", () => {
+  test("protected kickoff availability rejects host and role overrides", async () => {
+    for(const extra of ["hosts=host-b","optionalHosts=host-c","overrideHostRoles=true"]) {
+      const app=createAvailabilityRoutes({...makeDeps(),getEventTypeBySlug:async()=>({...groupEventType,mode:"group",fixedRoster:true})});
+      const response=await app.request(`/availability?${baseParams("group-60")}&${extra}`);
+      expect(response.status).toBe(400);expect(await response.json()).toEqual({error:"kickoff_roster_locked"});
+    }
+  });
   test("configured groups intersect all required hosts without caller-supplied host selection", async () => {
     const deps = { ...makeDeps(), getEventTypeBySlug: async () => ({ ...groupEventType, mode: "group" as const, publicSelectableHostIds: [] }) };
     const response = await createAvailabilityRoutes(deps).request(`/availability?${baseParams("group-60")}`);

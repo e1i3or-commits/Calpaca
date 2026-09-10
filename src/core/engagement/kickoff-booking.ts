@@ -1,0 +1,16 @@
+export type KickoffBookingError =
+  | "kickoff_not_published"
+  | "kickoff_engagement_inactive"
+  | "kickoff_configuration_changed"
+  | "kickoff_roster_mismatch"
+  | "kickoff_setup_incomplete"
+  | "kickoff_slot_unavailable";
+
+export function sameRoster(actual: readonly string[], required: readonly string[]) {
+  return actual.length === required.length && new Set(actual).size === actual.length
+    && required.every(id => actual.includes(id));
+}
+
+export function organizerFirst(required: readonly string[], organizer: string) {
+  return [organizer, ...required.filter(id => id !== organizer).sort()];
+}

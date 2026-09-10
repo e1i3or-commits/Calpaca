@@ -813,3 +813,13 @@ export const franchiseOnboardingChanges = pgTable("franchise_onboarding_changes"
   cadence: text("cadence").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [uniqueIndex("franchise_onboarding_change_revision_uq").on(t.onboardingId, t.revision)]);
+
+// Only this binding identifies the protected kickoff. Generic playbooks cannot
+// enable publication or change its source roster through editable form fields.
+export const onboardingKickoffs = pgTable("onboarding_kickoffs", {
+  onboardingId: uuid("onboarding_id").primaryKey().references(() => franchiseOnboarding.id),
+  eventTypeId: uuid("event_type_id").notNull().references(() => eventTypes.id),
+  createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+}, t => [uniqueIndex("onboarding_kickoff_event_type_uq").on(t.eventTypeId)]);

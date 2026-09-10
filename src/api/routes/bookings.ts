@@ -486,6 +486,9 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     }
     const eventType = await deps.getEventTypeForBooking(eventTypeSlug, workspaceId);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+    if(eventType.fixedRoster && (requestedHosts!==undefined || requestedOptionalHosts!==undefined || offerPublicId || proposalPublicId)) {
+      return c.json({error:"kickoff_roster_locked"},400);
+    }
     if (agent && !eventType.agentPolicy?.enabled) {
       return c.json({ error: "agent_not_allowed" }, 403);
     }

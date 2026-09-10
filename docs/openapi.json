@@ -90,6 +90,69 @@
     }
   ],
   "paths": {
+    "/api/automation/franchise-onboarding/{engagementId}/kickoff": {
+      "post": {
+        "operationId": "postApiAutomationFranchiseOnboardingEngagementIdKickoff",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Prepare a protected unpublished kickoff (workspace admin; empty body)",
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareKickoffRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/automation/franchise-onboarding": {
       "post": {
         "operationId": "postApiAutomationFranchiseOnboarding",
@@ -7216,6 +7279,11 @@
           "revision",
           "cadence"
         ],
+        "additionalProperties": false
+      },
+      "PrepareKickoffRequest": {
+        "type": "object",
+        "properties": {},
         "additionalProperties": false
       },
       "HoldRequest": {
