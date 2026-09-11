@@ -11,7 +11,7 @@ type Db = NodePgDatabase<typeof s>;
 const admin = (actor: EngagementActor) => actor.workspaceRole === "owner" || actor.workspaceRole === "admin";
 
 export async function onboardingOutput(row: typeof s.franchiseOnboarding.$inferSelect,db:Db) {
-  return { id: row.id, engagementId: row.engagementId, sourceWorkspaceId: row.sourceWorkspaceId,
+  return { id: row.id, workspaceId: row.workspaceId, engagementId: row.engagementId, sourceWorkspaceId: row.sourceWorkspaceId,
     sourceProjectKey: row.sourceProjectKey, locationKey: row.input.locationKey,
     franchiseeId: row.input.franchiseeId, businessUnitId: row.input.businessUnitId, primaryContactId: row.input.primaryContactId,
     accountLeadUserId: row.input.accountLeadUserId, workdriveFolderId: row.input.workdriveFolderId ?? null,

@@ -57,3 +57,8 @@ three queued reservations with synthetic records. Light/dark presentation was
 inspected. Temporary review files/server/tab were removed. No real calendar,
 email or live publication was performed; provider and monitor activation remains
 unverified. The n8n/Tyger handoff is the next dependency.
+
+The onboarding source projection also returns `workspaceId` for the authenticated
+Calpaca workspace. Tyger's n8n handoff requires it before attaching the
+Engagement to a launch, preventing a misbound API credential from supplying
+an otherwise similar source receipt. Verified with the full 854-test gate.
