@@ -26,6 +26,36 @@ A separate `followup-scheduler` heartbeat is written only after a successful
 sweep. Database errors fail the job and leave that heartbeat stale. Invitation
 dispatch has its own independent heartbeat and delivery deadlines.
 
+## Rolling extension
+
+The same worker maintains the configured number of future dates for enabled,
+planned schedules. The `extend` preview/apply command uses the existing revision,
+preview hash, permission and atomic audit path. It advances a persisted recurrence
+index independently of occurrence position, so shortening a plan never revives
+retired IDs or skips the next intended date. Monthly date/weekday anchoring and
+local wall time remain tied to the last configured rule. Individual exceptions
+remain intact; overlap or ambiguous future DST times block extension visibly.
+
+Up to 20 schedules are checked per sweep, with 15-minute failure backoff. A manual
+schedule edit clears that backoff so the next sweep can verify the correction.
+Assigned extension issues and recovery events persist in migration 0060, and the
+Engagement displays the owner and recovery instruction. `extensionAttention` and
+`extensionOverdue` are uncapped health counters. Aggregate `attention`, `overdue`
+and `workerStale` now also include scheduler/extension failures, preserving the
+existing monitor contract. A dead scheduler cannot conceal an exhausted horizon.
+
+The chosen future-date count bounds the planned horizon; actual invitations stay
+inside the independent 60-day reservation window. New dates enter the same
+reservation, availability and recipient-delivery pipeline as initial dates.
+Paused/ended schedules are never automatically extended.
+
+Verification: all 841 tests / 2,874 assertions, the full repository gate and the
+web build pass against local PostgreSQL. Tests cover concurrent extension,
+month ends, long elapsed periods, retired positions, DST ambiguity, preserved
+exceptions, overlapping dates, assigned errors and recovery. Local Chrome
+verified the visible issue owner and recovery instruction. No live provider
+calls or deployment were performed.
+
 These are local application and monitoring contracts, not deployed monitoring.
-Rolling extension, initial franchisee agreement/activation, real delivery
-feedback, independent alert binding and the n8n/Tyger adapter remain next.
+Initial franchisee agreement/activation, real delivery feedback, independent
+alert binding and the n8n/Tyger adapter remain next.

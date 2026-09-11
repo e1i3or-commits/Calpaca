@@ -271,3 +271,37 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("automatic follow-up reservation
   }finally{await f.pool.end();}
  });
 });
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("automatic follow-up extension",()=>{
+ test("concurrent sweeps extend the horizon once and preserve the original occurrence",async()=>{
+  const f=await fixture();try {
+   await f.db.update(s.workspaceMembers).set({role:"admin"}).where(eq(s.workspaceMembers.userId,f.actor.userId));
+   expect((await f.reserve()).kind).toBe("reserved");
+   const now=new Date(new Date(f.occurrence.endsAt).getTime()+3600000);
+   await Promise.all([runFollowupReservationBatch(f.db,now),runFollowupReservationBatch(f.db,now)]);
+   const state=await getFollowupSchedule(f.ws,f.actor,f.id,f.db);if(state.kind!=="found"||!state.schedule)throw new Error("missing");
+   expect(state.revision).toBe(3);expect(state.schedule.nextRecurrenceIndex).toBe(4);expect(state.schedule.occurrences).toHaveLength(4);
+   expect(state.schedule.occurrences[0]).toMatchObject({id:f.occurrence.id,startsAt:f.occurrence.startsAt});
+   expect(state.schedule.occurrences.filter(row=>new Date(row.startsAt)>now)).toHaveLength(3);
+   expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(4);
+   await runFollowupReservationBatch(f.db,now);expect(await f.db.select().from(s.onboardingFollowupChanges)).toHaveLength(2);
+  }finally{await f.pool.end();}
+ });
+ test("an overlapping individual exception creates an assigned extension issue and resolves after correction",async()=>{
+  const f=await fixture();try {
+   await f.db.update(s.workspaceMembers).set({role:"admin"}).where(eq(s.workspaceMembers.userId,f.actor.userId));
+   expect((await f.reserve()).kind).toBe("reserved");
+   const state=await getFollowupSchedule(f.ws,f.actor,f.id,f.db);if(state.kind!=="found"||!state.schedule)throw new Error("missing");
+   const second=state.schedule.occurrences[1]!,date=Temporal.PlainDate.from(state.schedule.rule.anchorDate).add({days:42}).toString();
+   expect((await applyFollowupSchedule(f.ws,f.actor,f.id,await reviewed(f,{action:"move",occurrenceId:second.id,date,time:"10:00"}),f.db)).kind).toBe("applied");
+   const now=new Date(new Date(f.occurrence.endsAt).getTime()+3600000);await runFollowupReservationBatch(f.db,now);
+   expect(await getFollowupSchedule(f.ws,f.actor,f.id,f.db)).toMatchObject({extensionIssue:{code:"followup_extension_schedule_invalid",ownerUserId:f.ids[2]}});
+   expect(await kickoffDeliveryReport(f.ws,f.db,now)).toMatchObject({extensionAttention:1});
+   const corrected=Temporal.PlainDate.from(date).add({days:1}).toString();
+   expect((await applyFollowupSchedule(f.ws,f.actor,f.id,await reviewed(f,{action:"move",occurrenceId:second.id,date:corrected,time:"10:00"}),f.db)).kind).toBe("applied");
+   expect((await f.db.select().from(s.onboardingFollowupSchedules))[0]?.extensionCheckedAt).toBeNull();await runFollowupReservationBatch(f.db,now);
+   expect(await getFollowupSchedule(f.ws,f.actor,f.id,f.db)).toMatchObject({extensionIssue:null});
+   expect((await f.db.select().from(s.followupSchedulerEvents)).map(row=>row.outcome)).toEqual(["blocked","resolved"]);
+  }finally{await f.pool.end();}
+ });
+});

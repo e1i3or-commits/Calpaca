@@ -20,7 +20,7 @@ export const followupPreviewInput = z.object({
   command: z.discriminatedUnion("action", [
     z.object({action: z.literal("configure"), rule: followupRule}).strict(),
     z.object({action: z.literal("move"), occurrenceId: z.string().uuid(), date, time}).strict(),
-    z.object({action: z.enum(["pause", "resume", "end"])}).strict(),
+    z.object({action: z.enum(["pause", "resume", "end", "extend"])}).strict(),
   ]),
 }).strict();
 export type FollowupPreviewInput = z.infer<typeof followupPreviewInput>;
@@ -34,8 +34,9 @@ export interface PlannedOccurrence {
 }
 export interface ScheduleSnapshot {
   revision: number; engagementStatus: string; canManage: boolean;
-  schedule: {status: ScheduleStatus; rule: FollowupRule; occurrences: PlannedOccurrence[]} | null;
+  schedule: {status: ScheduleStatus; rule: FollowupRule; nextRecurrenceIndex?: number; occurrences: PlannedOccurrence[]} | null;
   deliveryState: "not_invited" | "reservations_present";
+  extensionIssue?: {code:string;ownerUserId:string|null}|null;
 }
 export interface ScheduleChange {
   id: string | null; position: number; action: "create" | "move" | "keep" | "cancel" | "pause" | "resume";
@@ -44,7 +45,7 @@ export interface ScheduleChange {
 }
 export interface SchedulePreview {
   changes: ScheduleChange[]; issues: string[]; canApply: boolean;
-  status: ScheduleStatus; rule: FollowupRule | null;
+  status: ScheduleStatus; rule: FollowupRule | null; nextRecurrenceIndex?: number;
 }
 
 export function localSlot(day: string, clock: string, zone: string) {
@@ -55,9 +56,10 @@ export function localSlot(day: string, clock: string, zone: string) {
   return {startsAt: start.toString({fractionalSecondDigits:3}), endsAt: start.add({minutes: 45}).toString({fractionalSecondDigits:3})};
 }
 
-export function recurrenceSlots(rule: FollowupRule) {
+export function recurrenceSlots(rule: FollowupRule, offset=0) {
   const anchor = Temporal.PlainDate.from(rule.anchorDate);
-  return Array.from({length: rule.count}, (_, i) => {
+  return Array.from({length: rule.count}, (_, index) => {
+    const i=index+offset;
     let day: Temporal.PlainDate;
     if (rule.cadence !== "monthly") day = anchor.add({weeks: i * (rule.cadence === "biweekly" ? 2 : 1)});
     else {
@@ -80,6 +82,7 @@ export function previewSchedule(current: ScheduleSnapshot["schedule"], command: 
   const changes: ScheduleChange[] = [], issues: string[] = [];
   let status = current?.status ?? "planned", rule = current?.rule ?? null;
   const instant = Temporal.Instant.from(now);
+  let nextRecurrenceIndex=current?.nextRecurrenceIndex??current?.rule.count??0;
   const future = (current?.occurrences ?? []).filter(row => row.status !== "cancelled" && Temporal.Instant.compare(Temporal.Instant.from(row.startsAt), instant) > 0).sort((a,b) => a.position - b.position);
   const change = (row: PlannedOccurrence, action: ScheduleChange["action"], patch: Partial<ScheduleChange> = {}) => ({...row, action, previousStartsAt: row.startsAt, ...patch});
   if (current?.status === "ended") issues.push("This schedule has ended. Its history is preserved.");
@@ -97,7 +100,29 @@ export function previewSchedule(current: ScheduleSnapshot["schedule"], command: 
       else changes.push({id: null, position: ++position, action: "create", startsAt: slot.startsAt, endsAt: slot.endsAt, previousStartsAt: null, status: rowStatus, exception: false});
     });
     for (const old of future.slice(slots.length)) changes.push(change(old, old.exception ? "keep" : "cancel", {status: old.exception ? old.status : "cancelled"}));
+    nextRecurrenceIndex=Math.max(rule.count,...changes.map((row,index)=>row.action==="cancel"?0:index+1));
   } else if (!current) issues.push("Save a follow-up schedule first.");
+  else if(command.action==="extend") {
+    if(status!=="planned")issues.push("Only a planned schedule can be extended.");
+    else {
+      const needed=Math.max(0,current.rule.count-future.length);
+      if(needed) {
+        const anchor=Temporal.PlainDate.from(current.rule.anchorDate),today=instant.toZonedDateTimeISO(current.rule.timezone).toPlainDate();
+        const elapsed=current.rule.cadence==="monthly"?today.since(anchor,{largestUnit:"months"}).months:
+          Math.floor(today.since(anchor,{largestUnit:"days"}).days/(current.rule.cadence==="biweekly"?14:7));
+        let index=Math.max(nextRecurrenceIndex,elapsed-1),position=Math.max(0,...current.occurrences.map(row=>row.position));
+        for(let attempt=0;attempt<needed+3&&changes.length<needed;attempt++) {
+          const slot=recurrenceSlots({...current.rule,count:1},index)[0]!;index++;
+          if(Temporal.PlainDate.compare(Temporal.PlainDate.from(slot.date),today)<0)continue;
+          if(slot.issue){issues.push(slot.issue);break;}
+          if(Temporal.Instant.compare(Temporal.Instant.from(slot.startsAt),instant)<=0)continue;
+          changes.push({id:null,position:++position,action:"create",startsAt:slot.startsAt,endsAt:slot.endsAt,previousStartsAt:null,status:"draft",exception:false});
+        }
+        if(!issues.length&&changes.length!==needed)issues.push("The next follow-up dates could not be generated. Review the cadence anchor.");
+        nextRecurrenceIndex=index;
+      }
+    }
+  }
   else if (command.action === "move") {
     const row = future.find(item => item.id === command.occurrenceId);
     if (!row) issues.push("Only an existing future meeting can be moved.");
@@ -122,5 +147,5 @@ export function previewSchedule(current: ScheduleSnapshot["schedule"], command: 
   const ongoing = (current?.occurrences ?? []).filter(row => row.status !== "cancelled" && Temporal.Instant.compare(Temporal.Instant.from(row.startsAt), instant) <= 0 && Temporal.Instant.compare(Temporal.Instant.from(row.endsAt), instant) > 0);
   const resulting = [...ongoing, ...future.map(row => changed.get(row.id) ?? row), ...changes.filter(row => !row.id)].filter(row => row.status !== "cancelled").sort((a,b) => a.startsAt.localeCompare(b.startsAt));
   for (let i = 1; i < resulting.length; i++) if (Temporal.Instant.compare(Temporal.Instant.from(resulting[i]!.startsAt), Temporal.Instant.from(resulting[i-1]!.endsAt)) < 0) issues.push("Two proposed meetings overlap. Move the individual exception or choose a different series time.");
-  return {changes, issues: [...new Set(issues)], canApply: issues.length === 0, status, rule};
+  return {changes, issues: [...new Set(issues)], canApply: issues.length === 0, status, rule, nextRecurrenceIndex};
 }

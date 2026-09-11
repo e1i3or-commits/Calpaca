@@ -4,7 +4,7 @@ The existing follow-up preview/apply API now reconciles booked dates in the
 same transaction as its reviewed schedule revision and audit. A move retains
 the booking ID and Google event ID and queues one durable reschedule. Pausing,
 ending or removing a future date queues cancellation. Past calls stay unchanged.
-New and resumed draft dates still require the reservation/activation adapter.
+New and resumed dates enter the automatic reservation worker when the schedule is enabled.
 
 Required host locks precede the Engagement, booking and delivery records.
 Managed booking events require the persisted request audit, current revision,
@@ -50,6 +50,5 @@ call, pause/resume, cancellation status, reload and dark-mode layout. Synthetic
 provider adapters verify delivery and replacement; no real email, calendar or
 Slack messages were sent. Temporary browser-review tooling is excluded.
 
-Still to build: controlled initial agreement/activation, automatic reservation
-and rolling extension, real provider-feedback wiring, independent monitoring
+Still to build: controlled initial agreement/activation, real provider-feedback wiring, independent monitoring
 activation and the n8n/Tyger adapter. This branch has not been deployed.

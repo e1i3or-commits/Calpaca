@@ -55,7 +55,7 @@ They retain their original state when they pass into history.
 Pause marks future drafts paused. Resume returns future paused rows to draft;
 past rows stay unchanged. End cancels future rows and permanently ends this
 schedule. Each action is previewed before saving. A paused, completed or
-archived Engagement blocks schedule mutation. Automatic extension remains to build. For enabled schedules, ending or pausing
+archived Engagement blocks schedule mutation. Automatic extension is implemented for enabled, planned schedules (FOLLOWUP-AUTOMATION.md). For enabled schedules, ending or pausing
 queues verified cancellation of future booked calls; see FOLLOWUP-CHANGES.md.
 
 ## Database and API
@@ -84,7 +84,7 @@ rejected. Replay still checks current access and management permission.
 | `POST .../followup-schedule/apply` | Same input plus UUID requestId and previewHash; revalidates and atomically saves |
 
 Commands are `configure` with a rule, `move` with occurrenceId/date/time, or
-`pause`, `resume`, `end`. Input is strict: no workspace, duration, participant or
+`pause`, `resume`, `end`, or `extend` to maintain the saved future-date count. Input is strict: no workspace, duration, participant or
 publication overrides. Generated OpenAPI contains the actual validators.
 Responses are no-store. An inaccessible record returns 404, an unauthorized
 mutation 403, invalid input 400, and revision/preview/request/lifecycle conflicts
@@ -105,8 +105,7 @@ scoping and mutation contracts. No external effects are used in tests.
 
 Occurrence reservation, optional attendance and issued-meeting changes are now
 built. Controlled franchisee agreement/activation, real delivery feedback,
-independent alerts and the n8n/Tyger adapter remain. Automatic extension belongs
-to that remaining worker. Draft configuration alone never establishes readiness.
+independent alerts and the n8n/Tyger adapter remain. Automatic extension is now handled by the Calpaca scheduler. Draft configuration alone never establishes readiness.
 
 Verification on 2026-09-11: all 816 tests passed against local PostgreSQL, with
 TypeScript, lint, generated OpenAPI parity and repository invariants passing.

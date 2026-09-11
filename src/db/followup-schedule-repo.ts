@@ -28,8 +28,9 @@ async function load(workspaceId: string, actor: EngagementActor, engagementId: s
   const deliveries=await db.select({bookingId:s.kickoffDeliveries.bookingId,status:s.kickoffDeliveries.status,kind:s.kickoffDeliveries.kind}).from(s.kickoffDeliveries)
     .where(eq(s.kickoffDeliveries.onboardingId,onboarding.id)).orderBy(desc(s.kickoffDeliveries.sequence));
   const snapshot: ScheduleSnapshot = {revision: onboarding.revision, engagementStatus: engagement.status, canManage: engagement.canManage,
+    extensionIssue:schedule?.extensionIssueCode?{code:schedule.extensionIssueCode,ownerUserId:schedule.extensionOwnerUserId}:null,
     deliveryState: reservations.some(row=>row.bookingId) ? "reservations_present" : "not_invited",
-    schedule: schedule ? {status: schedule.status, rule: schedule.rule, occurrences: rows.map(row => {
+    schedule: schedule ? {status: schedule.status, rule: schedule.rule, nextRecurrenceIndex:schedule.nextRecurrenceIndex, occurrences: rows.map(row => {
       const reservation=reservations.find(item=>item.occurrenceId===row.id);
       const delivery=deliveries.find(item=>item.bookingId===reservation?.bookingId);
       return {id:row.id,position:row.position,startsAt:row.startsAt.toISOString(),endsAt:row.endsAt.toISOString(),status:row.status,exception:row.exception,
@@ -92,8 +93,8 @@ export async function applyFollowupSchedule(workspaceId:string,actor:EngagementA
     if(value.previewHash!==previewHash)return {kind:"preview_changed" as const};
     if(!preview.canApply||!preview.rule)return {kind:"schedule_invalid" as const,issues:preview.issues};
     const onboardingId=result.onboarding.id,revision=result.onboarding.revision+1;
-    await tx.insert(s.onboardingFollowupSchedules).values({onboardingId,status:preview.status,rule:preview.rule,updatedAt:now})
-      .onConflictDoUpdate({target:s.onboardingFollowupSchedules.onboardingId,set:{status:preview.status,rule:preview.rule,updatedAt:now}});
+    await tx.insert(s.onboardingFollowupSchedules).values({onboardingId,status:preview.status,rule:preview.rule,nextRecurrenceIndex:preview.nextRecurrenceIndex??preview.rule.count,updatedAt:now})
+      .onConflictDoUpdate({target:s.onboardingFollowupSchedules.onboardingId,set:{status:preview.status,rule:preview.rule,nextRecurrenceIndex:preview.nextRecurrenceIndex??preview.rule.count,extensionCheckedAt:null,updatedAt:now}});
     for(const row of preview.changes) {
       if(row.action==="keep")continue;
       const values={startsAt:new Date(row.startsAt),endsAt:new Date(row.endsAt),status:row.status,exception:row.exception,updatedAt:now};

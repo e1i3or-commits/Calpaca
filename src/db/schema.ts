@@ -876,6 +876,11 @@ export const onboardingFollowupSchedules = pgTable("onboarding_followup_schedule
   onboardingId: uuid("onboarding_id").primaryKey().references(() => franchiseOnboarding.id),
   status: text("status").$type<import("../core/engagement/followup-schedule").ScheduleStatus>().notNull(),
   rule: jsonb("rule").$type<import("../core/engagement/followup-schedule").FollowupRule>().notNull(),
+  nextRecurrenceIndex: integer("next_recurrence_index").notNull().default(0),
+  extensionCheckedAt: timestamp("extension_checked_at", {withTimezone:true}),
+  extensionIssueCode: text("extension_issue_code"),
+  extensionIssueAt: timestamp("extension_issue_at", {withTimezone:true}),
+  extensionOwnerUserId: uuid("extension_owner_user_id").references(() => users.id),
   updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
 });
 export const onboardingFollowupOccurrences = pgTable("onboarding_followup_occurrences", {
@@ -933,5 +938,15 @@ export const followupBookingHistory = pgTable("followup_booking_history", {
   bookingId: uuid("booking_id").primaryKey().references(() => bookings.id),
   occurrenceId: uuid("occurrence_id").notNull().references(() => onboardingFollowupOccurrences.id),
   revision: integer("revision").notNull(),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+});
+
+export const followupSchedulerEvents = pgTable("followup_scheduler_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  onboardingId: uuid("onboarding_id").notNull().references(() => onboardingFollowupSchedules.onboardingId),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
+  outcome: text("outcome").notNull(),
+  issueCode: text("issue_code"),
   createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
 });

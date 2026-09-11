@@ -46,10 +46,11 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
   const update=(patch:Partial<FollowupRule>)=>{setRule(value=>({...value,...patch}));setPending(null);setNotice(null);};
   return <section className="mt-6 rounded-lg border border-border p-4" aria-labelledby="followup-schedule-title">
     <div className="flex flex-wrap items-center justify-between gap-2"><h4 id="followup-schedule-title" className="font-medium">Follow-up schedule</h4><button className={button} disabled={busy} onClick={()=>void refresh()}>Refresh schedule</button></div>
-    <p className="mt-2 text-sm text-muted-foreground">Plan 45-minute follow-ups in the agreed timezone. Dates stay as drafts until availability and invitation delivery are ready.</p>
+    <p className="mt-2 text-sm text-muted-foreground">Plan 45-minute follow-ups in the agreed timezone. Enabled schedules keep the chosen number of future dates planned. Upcoming calls are booked after team availability is checked.</p>
     {error&&<p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
     {notice&&<p role="status" className="mt-3 text-sm text-primary">{notice}</p>}
     {!snapshot?<p role="status" className="mt-3 text-sm">{error?"Schedule unavailable. Use Refresh schedule to retry.":"Loading follow-up schedule…"}</p>:<>
+      {snapshot.extensionIssue&&<p role="alert" className="mt-3 text-sm text-destructive">Automatic scheduling needs attention. {snapshot.extensionIssue.code==="followup_automation_identity_unavailable"?"Restore the automation account’s workspace administrator access.":"Review the cadence anchor and individual exceptions before extending the schedule."} Assigned to {engagement.people.find(person=>person.userId===snapshot.extensionIssue?.ownerUserId)?.name??"the account lead"}.</p>}
       {schedule&&<p className="mt-3 text-sm font-medium">{schedule.status==="planned"?(snapshot.deliveryState==="reservations_present"?"Schedule with bookings":"Draft schedule"):schedule.status==="paused"?"Schedule paused":"Schedule ended"} · {schedule.rule.timezone}</p>}
       {snapshot.deliveryState==="reservations_present"&&<p role="status" className="mt-2 text-sm">Changes to booked dates update existing invitations. Pausing or ending cancels future calls; resuming waits for verified cancellations before new bookings.</p>}
       {["paused","completed","archived"].includes(engagement.status)&&<p className="mt-2 text-sm text-muted-foreground">The Engagement is {engagement.status}. Schedule changes are disabled.</p>}

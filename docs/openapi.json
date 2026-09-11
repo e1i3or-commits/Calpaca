@@ -7952,7 +7952,8 @@
                     "enum": [
                       "pause",
                       "resume",
-                      "end"
+                      "end",
+                      "extend"
                     ]
                   }
                 },
@@ -8077,7 +8078,8 @@
                     "enum": [
                       "pause",
                       "resume",
-                      "end"
+                      "end",
+                      "extend"
                     ]
                   }
                 },

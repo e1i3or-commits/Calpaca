@@ -230,5 +230,6 @@ export async function kickoffDeliveryReport(workspaceId:string,db:Db=getDb(),now
   const reservationAttention=reservationCounts?.attention??0;
   const [worker]=await db.select().from(s.kickoffDeliveryWorker).where(eq(s.kickoffDeliveryWorker.name,"dispatcher"));
   const workerStale=!worker||now.getTime()-worker.lastSweepAt.getTime()>180_000;
-  return {...await followupAutomationHealth(workspaceId,db,now),checkedAt:now.toISOString(),workerStale,lastSweepAt:worker?.lastSweepAt??null,attention:(counts?.attention??0)+reservationAttention,reservationAttention,overdue:counts?.overdue??0,deliveries:rows};
+  const automation=await followupAutomationHealth(workspaceId,db,now);
+  return {...automation,checkedAt:now.toISOString(),workerStale:workerStale||automation.schedulerStale,lastSweepAt:worker?.lastSweepAt??null,attention:(counts?.attention??0)+reservationAttention+automation.extensionAttention,reservationAttention,overdue:(counts?.overdue??0)+automation.reservationOverdue+automation.extensionOverdue,deliveries:rows};
 }

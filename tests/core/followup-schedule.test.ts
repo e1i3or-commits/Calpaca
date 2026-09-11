@@ -51,3 +51,27 @@ test("pause, resume and end affect only future dates",()=>{
 test("input rejects invalid dates, offset-only timezones, unknown settings and unbounded plans",()=>{
  for(const patch of [{anchorDate:"2027-02-30"},{timezone:"+05:00"},{timezone:"Not/AZone"},{localTime:"25:00"},{count:13},{durationMinutes:60}])expect(followupRule.safeParse({...rule(),...patch}).success).toBe(false);
 });
+
+test("rolling extension maintains the horizon and monthly anchor without rewriting history",()=>{
+ const monthly=rule({cadence:"monthly",anchorDate:"2027-01-31",timezone:"UTC",count:3});
+ const occurrences=recurrenceSlots(monthly).map((slot,i)=>({...row(String(i+1),slot.date),startsAt:slot.startsAt,endsAt:slot.endsAt}));
+ const current={status:"planned" as const,rule:monthly,nextRecurrenceIndex:3,occurrences};
+ const preview=previewSchedule(current,{action:"extend"},"2027-02-01T00:00:00Z");
+ expect(preview.canApply).toBe(true);expect(preview.changes).toHaveLength(1);expect(preview.changes[0]).toMatchObject({id:null,position:4,startsAt:"2027-04-30T10:00:00.000Z"});expect(preview.nextRecurrenceIndex).toBe(4);
+ expect(current.occurrences[0]?.startsAt).toBe("2027-01-31T10:00:00.000Z");
+ const later=previewSchedule(current,{action:"extend"},"2030-04-01T00:00:00Z");expect(later.canApply).toBe(true);expect(later.changes.map(row=>row.startsAt)).toEqual(["2030-04-30T10:00:00.000Z","2030-05-31T10:00:00.000Z","2030-06-30T10:00:00.000Z"]);
+});
+test("rolling extension blocks future DST ambiguity and exception overlap instead of changing their times",()=>{
+ const weekly=rule({cadence:"weekly",anchorDate:"2027-10-31",localTime:"01:30",count:1});
+ const current={status:"planned" as const,rule:weekly,nextRecurrenceIndex:1,occurrences:[{...row("1","2027-10-31"),...localSlot("2027-10-31","01:30","America/New_York")}]};
+ expect(previewSchedule(current,{action:"extend"},"2027-11-01T00:00:00Z").issues.join(" ")).toContain("ambiguous");
+ const exception={status:"planned" as const,rule:rule({cadence:"weekly",anchorDate:"2027-01-05",timezone:"UTC",count:2}),nextRecurrenceIndex:2,occurrences:[row("1","2027-01-05"),row("2","2027-01-19",true)]};
+ expect(previewSchedule(exception,{action:"extend"},"2027-01-06T00:00:00Z").issues).toContain("Two proposed meetings overlap. Move the individual exception or choose a different series time.");
+ expect(previewSchedule({...exception,status:"paused"},{action:"extend"},"2027-01-06T00:00:00Z").canApply).toBe(false);
+});
+test("shortening a plan advances its next date independently of retired occurrence positions",()=>{
+ const current={status:"planned" as const,rule:rule({cadence:"weekly",anchorDate:"2027-01-05",timezone:"UTC",count:4}),nextRecurrenceIndex:4,occurrences:[row("1","2027-01-05"),row("2","2027-01-12"),row("3","2027-01-19"),row("4","2027-01-26")]};
+ const shortened=previewSchedule(current,{action:"configure",rule:{...current.rule,count:2}},"2027-01-01T00:00:00Z");expect(shortened.nextRecurrenceIndex).toBe(2);
+ const next=previewSchedule({...current,rule:{...current.rule,count:2},nextRecurrenceIndex:shortened.nextRecurrenceIndex,occurrences:shortened.changes.map(change=>({...change,id:change.id!}))},{action:"extend"},"2027-01-06T00:00:00Z");
+ expect(next.canApply).toBe(true);expect(next.changes[0]).toMatchObject({position:5,startsAt:"2027-01-19T10:00:00.000Z"});
+});

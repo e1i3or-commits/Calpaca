@@ -1,3 +1,4 @@
+import { followupExtensionHealth } from "./followup-extension-state";
 import { and, asc, eq, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { PROTECTED_RESERVATION_WINDOW_DAYS } from "../core/engagement/kickoff-booking";
@@ -45,7 +46,7 @@ export async function followupAutomationHealth(workspaceId:string,db:Db,now=new 
     .innerJoin(s.engagements,eq(s.engagements.id,s.franchiseOnboarding.engagementId))
     .where(and(eq(s.franchiseOnboarding.workspaceId,workspaceId),isNotNull(s.onboardingFollowups.enabledAt),eq(s.engagements.status,"active"))).limit(1);
   const [heartbeat]=await db.select().from(s.kickoffDeliveryWorker).where(eq(s.kickoffDeliveryWorker.name,FOLLOWUP_SCHEDULER_NAME));
-  return {reservationPending:counts?.pending??0,reservationOverdue:counts?.overdue??0,
+  return {...await followupExtensionHealth(workspaceId,db,now),reservationPending:counts?.pending??0,reservationOverdue:counts?.overdue??0,
     schedulerStale:!!active&&(!heartbeat||now.getTime()-heartbeat.lastSweepAt.getTime()>180_000),schedulerLastSweepAt:heartbeat?.lastSweepAt??null};
 }
 export type FollowupCandidate=Awaited<ReturnType<typeof listDueFollowupReservations>>[number];

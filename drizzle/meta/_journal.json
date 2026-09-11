@@ -421,6 +421,13 @@
       "when": 1789129815827,
       "tag": "0059_followup_booking_history",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1789131140348,
+      "tag": "0060_followup_rolling_extension",
+      "breakpoints": true
     }
   ]
 }
