@@ -1,3 +1,4 @@
+import { runFollowupReservationBatch } from "./followup-reservations";
 import PgBoss from "pg-boss";
 import { Temporal } from "@js-temporal/polyfill";
 import { getAuth } from "../auth/index";
@@ -281,6 +282,9 @@ export async function startJobs(): Promise<void> {
   await b.createQueue(SYNC_QUEUE);
   await b.createQueue(SWEEP_QUEUE);
   await b.createQueue(INVITE_QUEUE);
+  await b.createQueue("followup-reservation-sweep");
+  await b.work("followup-reservation-sweep",async()=>{await runFollowupReservationBatch();});
+  await b.schedule("followup-reservation-sweep","* * * * *");
   await b.createQueue("kickoff-delivery-sweep");
   await b.work("kickoff-delivery-sweep",async()=>{await runKickoffDeliveryBatch();});
   await b.schedule("kickoff-delivery-sweep","* * * * *");

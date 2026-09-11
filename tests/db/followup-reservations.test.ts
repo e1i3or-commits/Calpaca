@@ -1,3 +1,5 @@
+import { runFollowupReservationBatch } from "../../src/jobs/followup-reservations";
+import { FOLLOWUP_SCHEDULER_NAME } from "../../src/db/followup-automation-state";
 import { claimKickoffDelivery, recordKickoffReceipt, kickoffDeliveryReport } from "../../src/db/kickoff-delivery-repo";
 import {describe,expect,test} from "bun:test";
 import {Pool} from "pg";
@@ -19,7 +21,7 @@ import {runKickoffDeliveryBatch,type KickoffDeliveryDeps} from "../../src/jobs/k
 import {buildMail} from "../../src/jobs/invite-email";
 async function fixture() {
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL}),db=drizzle(pool,{schema:s});
- await migrate(db,{migrationsFolder:"drizzle"});await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);
+ await migrate(db,{migrationsFolder:"drizzle"});await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);await db.delete(s.kickoffDeliveryWorker);
  const people=await db.insert(s.users).values(Array.from({length:6},(_,i)=>({name:`Person ${i}`,email:`followup-reserve-${i}@example.invalid`}))).returning();
  const [workspace]=await db.insert(s.workspaces).values({name:"Follow-up reservations",slug:"followup-reservation-test"}).returning();
  const ws=workspace!.id,ids=people.map(p=>p.id),actor={userId:ids[0]!,workspaceRole:"admin" as const};
@@ -215,6 +217,56 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("calendar coverage",()=>{
    expect((await applyFollowupSchedule(f.ws,f.actor,f.id,request,f.db)).kind).toBe("applied");
    await f.db.update(s.eventTypes).set({rollingWindowDays:365}).where(eq(s.eventTypes.id,f.eventTypeId));
    expect(await reserveOnboardingFollowup(f.ws,f.actor,f.id,f.occurrence.id,3,f.db)).toMatchObject({kind:"blocked",issueCode:"kickoff_calendar_coverage_incomplete"});
+   expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(0);
+  }finally{await f.pool.end();}
+ });
+});
+
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("automatic follow-up reservation",()=>{
+ test("enabled schedules reserve automatically once across concurrent sweeps and expose worker health",async()=>{
+  const f=await fixture();try {
+   await f.db.update(s.workspaceMembers).set({role:"admin"}).where(eq(s.workspaceMembers.userId,f.actor.userId));
+   expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({reservationPending:3,reservationOverdue:0,schedulerStale:true});
+   await Promise.all([runFollowupReservationBatch(f.db),runFollowupReservationBatch(f.db)]);
+   expect(await f.db.select().from(s.followupReservations)).toHaveLength(3);expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(3);
+   expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({reservationPending:0,schedulerStale:false});
+   await runFollowupReservationBatch(f.db);expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(3);
+   await f.db.update(s.kickoffDeliveryWorker).set({lastSweepAt:new Date(0)}).where(eq(s.kickoffDeliveryWorker.name,FOLLOWUP_SCHEDULER_NAME));
+   expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({schedulerStale:true});
+  }finally{await f.pool.end();}
+ });
+ test("revoked automation authority is assigned, cooldown limits retries and restoration permits recovery",async()=>{
+  const f=await fixture();try {
+   await runFollowupReservationBatch(f.db);
+   expect((await f.db.select().from(s.followupReservations)).every(row=>row.issueCode==="followup_automation_identity_unavailable"&&row.ownerUserId===f.ids[2])).toBe(true);
+   expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(0);
+   const auditCount=(await f.db.select().from(s.followupReservationEvents)).length;expect(auditCount).toBe(3);
+   await runFollowupReservationBatch(f.db);expect(await f.db.select().from(s.followupReservationEvents)).toHaveLength(auditCount);
+   await f.db.update(s.workspaceMembers).set({role:"admin"}).where(eq(s.workspaceMembers.userId,f.actor.userId));
+   await f.db.update(s.followupReservations).set({updatedAt:new Date(0)});
+   await runFollowupReservationBatch(f.db);expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(3);
+   expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({reservationAttention:0,reservationPending:0});
+  }finally{await f.pool.end();}
+ });
+ test("unactivated schedules and dates beyond coverage remain unissued; dead-worker backlog is visible without a sweep",async()=>{
+  const f=await fixture();try {
+   await f.db.update(s.onboardingFollowups).set({enabledAt:null});await runFollowupReservationBatch(f.db);
+   expect(await f.db.select().from(s.followupReservations)).toHaveLength(0);expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({reservationPending:0,schedulerStale:false});
+   await f.db.update(s.onboardingFollowups).set({enabledAt:new Date(Date.now()-3600000)});
+   await f.db.update(s.onboardingFollowupOccurrences).set({updatedAt:new Date(Date.now()-3600000)});
+   expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({reservationPending:3,reservationOverdue:3});
+   const date=Temporal.Now.plainDateISO("UTC").add({days:100}).toString();
+   const request=await reviewed(f,{action:"move",occurrenceId:f.occurrence.id,date,time:"10:00"});
+   expect((await applyFollowupSchedule(f.ws,f.actor,f.id,request,f.db)).kind).toBe("applied");
+   expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({reservationPending:2,reservationOverdue:2});
+  }finally{await f.pool.end();}
+ });
+ test("a missed unreserved date is an assigned issue instead of disappearing into past history",async()=>{
+  const f=await fixture();try {
+   await f.db.update(s.onboardingFollowupOccurrences).set({startsAt:new Date(Date.now()-3600000),endsAt:new Date(Date.now()-900000)}).where(eq(s.onboardingFollowupOccurrences.id,f.occurrence.id));
+   await runFollowupReservationBatch(f.db);
+   expect((await f.db.select().from(s.followupReservations).where(eq(s.followupReservations.occurrenceId,f.occurrence.id)))[0]).toMatchObject({status:"blocked",issueCode:"followup_reservation_missed",ownerUserId:f.ids[2]});
    expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(0);
   }finally{await f.pool.end();}
  });

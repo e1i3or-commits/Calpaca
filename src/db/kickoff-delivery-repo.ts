@@ -1,3 +1,4 @@
+import { followupAutomationHealth } from "./followup-automation-state";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, lte, notExists, notInArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -229,5 +230,5 @@ export async function kickoffDeliveryReport(workspaceId:string,db:Db=getDb(),now
   const reservationAttention=reservationCounts?.attention??0;
   const [worker]=await db.select().from(s.kickoffDeliveryWorker).where(eq(s.kickoffDeliveryWorker.name,"dispatcher"));
   const workerStale=!worker||now.getTime()-worker.lastSweepAt.getTime()>180_000;
-  return {checkedAt:now.toISOString(),workerStale,lastSweepAt:worker?.lastSweepAt??null,attention:(counts?.attention??0)+reservationAttention,reservationAttention,overdue:counts?.overdue??0,deliveries:rows};
+  return {...await followupAutomationHealth(workspaceId,db,now),checkedAt:now.toISOString(),workerStale,lastSweepAt:worker?.lastSweepAt??null,attention:(counts?.attention??0)+reservationAttention,reservationAttention,overdue:counts?.overdue??0,deliveries:rows};
 }
