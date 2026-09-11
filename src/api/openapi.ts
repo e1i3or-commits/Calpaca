@@ -79,6 +79,7 @@ export const openApiOperations: readonly Operation[] = [
   ["post","/api/me/engagements/{id}/followup-schedule/preview","Engagements","Preview future follow-up changes","personal","FollowupPreview"],
   ["post","/api/me/engagements/{id}/followup-schedule/apply","Engagements","Apply reviewed follow-up dates and queue changes to issued invitations","personal","FollowupApply"],
   ["get","/api/automation/kickoff-deliveries","Engagements","Inspect workspace kickoff delivery failures and worker heartbeat","personal"],
+  ["get","/api/automation/monitor","Engagements","Read aggregate onboarding health with the dedicated monitor credential","bearer"],
   ["post","/api/automation/kickoff-deliveries/{id}/retry","Engagements","Retry a kickoff delivery before email dispatch (workspace admin)","personal"],
   ["post","/api/webhooks/kickoff-delivery","Webhooks","Record recipient-level kickoff delivery evidence","bearer","KickoffReceipt"],
   ["post", "/api/automation/franchise-onboarding/{engagementId}/kickoff", "Engagements", "Prepare a protected unpublished kickoff (workspace admin; empty body)", "personal", "PrepareKickoff"],

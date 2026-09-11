@@ -3,6 +3,7 @@ import { franchiseOnboardingRoutes } from "./routes/franchise-onboarding";
 import { onboardingPublicationRoutes } from "./routes/onboarding-publication";
 import { sesFeedbackRoutes } from "./routes/ses-feedback";
 import { kickoffDeliveryRoutes } from "./routes/kickoff-delivery";
+import { automationMonitorRoutes } from "./routes/automation-monitor";
 import { followupScheduleRoutes } from "./routes/followup-schedule";
 import { Hono } from "hono";
 import { getAuth } from "../auth/index";
@@ -56,6 +57,7 @@ app.use("/book/*", async (c, next) => {
 });
 
 app.get("/health", (c) => c.json({ ok: true }));
+app.route("/", automationMonitorRoutes);
 app.get("/version", (c) => c.json({ version: CALPACA_VERSION }));
 
 app.get("/api/auth/error", (c) => {

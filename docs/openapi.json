@@ -777,6 +777,46 @@
         }
       }
     },
+    "/api/automation/monitor": {
+      "get": {
+        "operationId": "getApiAutomationMonitor",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Read aggregate onboarding health with the dedicated monitor credential",
+        "parameters": [],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/automation/kickoff-deliveries/{id}/retry": {
       "post": {
         "operationId": "postApiAutomationKickoffDeliveriesIdRetry",
