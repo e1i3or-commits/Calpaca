@@ -20,6 +20,16 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
   for(const id of [...kickoffHosts(initial)].sort())await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${id}, 0))`);
   const ctx=(await lockKickoffContext(eventTypeId,db))!;
   const blocked=(error:KickoffBookingError)=>({kind:"blocked" as const,error});
+  if(ctx.meetingKind==="followup") {
+    if(!ctx.binding.enabledAt || !ctx.binding.kickoffBookingId)return blocked("followup_not_enabled");
+    if(ctx.binding.approvedRevision!==ctx.onboarding.revision)return blocked("followup_approval_stale");
+    const [linked]=excludeBookingId?await db.select({occurrence:s.onboardingFollowupOccurrences,schedule:s.onboardingFollowupSchedules})
+      .from(s.followupReservations).innerJoin(s.onboardingFollowupOccurrences,eq(s.onboardingFollowupOccurrences.id,s.followupReservations.occurrenceId))
+      .innerJoin(s.onboardingFollowupSchedules,eq(s.onboardingFollowupSchedules.onboardingId,s.onboardingFollowupOccurrences.onboardingId))
+      .where(and(eq(s.followupReservations.bookingId,excludeBookingId),eq(s.followupReservations.onboardingId,ctx.onboarding.id))):[];
+    if(!linked || linked.schedule.status!=="planned" || linked.occurrence.status!=="draft"
+      || linked.occurrence.startsAt.getTime()!==slot.start.epochMilliseconds || linked.occurrence.endsAt.getTime()!==slot.end.epochMilliseconds)return blocked("followup_occurrence_mismatch");
+  }
   if(!ctx.binding.publishedAt || ctx.eventType.playbookStatus!=="ready")return blocked("kickoff_not_published");
   if(ctx.engagement.status!=="active")return blocked("kickoff_engagement_inactive");
   const configIssue=await kickoffConfigurationIssue(ctx,db);
@@ -27,7 +37,7 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
   const required=kickoffHosts(ctx);
   if(!sameRoster(hostIds,required))return blocked("kickoff_roster_mismatch");
   const now=Temporal.Now.instant();
-  if(!(await getKickoffReadiness(ctx.onboarding,db,new Date(now.epochMilliseconds))).calendarSetupReady)return blocked("kickoff_setup_incomplete");
+  if(!(await getKickoffReadiness(ctx.onboarding,db,new Date(now.epochMilliseconds),ctx.meetingKind)).calendarSetupReady)return blocked("kickoff_setup_incomplete");
   const event=ctx.eventType;
   if(slot.start.until(slot.end).total({unit:"minutes"})!==event.durationMinutes)return blocked("kickoff_slot_unavailable");
   const window={start:slot.start.subtract({minutes:event.bufferBeforeMin}),end:slot.end.add({minutes:event.bufferAfterMin})};
@@ -40,12 +50,17 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
     .where(and(inArray(s.calendarConnections.userId,required),eq(s.calendarConnections.conflictEnabled,true),lt(s.calendarBusyCache.startsAt,end),gte(s.calendarBusyCache.endsAt,start)));
   const bookings=await db.select({hostIds:s.bookings.hostUserIds,startsAt:s.bookings.startsAt,endsAt:s.bookings.endsAt}).from(s.bookings)
     .where(and(eq(s.bookings.status,"confirmed"),lt(s.bookings.startsAt,end),gte(s.bookings.endsAt,start),...(excludeBookingId?[ne(s.bookings.id,excludeBookingId)]:[])));
+  // The follow-up path reserves without public holds, so it must respect
+  // active holds belonging to any other booking flow as well as bookings.
+  const held=ctx.meetingKind==="followup"?await db.select().from(s.holds).where(and(inArray(s.holds.hostUserId,required),eq(s.holds.status,"active"),
+    gte(s.holds.expiresAt,new Date(now.epochMilliseconds)),lt(s.holds.slotStart,end),gte(s.holds.slotEnd,start))):[];
   const interval=(row:{startsAt:Date;endsAt:Date})=>({start:Temporal.Instant.fromEpochMilliseconds(row.startsAt.getTime()),end:Temporal.Instant.fromEpochMilliseconds(row.endsAt.getTime())});
   for(const id of required) {
     const schedule=schedules.find(row=>row.userId===id);
     if(!schedule)return blocked("kickoff_setup_incomplete");
     const busy=[...cached.filter(row=>row.userId===id && (!previous?.googleEventId || row.externalEventId!==previous.googleEventId)).map(interval),
-      ...bookings.filter(row=>row.hostIds.includes(id)).map(interval)];
+      ...bookings.filter(row=>row.hostIds.includes(id)).map(interval),
+      ...held.filter(row=>row.hostUserId===id).map(row=>interval({startsAt:row.slotStart,endsAt:row.slotEnd}))];
     const open=effectiveOpenIntervals(schedule.rules,schedule.overrides,schedule.timezone,window);
     const slots=generateSlots(subtract(open,busy),{durationMinutes:event.durationMinutes,bufferBeforeMin:event.bufferBeforeMin,
       bufferAfterMin:event.bufferAfterMin,minimumNoticeMin:event.minimumNoticeMin,rollingWindowDays:event.rollingWindowDays,

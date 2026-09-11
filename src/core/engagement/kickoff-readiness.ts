@@ -51,7 +51,7 @@ function calendarIssues(calendars: KickoffCalendarEvidence[], now: Date): Kickof
 
 /** All six entries are retained, including people whose setup is incomplete.
  * Only stored, non-secret evidence is considered; no provider writes occur. */
-export function evaluateKickoffReadiness(evidence: KickoffParticipantEvidence[], organizerUserId: string, now: Date) {
+export function evaluateKickoffReadiness(evidence: KickoffParticipantEvidence[], organizerUserId: string, now: Date, requiredUserIds?: readonly string[]) {
   const participants = evidence.map(person => {
     const issues: KickoffSetupIssue[] = [];
     if (!person.active) issues.push(issue("participant_inactive"));
@@ -73,7 +73,7 @@ export function evaluateKickoffReadiness(evidence: KickoffParticipantEvidence[],
     const calendars = person.calendars.filter(calendar => calendar.conflictEnabled);
     if (!calendars.length) issues.push(issue("calendar_missing"));
     else issues.push(...calendarIssues(calendars, now));
-    return { userId: person.userId, name: person.name, required: true as const, ready: issues.length === 0, issues };
+    return { userId: person.userId, name: person.name, required: requiredUserIds ? requiredUserIds.includes(person.userId) : true, ready: issues.length === 0, issues };
   });
   const organizer = evidence.find(person => person.userId === organizerUserId);
   const organizingCalendars = organizer?.calendars.filter(calendar => calendar.isWriteDestination) ?? [];
@@ -85,7 +85,10 @@ export function evaluateKickoffReadiness(evidence: KickoffParticipantEvidence[],
   return {
     checkedAt: now.toISOString(),
     calendarSetupReady: participants.length === 6 && new Set(participants.map(person => person.userId)).size === 6
-      && participants.every(person => person.ready) && organizerIssues.length === 0,
+      && participants.filter(person => person.required).every(person => person.ready)
+      && participants.every(person => !person.issues.some(issue => issue.code === "participant_inactive"))
+      && (!requiredUserIds || (requiredUserIds.length === 4 && new Set(requiredUserIds).size === 4 && requiredUserIds.every(id => participants.some(person => person.userId === id))))
+      && organizerIssues.length === 0,
     participants,
     organizer: { userId: organizerUserId, ready: organizerIssues.length === 0, issues: organizerIssues },
     // Calendar setup is only one prerequisite. Do not release a welcome email

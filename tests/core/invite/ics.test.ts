@@ -92,3 +92,9 @@ describe("buildIcs", () => {
     expect(ics).not.toContain("CN=;");
   });
 });
+
+test("optional leadership remains optional in interoperable calendar attachments",()=>{
+ const unfolded=buildIcs({...base,attendees:[...base.attendees,{name:"Leadership",email:"leader@example.invalid",role:"optional"}]}).replace(/\r\n /g,"");
+ expect(unfolded).toContain("ATTENDEE;CN=Leadership;ROLE=OPT-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:leader@example.invalid");
+ expect(unfolded).toContain("ATTENDEE;CN=Invitee;ROLE=REQ-PARTICIPANT;");
+});

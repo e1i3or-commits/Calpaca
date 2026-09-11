@@ -4,6 +4,7 @@ import { ApiError, applyFollowupSchedule, getFollowupSchedule, previewFollowupSc
 const control = "min-h-11 rounded-lg border border-input bg-background px-3 text-sm disabled:opacity-50";
 const button = "min-h-11 rounded-lg border border-input px-4 text-sm disabled:opacity-50";
 const messages: Record<string,string> = {
+  issued_schedule_requires_reconciliation: "Follow-up bookings exist. Calendar changes must be reconciled before editing this schedule.",
   revision_conflict: "The schedule changed. Refresh it and preview your changes again.",
   preview_changed: "The preview is out of date. Refresh and preview again before saving.",
   engagement_paused: "This Engagement is paused. Resume the Engagement before editing its schedule.",
@@ -39,7 +40,7 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
     try {const data=await applyFollowupSchedule(engagement.id,{...pending.input,previewHash:pending.previewHash,requestId:pending.requestId});setSnapshot(data);if(data.schedule)setRule(data.schedule.rule);setPending(null);setMoving(null);setNotice("Draft schedule saved. Invitations have not been sent.");await reload();}catch(e){setError(explain(e));}finally{setBusy(false);}
   }
   const schedule=snapshot?.schedule;
-  const locked=busy||!snapshot?.canManage||["paused","completed","archived"].includes(engagement.status)||schedule?.status==="ended";
+  const locked=busy||snapshot?.deliveryState==="reservations_present"||!snapshot?.canManage||["paused","completed","archived"].includes(engagement.status)||schedule?.status==="ended";
   const zone=rule.timezone;
   const format=(value:string,timezone=zone)=>{try{return new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short",timeZone:timezone}).format(new Date(value));}catch{return value;}};
   const update=(patch:Partial<FollowupRule>)=>{setRule(value=>({...value,...patch}));setPending(null);setNotice(null);};
@@ -49,7 +50,8 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
     {error&&<p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
     {notice&&<p role="status" className="mt-3 text-sm text-primary">{notice}</p>}
     {!snapshot?<p role="status" className="mt-3 text-sm">{error?"Schedule unavailable. Use Refresh schedule to retry.":"Loading follow-up schedule…"}</p>:<>
-      {schedule&&<p className="mt-3 text-sm font-medium">{schedule.status==="planned"?"Draft schedule":schedule.status==="paused"?"Schedule paused":"Schedule ended"} · {schedule.rule.timezone}</p>}
+      {schedule&&<p className="mt-3 text-sm font-medium">{schedule.status==="planned"?(snapshot.deliveryState==="reservations_present"?"Schedule with bookings":"Draft schedule"):schedule.status==="paused"?"Schedule paused":"Schedule ended"} · {schedule.rule.timezone}</p>}
+      {snapshot.deliveryState==="reservations_present"&&<p role="status" className="mt-2 text-sm">Follow-up bookings exist. Calendar changes must be reconciled before editing this schedule. Each meeting shows its invitation status below.</p>}
       {["paused","completed","archived"].includes(engagement.status)&&<p className="mt-2 text-sm text-muted-foreground">The Engagement is {engagement.status}. Schedule changes are disabled.</p>}
       {schedule?.status!=="ended"&&<form className="mt-4" onSubmit={event=>{event.preventDefault();void preview({action:"configure",rule});}}>
         <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -74,7 +76,7 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
         <div className="mt-3 flex gap-2"><button className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50" disabled={locked||!pending.preview.canApply} onClick={()=>void save()}>{busy?"Saving…":"Save reviewed changes"}</button><button className={button} disabled={busy} onClick={()=>setPending(null)}>Discard preview</button></div>
       </div>}
       {schedule&&<div className="mt-5"><h5 className="text-sm font-medium">Saved dates · {schedule.rule.timezone}</h5><ul className="mt-2 divide-y divide-border">{schedule.occurrences.map(row=><li key={row.id} className="py-3 text-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2"><p>{format(row.startsAt,schedule.rule.timezone)} <span className="text-muted-foreground">· {row.status}{row.exception?" · Individually moved":""}{new Date(row.startsAt).getTime()<=Date.now()?" · Past or started":""}</span></p>
+        <div className="flex flex-wrap items-center justify-between gap-2"><p>{format(row.startsAt,schedule.rule.timezone)} <span className="text-muted-foreground">· {row.bookingId?`Booked · Invitation ${row.inviteStatus}`:row.status}{row.exception?" · Individually moved":""}{new Date(row.startsAt).getTime()<=Date.now()?" · Past or started":""}</span></p>
         {row.status!=="cancelled"&&new Date(row.startsAt).getTime()>Date.now()&&<button className={button} disabled={locked} onClick={()=>{setMoving(row.id);setMoveDate("");setMoveTime(schedule.rule.localTime);setPending(null);}}>Move this meeting</button>}</div>
         {moving===row.id&&<form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={event=>{event.preventDefault();void preview({action:"move",occurrenceId:row.id,date:moveDate,time:moveTime});}}><label className="grid gap-1">New date<input required type="date" className={control} value={moveDate} onChange={event=>{setMoveDate(event.target.value);setPending(null);}}/></label><label className="grid gap-1">New time<input required type="time" className={control} value={moveTime} onChange={event=>{setMoveTime(event.target.value);setPending(null);}}/></label><button className={button} disabled={locked}>Preview this move</button></form>}
       </li>)}</ul></div>}

@@ -164,8 +164,8 @@ export function createEngagementRoutes(deps: EngagementDeps = defaultDeps) {
       return c.json({ error: "engagement_not_found" }, 404);
     }
     if (result.kind === "forbidden") return c.json({ error: "forbidden" }, 403);
-    if (result.kind === "invalid_transition") {
-      return c.json({ error: "invalid_transition" }, 409);
+    if (result.kind === "invalid_transition" || result.kind === "issued_schedule_requires_reconciliation") {
+      return c.json({ error: result.kind }, 409);
     }
     return c.json({ engagement: result.engagement });
   });

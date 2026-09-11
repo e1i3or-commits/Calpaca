@@ -1,3 +1,4 @@
+import { prepareFollowupInput, reserveFollowupInput } from "./routes/followup-reservations";
 import { franchiseOnboardingInput, onboardingCadenceUpdate } from "../core/engagement/franchise-onboarding";
 import { kickoffReceiptInput } from "../core/invite/kickoff-delivery";
 import { followupPreviewInput, followupApplyInput } from "../core/engagement/followup-schedule";
@@ -42,6 +43,8 @@ const requestSchemas = {
   KickoffReceipt: kickoffReceiptInput,
   FollowupPreview: followupPreviewInput,
   FollowupApply: followupApplyInput,
+  PrepareFollowup: prepareFollowupInput,
+  ReserveFollowup: reserveFollowupInput,
   Hold: holdBodySchema,
   Booking: bookingBodySchema,
   Reschedule: rescheduleBodySchema,
@@ -58,6 +61,9 @@ export type RequestSchemaName = keyof typeof requestSchemas;
 export const documentedRequestSchemas = requestSchemas;
 
 export const openApiOperations: readonly Operation[] = [
+  ["get","/api/automation/followup-reservations/{engagementId}","Engagements","Inspect assigned follow-up reservation issues (workspace admin)","personal"],
+  ["post","/api/automation/followup-reservations/{engagementId}","Engagements","Prepare a protected private follow-up conversation (workspace admin)","personal","PrepareFollowup"],
+  ["post","/api/automation/followup-reservations/{engagementId}/{occurrenceId}/reserve","Engagements","Reserve one approved follow-up and queue verified invitation delivery (workspace admin)","personal","ReserveFollowup"],
   ["get","/api/me/engagements/{id}/followup-schedule","Engagements","Read the planned follow-up schedule","personal"],
   ["post","/api/me/engagements/{id}/followup-schedule/preview","Engagements","Preview future follow-up changes","personal","FollowupPreview"],
   ["post","/api/me/engagements/{id}/followup-schedule/apply","Engagements","Apply a reviewed draft schedule without issuing invitations","personal","FollowupApply"],

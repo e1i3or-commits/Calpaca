@@ -67,12 +67,12 @@ describe("documented request schemas", () => {
       const schema = schemas[`${name}Request`];
       expect(schema).toBeDefined();
       expect(schema!.type).toBe("object");
-      // Kickoff preparation deliberately accepts no settings: its roster
+      // Protected conversation preparation accepts no settings: its roster
       // comes from the approved source plan, never request overrides.
-      if(name==="PrepareKickoff") {
+      if(name==="PrepareKickoff" || name==="PrepareFollowup") {
         expect(schema!.properties).toEqual({});
-        expect(documentedRequestSchemas.PrepareKickoff.safeParse({}).success).toBe(true);
-        expect(documentedRequestSchemas.PrepareKickoff.safeParse({publishedAt:"now"}).success).toBe(false);
+        expect(documentedRequestSchemas[name].safeParse({}).success).toBe(true);
+        expect(documentedRequestSchemas[name].safeParse({publishedAt:"now"}).success).toBe(false);
       } else {
         expect(Object.keys(schema!.properties as object).length).toBeGreaterThan(0);
       }

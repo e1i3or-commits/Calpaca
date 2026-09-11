@@ -7,6 +7,7 @@ import { Temporal } from "@js-temporal/polyfill";
  */
 
 export interface IcsPerson {
+  readonly role?: "required" | "optional";
   readonly name: string;
   readonly email: string;
 }
@@ -73,7 +74,7 @@ function formatUtc(instant: Temporal.Instant): string {
 function personLine(prop: "ORGANIZER" | "ATTENDEE", person: IcsPerson): string {
   const params =
     prop === "ATTENDEE"
-      ? `;CN=${escapeText(person.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE`
+      ? `;CN=${escapeText(person.name)};ROLE=${person.role === "optional" ? "OPT-PARTICIPANT" : "REQ-PARTICIPANT"};PARTSTAT=NEEDS-ACTION;RSVP=TRUE`
       : `;CN=${escapeText(person.name)}`;
   return `${prop}${params}:mailto:${person.email}`;
 }

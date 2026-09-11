@@ -61,3 +61,29 @@ test("cancellation is verified by readback and an already deleted event is not d
  await expect(syncKickoffGoogle(row,"primary","synthetic",request)).rejects.toMatchObject({code:"calendar_outcome_unknown"});
  await syncKickoffGoogle(row,"primary","synthetic",request);expect(writes).toBe(1);
 });
+
+test("follow-up leadership flags survive provider write and readback; a changed flag is rejected",async()=>{
+ const base=fixture();const row:Delivery={...base,snapshot:{...base.snapshot,hosts:base.snapshot.hosts.map((host,i)=>({...host,role:i>3?"optional":"required"}))}};
+ let event:Record<string,unknown>|null=null,writes=0;
+ const request=(async(_url:unknown,options?:RequestInit)=>{
+  if(options?.method==="POST"){writes++;event={...JSON.parse(String(options.body)),etag:'"v1"',organizer:{email:"host@example.invalid"},conferenceData:{entryPoints:[{entryPointType:"video",uri:"https://meet.google.com/test-meet"}]}};}
+  return event?Response.json(event):new Response(null,{status:404});
+ }) as unknown as typeof fetch;
+ await syncKickoffGoogle(row,"primary","synthetic",request);
+ const attendees=event!.attendees as {email:string;optional:boolean}[];
+ expect(attendees.filter(person=>person.optional).map(person=>person.email)).toEqual(["team-3@example.invalid","team-4@example.invalid"]);
+ expect(attendees).toHaveLength(6);
+ attendees.find(person=>person.optional)!.optional=false;
+ await expect(syncKickoffGoogle(row,"primary","synthetic",request)).rejects.toMatchObject({code:"calendar_readback_incomplete"});expect(writes).toBe(1);
+});
+
+test("a secondary organizing calendar still invites the human Franchise Success organizer",async()=>{
+ const row=fixture();let event:Record<string,unknown>|null=null;
+ const request=(async(_url:unknown,options?:RequestInit)=>{
+  if(options?.method==="POST")event={...JSON.parse(String(options.body)),etag:'"v1"',organizer:{email:"team-calendar@example.invalid"},conferenceData:{entryPoints:[{entryPointType:"video",uri:"https://meet.google.com/test-meet"}]}};
+  return event?Response.json(event):new Response(null,{status:404});
+ }) as unknown as typeof fetch;
+ await syncKickoffGoogle(row,"team-calendar@example.invalid","synthetic",request);
+ expect(event!.attendees).toContainEqual({email:"host@example.invalid",displayName:"Host",optional:false});
+ expect(event!.attendees).toHaveLength(7);
+});

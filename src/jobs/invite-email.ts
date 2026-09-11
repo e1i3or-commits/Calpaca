@@ -324,7 +324,7 @@ export function buildMail(
     start: booking.startsAt,
     end: booking.endsAt,
     timezone: booking.inviteeTimezone,
-    links: kind === "cancelled" ? null : buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken),
+    links: kind === "cancelled" || ctx.managementLinksEnabled === false ? null : buildLinks(booking.id, booking.rescheduleToken, booking.cancelToken),
     icsAttached: includeIcs,
     notes: preparation || null,
     location: renderedLocation || null,
@@ -348,7 +348,7 @@ export function buildMail(
         organizer: { name: organizer.name, email: organizer.email },
         attendees: [
           { name: booking.inviteeName, email: booking.inviteeEmail },
-          ...hosts.slice(1).map((h) => ({ name: h.name, email: h.email })),
+          ...hosts.slice(1).map((h) => ({ name: h.name, email: h.email, role: h.role })),
           // A guest supplies only an address, and IcsPerson.name is
           // interpolated straight into CN=, so an empty string would emit a
           // bare "CN=;". The address is what clients show anyway.

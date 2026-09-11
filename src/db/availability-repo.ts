@@ -115,6 +115,7 @@ export async function getPublicBookingPage(
     .where(and(
       eq(eventTypes.workspaceId, workspaceId),
       notExists(executor.select({id:schema.onboardingKickoffs.eventTypeId}).from(schema.onboardingKickoffs).where(eq(schema.onboardingKickoffs.eventTypeId,eventTypes.id))),
+      notExists(executor.select({id:schema.onboardingFollowups.eventTypeId}).from(schema.onboardingFollowups).where(eq(schema.onboardingFollowups.eventTypeId,eventTypes.id))),
       ...(configuredPage?.eventTypeIds.length
         ? [inArray(eventTypes.id, configuredPage.eventTypeIds)]
         : []),

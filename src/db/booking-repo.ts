@@ -2,7 +2,7 @@ import { and, asc, count, desc, eq, gte, inArray, lt, or, sql } from "drizzle-or
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { guardKickoffBooking } from "./kickoff-booking-guard";
-import { kickoffHosts, loadKickoffContext } from "./kickoff-context";
+import { kickoffHosts, loadKickoffContext, protectedAttendance, protectedOrganizer } from "./kickoff-context";
 import { sameRoster } from "../core/engagement/kickoff-booking";
 import { queueKickoffDelivery } from "./kickoff-delivery-repo";
 import { getDb } from "./client";
@@ -175,6 +175,7 @@ export async function appendEvent<K extends BookingEventKind>(
     const [deliveryBooking]=await tx.select({eventTypeId:bookings.eventTypeId}).from(bookings).where(eq(bookings.id,bookingId));
     const deliveryKickoff=deliveryBooking?await loadKickoffContext(deliveryBooking.eventTypeId,tx):null;
     if(deliveryKickoff) {
+      if(deliveryKickoff.meetingKind==="followup" && ["rescheduled","reassigned","cancelled"].includes(kind))return err({kind,reason:"followup_managed_schedule"});
       for(const hostId of [...kickoffHosts(deliveryKickoff)].sort())await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${hostId}, 0))`);
       await tx.select({id:bookings.id}).from(bookings).where(eq(bookings.id,bookingId)).for("update");
       if(["invite_sent","invite_delivered","invite_failed","reminder_sent"].includes(kind)) {
@@ -313,6 +314,7 @@ export async function setGoogleEventId(
 }
 
 export interface InviteHost {
+  readonly role?: "required" | "optional";
   readonly id: string;
   readonly name: string;
   readonly email: string;
@@ -320,6 +322,8 @@ export interface InviteHost {
 }
 
 export interface InviteContext {
+  readonly meetingKind?: "kickoff" | "followup";
+  readonly managementLinksEnabled?: boolean;
   readonly workspaceId?: string;
   readonly booking: BookingRow;
   readonly eventTypeTitle: string;
@@ -354,21 +358,22 @@ export async function getInviteContext(
     .where(eq(eventTypes.id, booking.eventTypeId));
   if (!eventType) return null;
 
-  const hostRows = booking.hostUserIds.length
+  const kickoff=await loadKickoffContext(booking.eventTypeId,executor);
+  const invitationIds=kickoff ? [protectedOrganizer(kickoff),...protectedAttendance(kickoff).map(host=>host.userId).filter(id=>id!==protectedOrganizer(kickoff)).sort()] : [...booking.hostUserIds];
+  const hostRows = invitationIds.length
     ? await executor
         .select({ id: users.id, name: users.name, email: users.email, timezone: users.timezone })
         .from(users)
-        .where(inArray(users.id, [...booking.hostUserIds]))
+        .where(inArray(users.id, invitationIds))
     : [];
   // preserve hostUserIds order: the first host is the ICS organizer
   const byId = new Map(hostRows.map((h) => [h.id, h]));
-  const hosts = booking.hostUserIds.flatMap((id) => {
+  const hosts = invitationIds.flatMap((id) => {
     const row = byId.get(id);
-    return row ? [{ id: row.id, name: row.name, email: row.email, timezone: row.timezone }] : [];
+    return row ? [{ id: row.id, name: row.name, email: row.email, timezone: row.timezone, ...(kickoff ? {role: protectedAttendance(kickoff).find(host=>host.userId===id)!.role} : {}) }] : [];
   });
-  const kickoff=await loadKickoffContext(booking.eventTypeId,executor);
-  if(kickoff && (!sameRoster(hosts.map(host=>host.id),kickoffHosts(kickoff))
-    || hosts[0]?.id!==kickoff.onboarding.input.organizerUserId)) {
+  if(kickoff && (!sameRoster(hosts.map(host=>host.id),invitationIds) || !sameRoster(booking.hostUserIds,kickoffHosts(kickoff))
+    || hosts[0]?.id!==protectedOrganizer(kickoff))) {
     throw new Error("kickoff_invitation_roster_unavailable");
   }
 
@@ -380,6 +385,7 @@ export async function getInviteContext(
   return {
     ...(booking.workspaceId ? { workspaceId: booking.workspaceId } : {}),
     booking,
+    ...(kickoff ? {meetingKind:kickoff.meetingKind,managementLinksEnabled:kickoff.meetingKind!=="followup"} : {}),
     eventTypeTitle: eventType.title,
     eventTypeSlug: eventType.slug,
     eventTypeTheme: eventType.theme,

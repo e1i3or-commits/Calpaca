@@ -16,7 +16,8 @@ type Event = {
 export async function syncKickoffGoogle(delivery:Delivery,calendarId:string,accessToken:string,request:typeof fetch=fetch) {
   const ctx=delivery.snapshot,booking=ctx.booking,organizer=ctx.hosts[0];
   if(!organizer)throw new KickoffProviderError("organizer_missing");
-  const attendees=[{email:booking.inviteeEmail,displayName:booking.inviteeName},...ctx.hosts.slice(1).map(host=>({email:host.email,displayName:host.name})),...(booking.guestEmails??[]).map(email=>({email}))]
+  const expectedOrganizer=(calendarId==="primary"?organizer.email:calendarId).toLowerCase();
+  const attendees=[{email:booking.inviteeEmail,displayName:booking.inviteeName,optional:false},...ctx.hosts.filter(host=>host.email.toLowerCase()!==expectedOrganizer).map(host=>({email:host.email,displayName:host.name,optional:host.role==="optional"})),...(booking.guestEmails??[]).map(email=>({email,optional:false}))]
     .filter((person,index,all)=>all.findIndex(other=>other.email.toLowerCase()===person.email.toLowerCase())===index);
   const base=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
   const url=`${base}/${encodeURIComponent(delivery.googleEventId)}`;
@@ -34,7 +35,6 @@ export async function syncKickoffGoogle(delivery:Delivery,calendarId:string,acce
     if(!response.ok)throw new KickoffProviderError("calendar_read_failed",true);
     try {return await response.json() as Event;}catch{throw new KickoffProviderError("calendar_readback_invalid",true);}
   }
-  const expectedOrganizer=(calendarId==="primary"?organizer.email:calendarId).toLowerCase();
   const needsMeet=booking.bookingLocation?.type==="google_meet"||(!booking.bookingLocation&&booking.meetingFormat==="google_meet");
   function matches(event:Event,requireOperation=true) {
     const expected=new Set(attendees.map(person=>person.email.toLowerCase()));
@@ -45,7 +45,7 @@ export async function syncKickoffGoogle(delivery:Delivery,calendarId:string,acce
       && new Date(event.start?.dateTime??"").getTime()===new Date(booking.startsAt).getTime()
       && new Date(event.end?.dateTime??"").getTime()===new Date(booking.endsAt).getTime()
       && actual.length===expected.size && new Set(actual.map(person=>person.email?.toLowerCase())).size===expected.size
-      && actual.every(person=>person.email&&expected.has(person.email.toLowerCase())&&!person.optional)
+      && actual.every(person=>person.email&&expected.has(person.email.toLowerCase())&&!!person.optional===attendees.find(host=>host.email.toLowerCase()===person.email!.toLowerCase())?.optional)
       && event.extendedProperties?.private?.tourscaleBookingId===booking.id
       && (!requireOperation||event.extendedProperties?.private?.tourscaleDeliveryId===delivery.id)
       && (!needsMeet||event.conferenceData?.entryPoints?.some(point=>point.entryPointType==="video"&&point.uri?.startsWith("https://meet.google.com/")));
@@ -71,7 +71,7 @@ export async function syncKickoffGoogle(delivery:Delivery,calendarId:string,acce
     ||Number(existing.extendedProperties?.private?.tourscaleSequence??0)>delivery.sequence))throw new KickoffProviderError("calendar_identity_conflict");
   if(!existing&&delivery.kind!=="created")throw new KickoffProviderError("calendar_event_missing");
   const body={summary:`${ctx.eventTypeTitle}: ${organizer.name} and ${booking.inviteeName}`,
-    start:{dateTime:booking.startsAt},end:{dateTime:booking.endsAt},attendees:attendees.map(person=>({...person,optional:false})),
+    start:{dateTime:booking.startsAt},end:{dateTime:booking.endsAt},attendees,
     extendedProperties:{private:{tourscaleBookingId:booking.id,tourscaleDeliveryId:delivery.id,tourscaleSequence:String(delivery.sequence)}},
     ...(!existing?{id:delivery.googleEventId}:{}),
     ...(!existing&&needsMeet?{conferenceData:{createRequest:{requestId:delivery.googleEventId,conferenceSolutionKey:{type:"hangoutsMeet"}}}}:{}),

@@ -898,3 +898,31 @@ export const onboardingFollowupChanges = pgTable("onboarding_followup_changes", 
   changes: jsonb("changes").$type<import("../core/engagement/followup-schedule").ScheduleChange[]>().notNull(),
   createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
 }, t => [uniqueIndex("onboarding_followup_request_uq").on(t.onboardingId,t.requestId), uniqueIndex("onboarding_followup_revision_uq").on(t.onboardingId,t.revision)]);
+
+export const onboardingFollowups = pgTable("onboarding_followups", {
+  onboardingId: uuid("onboarding_id").primaryKey().references(() => franchiseOnboarding.id),
+  eventTypeId: uuid("event_type_id").notNull().unique().references(() => eventTypes.id),
+  createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+  // Written only by a future controlled activation flow, never preparation.
+  enabledAt: timestamp("enabled_at", {withTimezone:true}),
+  approvedRevision: integer("approved_revision"),
+  kickoffBookingId: uuid("kickoff_booking_id").references(() => bookings.id),
+});
+export const followupReservations = pgTable("followup_reservations", {
+  occurrenceId: uuid("occurrence_id").primaryKey().references(() => onboardingFollowupOccurrences.id),
+  onboardingId: uuid("onboarding_id").notNull().references(() => onboardingFollowups.onboardingId),
+  bookingId: uuid("booking_id").unique().references(() => bookings.id),
+  status: text("status").$type<"blocked"|"reserved">().notNull(),
+  ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
+  issueCode: text("issue_code"),
+  updatedAt: timestamp("updated_at", {withTimezone:true}).notNull().defaultNow(),
+});
+export const followupReservationEvents = pgTable("followup_reservation_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  occurrenceId: uuid("occurrence_id").notNull().references(() => followupReservations.occurrenceId),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id),
+  outcome: text("outcome").notNull(),
+  issueCode: text("issue_code"),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+});

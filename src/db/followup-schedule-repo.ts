@@ -6,6 +6,7 @@ import type { EngagementActor } from "../core/engagement/permissions";
 import { getDb } from "./client";
 import { getEngagement } from "./engagement-repo";
 import * as s from "./schema";
+import { hasFollowupReservations } from "./followup-reservation-state";
 type Db = NodePgDatabase<typeof s>;
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -20,8 +21,9 @@ async function load(workspaceId: string, actor: EngagementActor, engagementId: s
   if (!onboarding) return null;
   const [schedule] = await db.select().from(s.onboardingFollowupSchedules).where(eq(s.onboardingFollowupSchedules.onboardingId,onboarding.id));
   const rows = schedule ? await db.select().from(s.onboardingFollowupOccurrences).where(eq(s.onboardingFollowupOccurrences.onboardingId,onboarding.id)).orderBy(asc(s.onboardingFollowupOccurrences.position)) : [];
+  const reservations=await db.select({occurrenceId:s.followupReservations.occurrenceId,bookingId:s.followupReservations.bookingId,inviteStatus:s.bookings.inviteStatus}).from(s.followupReservations).leftJoin(s.bookings,eq(s.bookings.id,s.followupReservations.bookingId)).where(eq(s.followupReservations.onboardingId,onboarding.id));
   const snapshot: ScheduleSnapshot = {revision: onboarding.revision, engagementStatus: engagement.status, canManage: engagement.canManage,
-    deliveryState: "not_invited", schedule: schedule ? {status: schedule.status, rule: schedule.rule, occurrences: rows.map(row => ({id:row.id,position:row.position,startsAt:row.startsAt.toISOString(),endsAt:row.endsAt.toISOString(),status:row.status,exception:row.exception}))} : null};
+    deliveryState: reservations.some(row=>row.bookingId) ? "reservations_present" : "not_invited", schedule: schedule ? {status: schedule.status, rule: schedule.rule, occurrences: rows.map(row => ({id:row.id,position:row.position,startsAt:row.startsAt.toISOString(),endsAt:row.endsAt.toISOString(),status:row.status,exception:row.exception,...(reservations.find(item=>item.occurrenceId===row.id)?.bookingId ? {bookingId:reservations.find(item=>item.occurrenceId===row.id)!.bookingId!,inviteStatus:reservations.find(item=>item.occurrenceId===row.id)!.inviteStatus!}: {})}))} : null};
   return {onboarding, snapshot};
 }
 async function lock(workspaceId: string, engagementId: string, db: Db, write: boolean) {
@@ -52,6 +54,7 @@ export async function previewFollowupSchedule(workspaceId:string,actor:Engagemen
     await lock(workspaceId,engagementId,tx,false);
     const result=await load(workspaceId,actor,engagementId,tx);if(!result)return {kind:"not_found" as const};
     const denied=allowed(result.snapshot);if(denied)return {kind:denied};
+    if(await hasFollowupReservations(result.onboarding.id,tx))return {kind:"issued_schedule_requires_reconciliation" as const};
     if(result.snapshot.revision!==input.data.revision)return {kind:"revision_conflict" as const};
     return {kind:"previewed" as const,...makePreview(result.snapshot,input.data,now)};
   });
@@ -66,6 +69,7 @@ export async function applyFollowupSchedule(workspaceId:string,actor:EngagementA
     const [prior]=await tx.select().from(s.onboardingFollowupChanges).where(and(eq(s.onboardingFollowupChanges.onboardingId,result.onboarding.id),eq(s.onboardingFollowupChanges.requestId,value.requestId)));
     if(prior)return canonical(prior.input)===canonical(value) ? {kind:"reused" as const,appliedRevision:prior.revision,...result.snapshot} : {kind:"request_conflict" as const};
     const denied=allowed(result.snapshot);if(denied)return {kind:denied};
+    if(await hasFollowupReservations(result.onboarding.id,tx))return {kind:"issued_schedule_requires_reconciliation" as const};
     if(result.snapshot.revision!==value.revision)return {kind:"revision_conflict" as const};
     const {preview,previewHash}=makePreview(result.snapshot,{revision:value.revision,command:value.command},now);
     if(value.previewHash!==previewHash)return {kind:"preview_changed" as const};

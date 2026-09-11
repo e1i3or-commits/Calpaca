@@ -1,3 +1,4 @@
+import { followupReservationRoutes } from "./routes/followup-reservations";
 import { franchiseOnboardingRoutes } from "./routes/franchise-onboarding";
 import { kickoffDeliveryRoutes } from "./routes/kickoff-delivery";
 import { followupScheduleRoutes } from "./routes/followup-schedule";
@@ -87,5 +88,6 @@ app.route("/", engagementRoutes);
 app.route("/", franchiseOnboardingRoutes);
 app.route("/", kickoffDeliveryRoutes);
 app.route("/", followupScheduleRoutes);
+app.route("/", followupReservationRoutes);
 app.route("/", conversationRoutes);
 app.route("/", proposalRoutes);

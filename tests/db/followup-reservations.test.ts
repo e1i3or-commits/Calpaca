@@ -1,0 +1,114 @@
+import { kickoffDeliveryReport } from "../../src/db/kickoff-delivery-repo";
+import {describe,expect,test} from "bun:test";
+import {Pool} from "pg";
+import {drizzle} from "drizzle-orm/node-postgres";
+import {migrate} from "drizzle-orm/node-postgres/migrator";
+import {eq,sql} from "drizzle-orm";
+import {Temporal} from "@js-temporal/polyfill";
+import * as s from "../../src/db/schema";
+import {franchiseOnboardingInput} from "../../src/core/engagement/franchise-onboarding";
+import {provisionFranchiseOnboarding} from "../../src/db/franchise-onboarding-repo";
+import {prepareOnboardingKickoff} from "../../src/db/prepare-kickoff-repo";
+import {applyFollowupSchedule,getFollowupSchedule,previewFollowupSchedule} from "../../src/db/followup-schedule-repo";
+import {getFollowupReservations,prepareOnboardingFollowups,reserveOnboardingFollowup} from "../../src/db/followup-reservation-repo";
+import {appendEvent,getInviteContext} from "../../src/db/booking-repo";
+import {updateEngagementStatus} from "../../src/db/engagement-repo";
+import {kickoffPubliclyAvailable} from "../../src/db/kickoff-context";
+import {createHold} from "../../src/db/holds-repo";
+import {runKickoffDeliveryBatch,type KickoffDeliveryDeps} from "../../src/jobs/kickoff-delivery";
+import {buildMail} from "../../src/jobs/invite-email";
+async function fixture() {
+ const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL}),db=drizzle(pool,{schema:s});
+ await migrate(db,{migrationsFolder:"drizzle"});await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);
+ const people=await db.insert(s.users).values(Array.from({length:6},(_,i)=>({name:`Person ${i}`,email:`followup-reserve-${i}@example.invalid`}))).returning();
+ const [workspace]=await db.insert(s.workspaces).values({name:"Follow-up reservations",slug:"followup-reservation-test"}).returning();
+ const ws=workspace!.id,ids=people.map(p=>p.id),actor={userId:ids[0]!,workspaceRole:"admin" as const};
+ await db.insert(s.workspaceMembers).values(ids.map(userId=>({userId,workspaceId:ws,role:"member" as const})));
+ const provision=await provisionFranchiseOnboarding(ws,actor,franchiseOnboardingInput.parse({sourceWorkspaceId:crypto.randomUUID(),sourceProjectKey:"reserve",locationKey:crypto.randomUUID(),franchiseeId:"5854883000000000001",businessUnitId:"5854883000000000002",primaryContactId:"5854883000000000003",clientName:"Reservation Client",locationName:"Sample City",franchiseSuccessUserIds:ids.slice(2),kaiUserId:ids[0],andrewUserId:ids[1],accountLeadUserId:ids[2],organizerUserId:ids[0]}),db);
+ if(provision.kind!=="created")throw new Error("fixture provision");const id=provision.onboarding.engagementId;
+ const day=Temporal.Now.plainDateISO("UTC").add({days:2}).toString();
+ const input={revision:1,command:{action:"configure" as const,rule:{cadence:"biweekly" as const,anchorDate:day,localTime:"10:00",timezone:"UTC",monthlyMode:"day_of_month" as const,count:3}}};
+ const preview=await previewFollowupSchedule(ws,actor,id,input,db);if(preview.kind!=="previewed")throw new Error("fixture preview");
+ const applied=await applyFollowupSchedule(ws,actor,id,{...input,previewHash:preview.previewHash,requestId:crypto.randomUUID()},db);if(applied.kind!=="applied"||!applied.schedule)throw new Error("fixture schedule");
+ const occurrence=applied.schedule.occurrences[0]!;
+ const kickoff=await prepareOnboardingKickoff(ws,actor,id,db);if(kickoff.kind!=="created")throw new Error("fixture kickoff");
+ const prepared=await prepareOnboardingFollowups(ws,actor,id,db);if(prepared.kind!=="created")throw new Error("fixture followup");
+ // Synthetic source receipt and private activation fixture only. No provider
+ // calls, real invitations, or production publication occur in this test.
+ const [source]=await db.insert(s.bookings).values({workspaceId:ws,eventTypeId:kickoff.eventTypeId,startsAt:new Date(Date.now()-3600000),endsAt:new Date(Date.now()-900000),hostUserIds:ids,inviteeName:"Franchisee",inviteeEmail:"owner@example.invalid",inviteeTimezone:"UTC",status:"confirmed",inviteStatus:"delivered",cancelToken:crypto.randomUUID(),rescheduleToken:crypto.randomUUID()}).returning();
+ await db.update(s.onboardingFollowups).set({enabledAt:new Date(),approvedRevision:2,kickoffBookingId:source!.id});
+ await db.update(s.eventTypes).set({playbookStatus:"ready",minimumNoticeMin:0});await db.update(s.engagements).set({status:"active"});
+ // Optional leadership has no scheduling setup. Only FS supplies availability.
+ await db.insert(s.schedules).values(ids.slice(2).map(userId=>({userId,timezone:"UTC",rules:Array.from({length:7},(_,i)=>({dow:i+1,start:"08:00",end:"18:00"}))})));
+ const calendars=await db.insert(s.calendarConnections).values(ids.slice(2).map(userId=>({userId,externalCalendarId:`test-${userId}`,isWriteDestination:userId===ids[2],lastSyncedAt:new Date(),fullSyncedAt:new Date()}))).returning();
+ const reserve=()=>reserveOnboardingFollowup(ws,actor,id,occurrence.id,2,db);
+ return {pool,db,ws,id,ids,actor,occurrence,eventTypeId:prepared.eventTypeId,source:source!,calendars,reserve};
+}
+const dependencies=(mail:()=>void=()=>{}):KickoffDeliveryDeps=>({configurationIssue:()=>null,credentials:async()=>({calendarId:"primary",accessToken:"synthetic"}),calendar:async()=>{},mail:async message=>{mail();return {accepted:[message.to,...message.cc??[]],rejected:[]};}});
+describe.skipIf(!process.env.TEST_DATABASE_URL)("follow-up reservations",()=>{
+ test("concurrent replay creates one booking with four reserved hosts and six invitation roles",async()=>{
+  const f=await fixture();try {
+   const results=await Promise.all([f.reserve(),f.reserve()]);expect(results.map(row=>row.kind).sort()).toEqual(["reserved","reused"]);
+   const row=results.find(row=>row.kind==="reserved");if(row?.kind!=="reserved")throw new Error(JSON.stringify(results));
+   expect((await f.db.select().from(s.bookings))).toHaveLength(2);
+   const [booking]=await f.db.select().from(s.bookings).where(eq(s.bookings.id,row.bookingId));expect(booking?.hostUserIds[0]).toBe(f.ids[2]);expect(booking?.hostUserIds.slice().sort()).toEqual(f.ids.slice(2).sort());
+   const context=await getInviteContext(row.bookingId,f.db);if(!context)throw new Error("context missing");
+   expect(context.hosts).toHaveLength(6);expect(context.hosts[0]?.id).toBe(f.ids[2]);expect(context.hosts.filter(host=>host.role==="optional").map(host=>host.id).sort()).toEqual(f.ids.slice(0,2).sort());
+   expect(context.managementLinksEnabled).toBe(false);
+   const mail=buildMail(context,"created",Temporal.Now.instant());expect(mail.html).not.toContain("/reschedule?");expect(mail.html).not.toContain("/cancel?");
+   const [intent]=await f.db.select().from(s.kickoffDeliveries);expect(intent?.recipients).toHaveLength(7);expect(intent?.ownerUserId).toBe(f.ids[2]);expect(intent?.snapshot.meetingKind).toBe("followup");
+   let sends=0;await runKickoffDeliveryBatch(dependencies(()=>{sends++;}),f.db);expect(sends).toBe(1);
+   expect((await f.db.select().from(s.kickoffDeliveries))[0]?.status).toBe("awaiting_delivery");
+   expect((await getFollowupSchedule(f.ws,f.actor,f.id,f.db))).toMatchObject({deliveryState:"reservations_present",schedule:{occurrences:[{bookingId:row.bookingId,inviteStatus:"sent"},{},{}]}});
+   expect((await prepareOnboardingFollowups(f.ws,f.actor,f.id,f.db)).kind).toBe("reused");
+  }finally{await f.pool.end();}
+ });
+ test("required calendar conflicts and live holds create assigned issues; resolution permits one retry",async()=>{
+  const f=await fixture();try {
+   const [busy]=await f.db.insert(s.calendarBusyCache).values({connectionId:f.calendars[0]!.id,startsAt:new Date(f.occurrence.startsAt),endsAt:new Date(f.occurrence.endsAt)}).returning();
+   expect(await f.reserve()).toMatchObject({kind:"blocked",issueCode:"kickoff_slot_unavailable",ownerUserId:f.ids[2]});
+   expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(0);expect(await f.db.select().from(s.bookings)).toHaveLength(1);
+   await f.db.delete(s.calendarBusyCache).where(eq(s.calendarBusyCache.id,busy!.id));
+   const [hold]=await f.db.insert(s.holds).values({eventTypeId:f.source.eventTypeId,hostUserId:f.ids[3]!,slotStart:new Date(f.occurrence.startsAt),slotEnd:new Date(f.occurrence.endsAt),expiresAt:new Date(Date.now()+600000)}).returning();
+   expect(await f.reserve()).toMatchObject({kind:"blocked",issueCode:"kickoff_slot_unavailable"});
+   expect((await getFollowupReservations(f.ws,f.actor,f.id,f.db))).toMatchObject({attention:1});
+   expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({attention:1,reservationAttention:1});
+   expect(await kickoffDeliveryReport(crypto.randomUUID(),f.db)).toMatchObject({attention:0,reservationAttention:0});
+   await f.db.update(s.holds).set({status:"expired"}).where(eq(s.holds.id,hold!.id));expect((await f.reserve()).kind).toBe("reserved");
+   expect((await getFollowupReservations(f.ws,f.actor,f.id,f.db))).toMatchObject({attention:0});
+  }finally{await f.pool.end();}
+ });
+ test("workspace, approval and kickoff evidence gate reservations; public and generic mutations cannot bypass them",async()=>{
+  const f=await fixture();try {
+   expect((await reserveOnboardingFollowup(crypto.randomUUID(),f.actor,f.id,f.occurrence.id,2,f.db)).kind).toBe("not_found");
+   expect((await reserveOnboardingFollowup(f.ws,{...f.actor,workspaceRole:"member"},f.id,f.occurrence.id,2,f.db)).kind).toBe("forbidden");
+   expect((await reserveOnboardingFollowup(f.ws,f.actor,f.id,crypto.randomUUID(),2,f.db)).kind).toBe("not_found");
+   expect(await reserveOnboardingFollowup(f.ws,f.actor,f.id,f.occurrence.id,1,f.db)).toMatchObject({kind:"blocked",issueCode:"followup_approval_stale"});
+   await f.db.update(s.bookings).set({inviteStatus:"sent"}).where(eq(s.bookings.id,f.source.id));expect(await f.reserve()).toMatchObject({kind:"blocked",issueCode:"kickoff_delivery_unverified"});
+   await f.db.update(s.bookings).set({inviteStatus:"delivered"}).where(eq(s.bookings.id,f.source.id));
+   expect(await kickoffPubliclyAvailable(f.eventTypeId,f.db)).toBe(false);
+   expect((await createHold(f.eventTypeId,f.ids.slice(2),{start:Temporal.Instant.from(f.occurrence.startsAt),end:Temporal.Instant.from(f.occurrence.endsAt)},Temporal.Duration.from({minutes:10}),f.db)).ok).toBe(false);
+   const result=await f.reserve();if(result.kind!=="reserved")throw new Error(JSON.stringify(result));
+   expect(await appendEvent(result.bookingId,"cancelled",{},f.db)).toMatchObject({ok:false,error:{reason:"followup_managed_schedule"}});
+   expect((await previewFollowupSchedule(f.ws,f.actor,f.id,{revision:2,command:{action:"pause"}},f.db)).kind).toBe("issued_schedule_requires_reconciliation");
+   expect((await updateEngagementStatus(f.ws,f.actor,f.id,"paused",f.db)).kind).toBe("issued_schedule_requires_reconciliation");
+  }finally{await f.pool.end();}
+ });
+ test("outbox write failure rolls back the booking and preserves a durable assigned failure",async()=>{
+  const f=await fixture();try {
+   await f.db.execute(sql`create function reject_followup_delivery_test() returns trigger language plpgsql as $$ begin raise exception 'synthetic failure'; end $$`);
+   await f.db.execute(sql`create trigger reject_followup_delivery_test before insert on kickoff_deliveries for each row execute function reject_followup_delivery_test()`);
+   expect(await f.reserve()).toMatchObject({kind:"blocked",issueCode:"followup_reservation_failed",ownerUserId:f.ids[2]});
+   expect(await f.db.select().from(s.bookings)).toHaveLength(1);expect(await f.db.select().from(s.bookingEvents)).toHaveLength(0);expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(0);
+   expect((await f.db.select().from(s.followupReservations))[0]?.bookingId).toBeNull();expect(await f.db.select().from(s.followupReservationEvents)).toHaveLength(1);
+  }finally{await f.db.execute(sql`drop trigger if exists reject_followup_delivery_test on kickoff_deliveries`);await f.db.execute(sql`drop function if exists reject_followup_delivery_test()`);await f.pool.end();}
+ });
+ test("delivery rechecks approval and produces an assigned failure before any provider call",async()=>{
+  const f=await fixture();try {
+   expect((await f.reserve()).kind).toBe("reserved");
+   await f.db.update(s.onboardingFollowups).set({approvedRevision:1});let calls=0;
+   await runKickoffDeliveryBatch({...dependencies(()=>{calls++;}),credentials:async()=>{calls++;return {calendarId:"primary",accessToken:"synthetic"};}},f.db);
+   expect(calls).toBe(0);expect((await f.db.select().from(s.kickoffDeliveries))[0]).toMatchObject({status:"needs_attention",issueCode:"followup_approval_stale",ownerUserId:f.ids[2]});
+  }finally{await f.pool.end();}
+ });
+});

@@ -80,8 +80,8 @@ export async function queueKickoffReminder(bookingId:string,db:Db=getDb()) {
 }
 
 export async function isKickoffDeliveryBooking(bookingId:string,db:Db=getDb()) {
-  const [row]=await db.select({id:s.bookings.id}).from(s.bookings).innerJoin(s.onboardingKickoffs,eq(s.onboardingKickoffs.eventTypeId,s.bookings.eventTypeId)).where(eq(s.bookings.id,bookingId));
-  return !!row;
+  const [row]=await db.select({eventTypeId:s.bookings.eventTypeId}).from(s.bookings).where(eq(s.bookings.id,bookingId));
+  return !!row && !!await loadKickoffContext(row.eventTypeId,db);
 }
 
 export async function supersedeKickoffDelivery(id:string,attemptId:string,db:Db=getDb()) {
@@ -223,7 +223,11 @@ export async function kickoffDeliveryReport(workspaceId:string,db:Db=getDb(),now
   const [counts]=await db.select({attention:sql<number>`count(*) filter (where ${s.kickoffDeliveries.status} = 'needs_attention')::int`,
     overdue:sql<number>`count(*) filter (where ${s.kickoffDeliveries.status} not in ('delivered','superseded') and ${s.kickoffDeliveries.deadlineAt} < ${now})::int`})
     .from(s.kickoffDeliveries).where(eq(s.kickoffDeliveries.workspaceId,workspaceId));
+  const [reservationCounts]=await db.select({attention:sql<number>`count(*)::int`}).from(s.followupReservations)
+    .innerJoin(s.franchiseOnboarding,eq(s.franchiseOnboarding.id,s.followupReservations.onboardingId))
+    .where(and(eq(s.franchiseOnboarding.workspaceId,workspaceId),eq(s.followupReservations.status,"blocked")));
+  const reservationAttention=reservationCounts?.attention??0;
   const [worker]=await db.select().from(s.kickoffDeliveryWorker).where(eq(s.kickoffDeliveryWorker.name,"dispatcher"));
   const workerStale=!worker||now.getTime()-worker.lastSweepAt.getTime()>180_000;
-  return {checkedAt:now.toISOString(),workerStale,lastSweepAt:worker?.lastSweepAt??null,attention:counts?.attention??0,overdue:counts?.overdue??0,deliveries:rows};
+  return {checkedAt:now.toISOString(),workerStale,lastSweepAt:worker?.lastSweepAt??null,attention:(counts?.attention??0)+reservationAttention,reservationAttention,overdue:counts?.overdue??0,deliveries:rows};
 }

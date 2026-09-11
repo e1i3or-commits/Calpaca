@@ -1,3 +1,4 @@
+import { hasFollowupReservations } from "./followup-reservation-state";
 import {
   and,
   desc,
@@ -292,13 +293,18 @@ export async function updateEngagementStatus(
   status: EngagementStatus,
   executor: Db = getDb(),
 ) {
-  const current = await getEngagement(workspaceId, actor, engagementId, executor);
+  return executor.transaction(async tx => {
+  await tx.select({id:schema.workspaces.id}).from(schema.workspaces).where(eq(schema.workspaces.id,workspaceId)).for("update");
+  await tx.select({id:schema.engagements.id}).from(schema.engagements).where(and(eq(schema.engagements.id,engagementId),eq(schema.engagements.workspaceId,workspaceId))).for("update");
+  const current = await getEngagement(workspaceId, actor, engagementId, tx);
   if (!current) return { kind: "not_found" as const };
   if (!current.canManage) return { kind: "forbidden" as const };
   if (!canTransitionEngagement(current.status, status)) {
     return { kind: "invalid_transition" as const };
   }
-  const [engagement] = await executor
+  const [onboarding]=await tx.select({id:schema.franchiseOnboarding.id}).from(schema.franchiseOnboarding).where(and(eq(schema.franchiseOnboarding.workspaceId,workspaceId),eq(schema.franchiseOnboarding.engagementId,engagementId)));
+  if(current.status!==status && onboarding && await hasFollowupReservations(onboarding.id,tx))return {kind:"issued_schedule_requires_reconciliation" as const};
+  const [engagement] = await tx
     .update(schema.engagements)
     .set({ status, updatedAt: new Date() })
     .where(and(
@@ -307,4 +313,5 @@ export async function updateEngagementStatus(
     ))
     .returning();
   return { kind: "updated" as const, engagement };
+  });
 }

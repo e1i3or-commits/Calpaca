@@ -1,3 +1,5 @@
+import { loadKickoffContext } from "../db/kickoff-context";
+import { guardKickoffBooking } from "../db/kickoff-booking-guard";
 import { Temporal } from "@js-temporal/polyfill";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { and, eq, lt } from "drizzle-orm";
@@ -44,6 +46,21 @@ export async function processKickoffDelivery(row:Delivery,deps:KickoffDeliveryDe
       if(!booking||booking.status!=="confirmed"||until<=0||until>86400_000||booking.startsAt.toISOString()!==new Date(row.snapshot.booking.startsAt).toISOString()) {
         await supersedeKickoffDelivery(row.id,attempt,db);return;
       }
+    }
+    if(row.snapshot.meetingKind==="followup") {
+      const issue=await db.transaction(async tx=>{
+        const [booking]=await tx.select().from(s.bookings).where(eq(s.bookings.id,row.bookingId));
+        if(!booking)return "followup_booking_missing";
+        const ctx=await loadKickoffContext(booking.eventTypeId,tx);
+        if(!ctx||ctx.meetingKind!=="followup")return "followup_configuration_missing";
+        const [kickoff]=ctx.binding.kickoffBookingId?await tx.select({booking:s.bookings}).from(s.bookings)
+          .innerJoin(s.onboardingKickoffs,eq(s.onboardingKickoffs.eventTypeId,s.bookings.eventTypeId))
+          .where(and(eq(s.bookings.id,ctx.binding.kickoffBookingId),eq(s.onboardingKickoffs.onboardingId,ctx.onboarding.id))):[];
+        if(!kickoff||kickoff.booking.status!=="confirmed"||kickoff.booking.inviteStatus!=="delivered")return "kickoff_delivery_unverified";
+        const result=await guardKickoffBooking(booking.eventTypeId,booking.hostUserIds,{start:Temporal.Instant.from(booking.startsAt.toISOString()),end:Temporal.Instant.from(booking.endsAt.toISOString())},tx,booking.id);
+        return result.kind==="allowed"?null:result.kind==="blocked"?result.error:"followup_configuration_missing";
+      });
+      if(issue)throw new KickoffProviderError(issue);
     }
     const credentials=await deps.credentials(row);
     const calendarId=await bindKickoffCalendar(row.id,attempt,credentials.calendarId,db);
