@@ -236,6 +236,14 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("automatic follow-up reservation
    expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({schedulerStale:true});
   }finally{await f.pool.end();}
  });
+ test("an inactive automation membership cannot reserve even while its admin role remains",async()=>{
+  const f=await fixture();try {
+   await f.db.update(s.workspaceMembers).set({role:"admin",status:"inactive"}).where(eq(s.workspaceMembers.userId,f.actor.userId));
+   await runFollowupReservationBatch(f.db);
+   expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(0);
+   expect((await f.db.select().from(s.followupReservations)).every(row=>row.issueCode==="followup_automation_identity_unavailable")).toBe(true);
+  }finally{await f.pool.end();}
+ });
  test("revoked automation authority is assigned, cooldown limits retries and restoration permits recovery",async()=>{
   const f=await fixture();try {
    await runFollowupReservationBatch(f.db);

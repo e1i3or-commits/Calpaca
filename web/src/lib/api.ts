@@ -1616,7 +1616,9 @@ export type OnboardingPlan = {
   kickoffDurationMinutes: number; followupDurationMinutes: number;
   sourceWorkspaceId: string; sourceProjectKey: string; locationKey: string;
   franchiseeId: string; businessUnitId: string; primaryContactId: string; workdriveFolderId: string|null;
-  schedulingState: "not_published";
+  schedulingState: "not_published"|"published"|"unavailable";
+  kickoffBookingUrl?: string|null;
+  followupsEnabled?: boolean;
   kickoffReadiness?: {
     checkedAt: string; calendarSetupReady: boolean; canPublish: false; kickoffBookingUrl: null;
     participants: {userId: string; name: string; required: true; ready: boolean; issues: {code: string; message: string}[]}[];
@@ -1797,4 +1799,24 @@ export function previewFollowupSchedule(id: string, input: import("../../../src/
 }
 export function applyFollowupSchedule(id: string, input: import("../../../src/core/engagement/followup-schedule").FollowupApplyInput) {
   return request<import("../../../src/core/engagement/followup-schedule").ScheduleSnapshot>(`/api/me/engagements/${encodeURIComponent(id)}/followup-schedule/apply`, {method:"POST",body:JSON.stringify(input)});
+}
+
+export type OnboardingScheduling = {
+  kind:"found";revision:number;checkedAt:string;canPublish:boolean;canEnable:boolean;
+  kickoff:{prepared:boolean;published:boolean;available:boolean;kickoffBookingUrl:string|null;issues:string[]};
+  followups:{prepared:boolean;enabled:boolean;approvedRevision:number|null;kickoffBookingId:string|null;
+    issues:string[];timezone:string|null;previewHash:string;eligibleKickoffs:{id:string;startsAt:string;endsAt:string}[];
+    dates:{id:string;startsAt:string;endsAt:string}[]};
+};
+export function getOnboardingScheduling(id:string) {
+  return request<OnboardingScheduling>(`/api/me/engagements/${encodeURIComponent(id)}/onboarding-scheduling`);
+}
+export function prepareOnboardingCalls(id:string,kind:"kickoff"|"followups") {
+  return request(kind==="kickoff"?`/api/automation/franchise-onboarding/${encodeURIComponent(id)}/kickoff`:`/api/automation/followup-reservations/${encodeURIComponent(id)}`,{method:"POST",body:"{}"});
+}
+export function publishOnboardingKickoff(id:string,input:{revision:number;requestId:string}) {
+  return request(`/api/me/engagements/${encodeURIComponent(id)}/onboarding-scheduling/publish-kickoff`,{method:"POST",body:JSON.stringify(input)});
+}
+export function enableOnboardingFollowups(id:string,input:{revision:number;requestId:string;kickoffBookingId:string;previewHash:string}) {
+  return request(`/api/me/engagements/${encodeURIComponent(id)}/onboarding-scheduling/enable-followups`,{method:"POST",body:JSON.stringify(input)});
 }

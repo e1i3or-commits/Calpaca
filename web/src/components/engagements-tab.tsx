@@ -1,3 +1,4 @@
+import { OnboardingSchedulingPanel } from "@/components/onboarding-scheduling-panel";
 import { FollowupSchedulePanel } from "@/components/followup-schedule-panel";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -358,7 +359,7 @@ function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDeta
   const names = (hosts: typeof plan.attendance.kickoff) => hosts.map(host => engagement.people.find(person => person.userId === host.userId)?.name ?? "Unavailable participant").join(", ");
   return <section aria-labelledby="onboarding-plan-title" className="border-t border-border py-6">
     <h3 id="onboarding-plan-title" className="font-medium">Franchise onboarding plan</h3>
-    <p className="mt-2 text-sm text-muted-foreground">Kickoff booking is not available yet. Follow-up dates remain drafts until invitations are enabled.</p>
+    <p className="mt-2 text-sm text-muted-foreground">Kickoff and follow-up calls share this Engagement’s team, context and schedule.</p>
     <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-[10rem_1fr]">
       <dt className="text-muted-foreground">Kickoff</dt><dd>{plan.kickoffDurationMinutes} minutes. Required: {names(plan.attendance.kickoff)}.</dd>
       <dt className="text-muted-foreground">Follow-up</dt><dd>{plan.followupDurationMinutes} minutes. Required: {names(plan.attendance.followup.filter(host => host.role === "required"))}. Optional: {names(plan.attendance.followup.filter(host => host.role === "optional"))}.</dd>
@@ -372,7 +373,7 @@ function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDeta
         }}>{refreshing ? "Checking calendars…" : "Refresh calendar checks"}</button>
       </div>
       {plan.kickoffReadiness ? <>
-        <p className="mt-1 text-sm text-muted-foreground">{plan.kickoffReadiness.calendarSetupReady ? "Calendar setup checks pass. Booking and invitation delivery still need to be connected." : "Complete the items below before publishing kickoff booking."}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{plan.kickoffReadiness.calendarSetupReady ? "The team's calendar setup checks pass." : "Complete the items below before publishing kickoff booking."}</p>
         <ul className="mt-3 divide-y divide-border">
           {plan.kickoffReadiness.participants.map(person => <li key={person.userId} className="py-3 text-sm">
             <p className="font-medium">{person.name} <span className="font-normal text-muted-foreground">· Required · {person.ready ? "Calendar setup ready" : "Needs setup"}</span></p>
@@ -380,10 +381,11 @@ function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDeta
           </li>)}
         </ul>
         <p className="mt-3 text-sm font-medium">Organizer: {engagement.people.find(person => person.userId === plan.kickoffReadiness?.organizer.userId)?.name ?? "Unavailable participant"}</p>
-        {plan.kickoffReadiness.organizer.issues.length > 0 ? <ul className="mt-1 list-disc pl-5 text-sm text-muted-foreground">{plan.kickoffReadiness.organizer.issues.map(issue => <li key={issue.code}>{issue.message}</li>)}</ul> : <p className="mt-1 text-sm text-muted-foreground">Organizing calendar setup ready. Invitation delivery has not been verified.</p>}
+        {plan.kickoffReadiness.organizer.issues.length > 0 ? <ul className="mt-1 list-disc pl-5 text-sm text-muted-foreground">{plan.kickoffReadiness.organizer.issues.map(issue => <li key={issue.code}>{issue.message}</li>)}</ul> : <p className="mt-1 text-sm text-muted-foreground">The organizing calendar is ready. Each invitation has its own delivery checks.</p>}
         <p className="mt-3 text-xs text-muted-foreground">Checked {new Date(plan.kickoffReadiness.checkedAt).toLocaleString()}. Availability will be checked again when a time is booked.</p>
       </> : <p role="status" className="mt-2 text-sm text-muted-foreground">Calendar setup has not been checked.</p>}
     </div>
+    <OnboardingSchedulingPanel engagement={engagement} reload={reload} />
     <FollowupSchedulePanel engagement={engagement} reload={reload} />
     <div className="mt-4 flex flex-wrap gap-4 text-sm">
       <a className="text-primary" href={`https://tyger.tourscale.com/launch/${encodeURIComponent(plan.sourceProjectKey)}`} target="_blank" rel="noopener noreferrer">Launch context in Tyger</a>
@@ -419,7 +421,7 @@ function DetailView({
       <button className="mb-4 min-h-11 text-sm text-muted-foreground hover:text-foreground" onClick={() => go("/app/engagements")}>Engagements /</button>
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
         <div><div className="flex items-center gap-3"><h2 className="text-2xl font-semibold">{item.name}</h2><span className="text-sm">{label(item.status)}</span></div><p className="mt-1 text-sm text-muted-foreground">{item.clientName} · Account lead {item.accountLeadName}</p></div>
-        <button className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground" onClick={() => go(`/app/engagements/${item.id}/conversations/new`)}>Create first conversation</button>
+        <button className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground" onClick={() => go(`/app/engagements/${item.id}/conversations/new`)}>{item.eventTypes.length?"Create conversation":"Create first conversation"}</button>
       </div>
       <nav aria-label="Engagement" className="flex gap-5 overflow-x-auto border-b border-border">
         <button className={`min-h-11 whitespace-nowrap text-sm ${section === "overview" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}`)}>Overview</button>

@@ -1,3 +1,4 @@
+import { onboardingPublicationSummary } from "./onboarding-scheduling-state";
 import { and, eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { canonicalOnboardingInput, franchiseOnboardingInput, onboardingAttendance, onboardingCadenceUpdate, type FranchiseOnboardingInput } from "../core/engagement/franchise-onboarding";
@@ -9,7 +10,7 @@ import { getKickoffReadiness } from "./kickoff-readiness-repo";
 type Db = NodePgDatabase<typeof s>;
 const admin = (actor: EngagementActor) => actor.workspaceRole === "owner" || actor.workspaceRole === "admin";
 
-export function onboardingOutput(row: typeof s.franchiseOnboarding.$inferSelect) {
+export async function onboardingOutput(row: typeof s.franchiseOnboarding.$inferSelect,db:Db) {
   return { id: row.id, engagementId: row.engagementId, sourceWorkspaceId: row.sourceWorkspaceId,
     sourceProjectKey: row.sourceProjectKey, locationKey: row.input.locationKey,
     franchiseeId: row.input.franchiseeId, businessUnitId: row.input.businessUnitId, primaryContactId: row.input.primaryContactId,
@@ -17,8 +18,7 @@ export function onboardingOutput(row: typeof s.franchiseOnboarding.$inferSelect)
     cadence: row.cadence, revision: row.revision, attendance: row.attendance,
     kickoffDurationMinutes: row.input.kickoffDurationMinutes, followupDurationMinutes: row.input.followupDurationMinutes,
     organizerUserId: row.input.organizerUserId,
-    kickoffBookingUrl: null, schedulingState: "not_published" as const,
-    issues: ["kickoff_booking_not_published", "followup_scheduler_not_configured"],
+    ...await onboardingPublicationSummary(row,db),
   };
 }
 
@@ -36,7 +36,7 @@ export async function provisionFranchiseOnboarding(workspaceId: string, actor: E
     if (existing) {
       const stored = canonicalOnboardingInput(franchiseOnboardingInput.parse(existing.input));
       if (JSON.stringify(stored) !== JSON.stringify(input)) return { kind: "source_conflict" as const };
-      return { kind: "reused" as const, onboarding: onboardingOutput(existing) };
+      return { kind: "reused" as const, onboarding: await onboardingOutput(existing,tx) };
     }
     const successIds = input.franchiseSuccessUserIds;
     const attendance = onboardingAttendance(input);
@@ -79,7 +79,7 @@ export async function provisionFranchiseOnboarding(workspaceId: string, actor: E
       sourceProjectKey: input.sourceProjectKey, engagementId: engagement.id, franchiseeId: input.franchiseeId, input, attendance }).returning();
     if (!row) throw new Error("onboarding_mapping_not_created");
     await tx.insert(s.franchiseOnboardingChanges).values({ workspaceId, onboardingId: row.id, actorUserId: actor.userId, revision: 1, kind: "created", cadence: row.cadence });
-    return { kind: "created" as const, onboarding: onboardingOutput(row) };
+    return { kind: "created" as const, onboarding: await onboardingOutput(row,tx) };
   });
 }
 
@@ -87,7 +87,7 @@ export async function getFranchiseOnboarding(workspaceId: string, actor: Engagem
   if (!admin(actor)) return { kind: "forbidden" as const };
   const [row] = await db.select().from(s.franchiseOnboarding).where(and(eq(s.franchiseOnboarding.workspaceId, workspaceId),
     eq(s.franchiseOnboarding.sourceWorkspaceId, sourceWorkspaceId), eq(s.franchiseOnboarding.sourceProjectKey, sourceProjectKey)));
-  return row ? { kind: "found" as const, onboarding: { ...onboardingOutput(row), kickoffReadiness: await getKickoffReadiness(row, db) } } : { kind: "not_found" as const };
+  return row ? { kind: "found" as const, onboarding: { ...await onboardingOutput(row,db), kickoffReadiness: await getKickoffReadiness(row, db) } } : { kind: "not_found" as const };
 }
 
 export async function updateOnboardingCadence(workspaceId: string, actor: EngagementActor, engagementId: string, raw: {revision: number; cadence: string}, db: Db = getDb()) {
@@ -103,13 +103,13 @@ export async function updateOnboardingCadence(workspaceId: string, actor: Engage
     const [row] = await tx.select().from(s.franchiseOnboarding).where(and(eq(s.franchiseOnboarding.workspaceId, workspaceId), eq(s.franchiseOnboarding.engagementId, engagementId)));
     if (!row) return { kind: "not_found" as const };
     if (row.revision !== parsed.data.revision) return { kind: "revision_conflict" as const };
-    if (row.cadence === parsed.data.cadence) return { kind: "unchanged" as const, onboarding: onboardingOutput(row) };
+    if (row.cadence === parsed.data.cadence) return { kind: "unchanged" as const, onboarding: await onboardingOutput(row,tx) };
     const [schedule] = await tx.select({id:s.onboardingFollowupSchedules.onboardingId}).from(s.onboardingFollowupSchedules).where(eq(s.onboardingFollowupSchedules.onboardingId,row.id));
     if (schedule) return { kind: "schedule_preview_required" as const };
     const [updated] = await tx.update(s.franchiseOnboarding).set({ cadence: parsed.data.cadence, revision: row.revision + 1, updatedAt: new Date() })
       .where(eq(s.franchiseOnboarding.id, row.id)).returning();
     await tx.insert(s.franchiseOnboardingChanges).values({ workspaceId, onboardingId: row.id, actorUserId: actor.userId, revision: updated!.revision, kind: "cadence_changed", cadence: updated!.cadence });
     await tx.update(s.engagements).set({ updatedAt: new Date() }).where(and(eq(s.engagements.workspaceId, workspaceId), eq(s.engagements.id, engagementId)));
-    return { kind: "updated" as const, onboarding: onboardingOutput(updated!) };
+    return { kind: "updated" as const, onboarding: await onboardingOutput(updated!,tx) };
   });
 }

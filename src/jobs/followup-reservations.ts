@@ -8,9 +8,9 @@ import { reserveOnboardingFollowup } from "../db/followup-reservation-repo";
 import * as s from "../db/schema";
 export async function runFollowupReservationBatch(db:NodePgDatabase<typeof s>=getDb(),now=new Date()) {
   for(const row of await listDueFollowupExtensions(db,now)) {
-    const [identity]=await db.select({role:s.workspaceMembers.role,status:s.users.status}).from(s.workspaceMembers)
+    const [identity]=await db.select({role:s.workspaceMembers.role,status:s.users.status,membershipStatus:s.workspaceMembers.status}).from(s.workspaceMembers)
       .innerJoin(s.users,eq(s.users.id,s.workspaceMembers.userId)).where(and(eq(s.workspaceMembers.workspaceId,row.workspaceId),eq(s.workspaceMembers.userId,row.actorUserId)));
-    if(!identity||identity.status!=="active"||!["admin","owner"].includes(identity.role)) {
+    if(!identity||identity.status!=="active"||identity.membershipStatus!=="active"||!["admin","owner"].includes(identity.role)) {
       await recordFollowupExtensionResult(row,row.revision,"followup_automation_identity_unavailable",db);continue;
     }
     const actor={userId:row.actorUserId,workspaceRole:identity.role};
@@ -27,10 +27,10 @@ export async function runFollowupReservationBatch(db:NodePgDatabase<typeof s>=ge
   }
   for(const row of await listDueFollowupReservations(db,now)) {
     if(row.startsAt<=now) {await recordFollowupSchedulerIssue(row,"followup_reservation_missed",db);continue;}
-    const [identity]=await db.select({role:s.workspaceMembers.role,status:s.users.status}).from(s.workspaceMembers)
+    const [identity]=await db.select({role:s.workspaceMembers.role,status:s.users.status,membershipStatus:s.workspaceMembers.status}).from(s.workspaceMembers)
       .innerJoin(s.users,eq(s.users.id,s.workspaceMembers.userId))
       .where(and(eq(s.workspaceMembers.workspaceId,row.workspaceId),eq(s.workspaceMembers.userId,row.actorUserId)));
-    if(!identity||identity.status!=="active"||!["admin","owner"].includes(identity.role)) {
+    if(!identity||identity.status!=="active"||identity.membershipStatus!=="active"||!["admin","owner"].includes(identity.role)) {
       await recordFollowupSchedulerIssue(row,"followup_automation_identity_unavailable",db);continue;
     }
     // Source identity is the administrator that prepared the enabled binding;

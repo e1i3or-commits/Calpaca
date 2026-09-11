@@ -17,10 +17,10 @@
   ],
   "tags": [
     {
-      "name": "Webhooks"
+      "name": "Engagements"
     },
     {
-      "name": "Engagements"
+      "name": "Webhooks"
     },
     {
       "name": "System"
@@ -90,6 +90,185 @@
     }
   ],
   "paths": {
+    "/api/me/engagements/{id}/onboarding-scheduling": {
+      "get": {
+        "operationId": "getApiMeEngagementsIdOnboardingScheduling",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Read onboarding publication readiness and reviewed follow-up dates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/me/engagements/{id}/onboarding-scheduling/publish-kickoff": {
+      "post": {
+        "operationId": "postApiMeEngagementsIdOnboardingSchedulingPublishKickoff",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Publish a prepared kickoff after deployment and calendar checks",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishOnboardingRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/me/engagements/{id}/onboarding-scheduling/enable-followups": {
+      "post": {
+        "operationId": "postApiMeEngagementsIdOnboardingSchedulingEnableFollowups",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Enable a reviewed follow-up cadence from a delivered kickoff",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnableOnboardingFollowupsRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/webhooks/ses-onboarding/poll": {
       "post": {
         "operationId": "postApiWebhooksSesOnboardingPoll",
@@ -8002,6 +8181,52 @@
         "required": [
           "queueUrl",
           "notificationId"
+        ],
+        "additionalProperties": false
+      },
+      "PublishOnboardingRequest": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "revision",
+          "requestId"
+        ],
+        "additionalProperties": false
+      },
+      "EnableOnboardingFollowupsRequest": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kickoffBookingId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "revision",
+          "requestId",
+          "kickoffBookingId",
+          "previewHash"
         ],
         "additionalProperties": false
       },

@@ -867,6 +867,17 @@ export const kickoffDeliveryReceipts = pgTable("kickoff_delivery_receipts", {
   payload: jsonb("payload").$type<import("../core/invite/kickoff-delivery").KickoffReceipt>().notNull(),
   createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
 });
+export const onboardingSchedulingActions = pgTable("onboarding_scheduling_actions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id),
+  onboardingId: uuid("onboarding_id").notNull().references(() => franchiseOnboarding.id),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id),
+  requestId: uuid("request_id").notNull(),
+  action: text("action").$type<"publish_kickoff"|"enable_followups">().notNull(),
+  revision: integer("revision").notNull(),
+  inputHash: text("input_hash").notNull(),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+}, t => [uniqueIndex("onboarding_scheduling_request_uq").on(t.workspaceId,t.requestId)]);
 export const sesFeedbackNotifications = pgTable("ses_feedback_notifications", {
   id: text("id").primaryKey(),
   deliveryId: uuid("delivery_id").notNull().references(() => kickoffDeliveries.id),

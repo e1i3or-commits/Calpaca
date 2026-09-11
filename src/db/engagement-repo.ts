@@ -20,6 +20,7 @@ import type { EngagementActor } from "../core/engagement/permissions";
 import { canManageEngagement } from "../core/engagement/permissions";
 import { getDb } from "./client";
 import * as schema from "./schema";
+import { onboardingPublicationSummary } from "./onboarding-scheduling-state";
 import { getKickoffReadiness } from "./kickoff-readiness-repo";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -277,7 +278,7 @@ export async function getEngagement(
       sourceWorkspaceId: onboarding.sourceWorkspaceId, sourceProjectKey: onboarding.sourceProjectKey, locationKey: onboarding.input.locationKey,
       franchiseeId: onboarding.input.franchiseeId, businessUnitId: onboarding.input.businessUnitId,
       primaryContactId: onboarding.input.primaryContactId, workdriveFolderId: onboarding.input.workdriveFolderId ?? null,
-      schedulingState: "not_published" as const,
+      ...await onboardingPublicationSummary(onboarding,executor),
       kickoffReadiness: await getKickoffReadiness(onboarding, executor) } : null,
     people,
     eventTypes,

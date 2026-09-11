@@ -1,3 +1,4 @@
+import { onboardingPublicationSummary } from "./onboarding-scheduling-state";
 import { and, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { EngagementActor } from "../core/engagement/permissions";
@@ -20,7 +21,8 @@ export async function prepareOnboardingKickoff(workspaceId: string, actor: Engag
     if (existing) {
       const ctx=await loadKickoffContext(existing.eventTypeId,tx);
       if (!ctx || await kickoffConfigurationIssue(ctx,tx)) return {kind:"kickoff_configuration_changed" as const};
-      return {kind:"reused" as const,eventTypeId:existing.eventTypeId,kickoffBookingUrl:null,schedulingState:"not_published" as const};
+      const summary=await onboardingPublicationSummary(onboarding,tx);
+      return {kind:"reused" as const,eventTypeId:existing.eventTypeId,kickoffBookingUrl:summary.kickoffBookingUrl,schedulingState:summary.schedulingState};
     }
     const [conversation] = await tx.insert(s.eventTypes).values({workspaceId,engagementId,ownerUserId:onboarding.input.organizerUserId,
       slug:`onboarding-kickoff-${crypto.randomUUID()}`,title:`${onboarding.input.locationName} kickoff`,

@@ -1,3 +1,4 @@
+import { publishOnboardingInput,enableFollowupsInput } from "../core/engagement/onboarding-publication";
 import { sesNotificationInput,sesPollInput } from "../core/invite/ses-feedback";
 import { prepareFollowupInput, reserveFollowupInput } from "./routes/followup-reservations";
 import { franchiseOnboardingInput, onboardingCadenceUpdate } from "../core/engagement/franchise-onboarding";
@@ -44,6 +45,8 @@ const requestSchemas = {
   KickoffReceipt: kickoffReceiptInput,
   SesNotification: sesNotificationInput,
   SesPoll: sesPollInput,
+  PublishOnboarding: publishOnboardingInput,
+  EnableOnboardingFollowups: enableFollowupsInput,
   FollowupPreview: followupPreviewInput,
   FollowupApply: followupApplyInput,
   PrepareFollowup: prepareFollowupInput,
@@ -64,6 +67,9 @@ export type RequestSchemaName = keyof typeof requestSchemas;
 export const documentedRequestSchemas = requestSchemas;
 
 export const openApiOperations: readonly Operation[] = [
+  ["get","/api/me/engagements/{id}/onboarding-scheduling","Engagements","Read onboarding publication readiness and reviewed follow-up dates","personal"],
+  ["post","/api/me/engagements/{id}/onboarding-scheduling/publish-kickoff","Engagements","Publish a prepared kickoff after deployment and calendar checks","personal","PublishOnboarding"],
+  ["post","/api/me/engagements/{id}/onboarding-scheduling/enable-followups","Engagements","Enable a reviewed follow-up cadence from a delivered kickoff","personal","EnableOnboardingFollowups"],
   ["post","/api/webhooks/ses-onboarding/poll","Webhooks","Record a successful poll by the authenticated SES queue adapter","bearer","SesPoll"],
   ["post","/api/webhooks/ses-onboarding","Webhooks","Record an SES notification from the authenticated SQS adapter","bearer","SesNotification"],
   ["get","/api/automation/followup-reservations/{engagementId}","Engagements","Inspect assigned follow-up reservation issues (workspace admin)","personal"],

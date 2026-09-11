@@ -24,7 +24,7 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
     let alive=true;
     getFollowupSchedule(engagement.id).then(data=>{if(alive){setSnapshot(data);if(data.schedule)setRule(data.schedule.rule);setPending(null);}}).catch(e=>{if(alive)setError(explain(e));});
     return()=>{alive=false;};
-  },[engagement.id,engagement.onboarding?.revision,engagement.status]);
+  },[engagement.id,engagement.onboarding?.revision,engagement.status,engagement.onboarding?.followupsEnabled]);
   async function refresh() {
     setBusy(true);setError(null);
     try {const data=await getFollowupSchedule(engagement.id);setSnapshot(data);if(data.schedule)setRule(data.schedule.rule);setPending(null);setMoving(null);}catch(e){setError(explain(e));}finally{setBusy(false);}
@@ -37,7 +37,7 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
   async function save() {
     if(!pending)return;
     setBusy(true);setError(null);
-    try {const data=await applyFollowupSchedule(engagement.id,{...pending.input,previewHash:pending.previewHash,requestId:pending.requestId});setSnapshot(data);if(data.schedule)setRule(data.schedule.rule);setPending(null);setMoving(null);setNotice(data.deliveryState==="reservations_present"?"Schedule saved. Check each booked meeting’s delivery status below.":"Draft schedule saved. Invitations have not been sent.");await reload();}catch(e){setError(explain(e));}finally{setBusy(false);}
+    try {const data=await applyFollowupSchedule(engagement.id,{...pending.input,previewHash:pending.previewHash,requestId:pending.requestId});setSnapshot(data);if(data.schedule)setRule(data.schedule.rule);setPending(null);setMoving(null);setNotice(data.deliveryState==="reservations_present"?"Schedule saved. Check each booked meeting’s delivery status below.":engagement.onboarding?.followupsEnabled?"Schedule saved. Upcoming calls will be booked after availability checks.":"Draft schedule saved. Invitations have not been sent.");await reload();}catch(e){setError(explain(e));}finally{setBusy(false);}
   }
   const schedule=snapshot?.schedule;
   const locked=busy||!snapshot?.canManage||["paused","completed","archived"].includes(engagement.status)||schedule?.status==="ended";
@@ -51,7 +51,7 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
     {notice&&<p role="status" className="mt-3 text-sm text-primary">{notice}</p>}
     {!snapshot?<p role="status" className="mt-3 text-sm">{error?"Schedule unavailable. Use Refresh schedule to retry.":"Loading follow-up schedule…"}</p>:<>
       {snapshot.extensionIssue&&<p role="alert" className="mt-3 text-sm text-destructive">Automatic scheduling needs attention. {snapshot.extensionIssue.code==="followup_automation_identity_unavailable"?"Restore the automation account’s workspace administrator access.":"Review the cadence anchor and individual exceptions before extending the schedule."} Assigned to {engagement.people.find(person=>person.userId===snapshot.extensionIssue?.ownerUserId)?.name??"the account lead"}.</p>}
-      {schedule&&<p className="mt-3 text-sm font-medium">{schedule.status==="planned"?(snapshot.deliveryState==="reservations_present"?"Schedule with bookings":"Draft schedule"):schedule.status==="paused"?"Schedule paused":"Schedule ended"} · {schedule.rule.timezone}</p>}
+      {schedule&&<p className="mt-3 text-sm font-medium">{schedule.status==="planned"?(snapshot.deliveryState==="reservations_present"?"Schedule with bookings":engagement.onboarding?.followupsEnabled?"Active cadence awaiting bookings":"Draft schedule"):schedule.status==="paused"?"Schedule paused":"Schedule ended"} · {schedule.rule.timezone}</p>}
       {snapshot.deliveryState==="reservations_present"&&<p role="status" className="mt-2 text-sm">Changes to booked dates update existing invitations. Pausing or ending cancels future calls; resuming waits for verified cancellations before new bookings.</p>}
       {["paused","completed","archived"].includes(engagement.status)&&<p className="mt-2 text-sm text-muted-foreground">The Engagement is {engagement.status}. Schedule changes are disabled.</p>}
       {schedule?.status!=="ended"&&<form className="mt-4" onSubmit={event=>{event.preventDefault();void preview({action:"configure",rule});}}>
