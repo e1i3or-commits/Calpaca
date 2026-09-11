@@ -30,7 +30,7 @@ export type ScheduleStatus = "planned" | "paused" | "ended";
 export interface PlannedOccurrence {
   id: string; position: number; startsAt: string; endsAt: string;
   status: "draft" | "paused" | "cancelled"; exception: boolean;
-  bookingId?: string; inviteStatus?: string;
+  bookingId?: string; inviteStatus?: string; bookingStatus?: string; deliveryStatus?: string; deliveryKind?: string;
 }
 export interface ScheduleSnapshot {
   revision: number; engagementStatus: string; canManage: boolean;

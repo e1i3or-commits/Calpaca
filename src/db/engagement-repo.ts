@@ -1,4 +1,4 @@
-import { hasFollowupReservations } from "./followup-reservation-state";
+import { hasFutureFollowupBookings } from "./followup-reservation-state";
 import {
   and,
   desc,
@@ -303,7 +303,7 @@ export async function updateEngagementStatus(
     return { kind: "invalid_transition" as const };
   }
   const [onboarding]=await tx.select({id:schema.franchiseOnboarding.id}).from(schema.franchiseOnboarding).where(and(eq(schema.franchiseOnboarding.workspaceId,workspaceId),eq(schema.franchiseOnboarding.engagementId,engagementId)));
-  if(current.status!==status && onboarding && await hasFollowupReservations(onboarding.id,tx))return {kind:"issued_schedule_requires_reconciliation" as const};
+  if(current.status!==status && onboarding && await hasFutureFollowupBookings(onboarding.id,tx))return {kind:"issued_schedule_requires_reconciliation" as const};
   const [engagement] = await tx
     .update(schema.engagements)
     .set({ status, updatedAt: new Date() })

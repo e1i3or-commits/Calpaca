@@ -47,10 +47,11 @@ export async function processKickoffDelivery(row:Delivery,deps:KickoffDeliveryDe
         await supersedeKickoffDelivery(row.id,attempt,db);return;
       }
     }
-    if(row.snapshot.meetingKind==="followup") {
+    if(row.snapshot.meetingKind==="followup" && row.kind!=="cancelled") {
       const issue=await db.transaction(async tx=>{
         const [booking]=await tx.select().from(s.bookings).where(eq(s.bookings.id,row.bookingId));
         if(!booking)return "followup_booking_missing";
+        if(booking.status!=="confirmed" || booking.startsAt.toISOString()!==new Date(row.snapshot.booking.startsAt).toISOString() || booking.endsAt.toISOString()!==new Date(row.snapshot.booking.endsAt).toISOString())return "followup_booking_version_changed";
         const ctx=await loadKickoffContext(booking.eventTypeId,tx);
         if(!ctx||ctx.meetingKind!=="followup")return "followup_configuration_missing";
         const [kickoff]=ctx.binding.kickoffBookingId?await tx.select({booking:s.bookings}).from(s.bookings)

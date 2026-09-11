@@ -414,6 +414,13 @@
       "when": 1789128726381,
       "tag": "0058_followup_reservations",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1789129815827,
+      "tag": "0059_followup_booking_history",
+      "breakpoints": true
     }
   ]
 }

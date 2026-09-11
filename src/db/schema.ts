@@ -926,3 +926,12 @@ export const followupReservationEvents = pgTable("followup_reservation_events", 
   issueCode: text("issue_code"),
   createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
 });
+
+// Keeps cancelled booking generations addressable when a paused occurrence is
+// resumed with a fresh calendar event. An old cancellation is never revived.
+export const followupBookingHistory = pgTable("followup_booking_history", {
+  bookingId: uuid("booking_id").primaryKey().references(() => bookings.id),
+  occurrenceId: uuid("occurrence_id").notNull().references(() => onboardingFollowupOccurrences.id),
+  revision: integer("revision").notNull(),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+});

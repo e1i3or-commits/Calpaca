@@ -33,14 +33,14 @@ ICS serializes optional participation explicitly. Follow-ups remain inaccessible
 through public booking lookup, holds and generic change/cancellation operations.
 Email omits public management links for this managed schedule.
 
-Until issued-meeting reconciliation is implemented, any booked occurrence locks
-draft schedule edits and Engagement status changes. Read models distinguish
-booked dates and invitation status from unissued drafts; these locks prevent
-calendar divergence but are not the final cadence-editing experience.
+Reviewed schedule changes now reconcile booked dates, cancellations and resumed
+booking generations; see [FOLLOWUP-CHANGES.md](FOLLOWUP-CHANGES.md). Generic
+Engagement status changes remain blocked while confirmed future calls exist;
+pause/end the schedule first so those invitations receive cancellations.
 
 Migration 0058 adds private conversation bindings, reservations and their audit.
 There is no activation API in this milestone. Synthetic PostgreSQL tests set
 private activation/source delivery fixtures directly; production callers cannot.
 Controlled agreement/publication, provider feedback binding, independent monitor
-activation, issued-meeting changes and automatic extension remain to implement.
+activation, automatic extension remain to implement.
 No production booking, invitation or provider resource was created by this build.

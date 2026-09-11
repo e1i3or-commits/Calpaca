@@ -398,7 +398,7 @@
         "tags": [
           "Engagements"
         ],
-        "summary": "Apply a reviewed draft schedule without issuing invitations",
+        "summary": "Apply reviewed follow-up dates and queue changes to issued invitations",
         "parameters": [
           {
             "name": "id",

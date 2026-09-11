@@ -1,8 +1,9 @@
 # Engagement follow-up schedule
 
 Implemented for franchise onboarding Engagements. A planned series is separate
-from confirmed bookings: every saved date stays explicitly not invited. This
-build does not publish calendars or send messages.
+from confirmed bookings. Unreserved dates remain drafts; reserved dates expose
+booking and delivery status. See [issued follow-up changes](FOLLOWUP-CHANGES.md)
+for the current reservation and calendar reconciliation behavior.
 
 ## Controls and recurrence
 
@@ -12,7 +13,8 @@ cadence, the first future date, a local time, and an IANA timezone. The timezone
 initially suggests the browser's zone and remains visible/editable. Six future
 meetings are suggested, with an explicit limit of 12 per preview. Meetings are
 45 minutes. The existing attendance plan remains four required Franchise Success
-members and two optional leaders; this planner does not yet evaluate calendars.
+members and two optional leaders. Reservation and changes to issued dates
+recheck required calendars in the booking transaction.
 
 Monthly has two explicit patterns:
 
@@ -53,9 +55,8 @@ They retain their original state when they pass into history.
 Pause marks future drafts paused. Resume returns future paused rows to draft;
 past rows stay unchanged. End cancels future rows and permanently ends this
 schedule. Each action is previewed before saving. A paused, completed or
-archived Engagement blocks schedule mutation. No automatic extension or invite
-worker consumes these draft rows. Ending/pausing an already-issued series will
-require the separate calendar delivery milestone before such series are enabled.
+archived Engagement blocks schedule mutation. Automatic extension remains to build. For enabled schedules, ending or pausing
+queues verified cancellation of future booked calls; see FOLLOWUP-CHANGES.md.
 
 ## Database and API
 
@@ -78,7 +79,7 @@ rejected. Replay still checks current access and management permission.
 
 | Method and path | Contract |
 |---|---|
-| `GET /api/me/engagements/:id/followup-schedule` | Existing Engagement read permissions; current revision, rule, all saved dates, management permission and `deliveryState: not_invited` |
+| `GET /api/me/engagements/:id/followup-schedule` | Existing Engagement read permissions; current revision, rule, all saved dates, management permission and `deliveryState: not_invited | reservations_present` |
 | `POST .../followup-schedule/preview` | Lead/admin; `{revision, command}` returns changes, issues, canApply and previewHash |
 | `POST .../followup-schedule/apply` | Same input plus UUID requestId and previewHash; revalidates and atomically saves |
 
@@ -102,12 +103,10 @@ both DST transitions, DST gaps/folds, month-end/leap-year/weekday patterns,
 overlap, past anchors and strict bounded inputs. API tests verify authentication,
 scoping and mutation contracts. No external effects are used in tests.
 
-Before issuing follow-ups, implement occurrence claiming and calendar reservation,
-franchisee slot agreement, optional-attendee invitation serialization, durable
-calendar updates and cancellation, invitation delivery/feedback and independent
-alerts. Bind the real users/organizer and integrate n8n/Tyger receipts. Automatic
-extension of an invited series belongs to that worker. Draft configuration alone
-must never satisfy a welcome or provisioning readiness gate.
+Occurrence reservation, optional attendance and issued-meeting changes are now
+built. Controlled franchisee agreement/activation, real delivery feedback,
+independent alerts and the n8n/Tyger adapter remain. Automatic extension belongs
+to that remaining worker. Draft configuration alone never establishes readiness.
 
 Verification on 2026-09-11: all 816 tests passed against local PostgreSQL, with
 TypeScript, lint, generated OpenAPI parity and repository invariants passing.

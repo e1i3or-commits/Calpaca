@@ -1,3 +1,4 @@
+import { authorizeFollowupChange } from "./followup-change-authorization";
 import { and, asc, count, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
@@ -168,6 +169,7 @@ export async function appendEvent<K extends BookingEventKind>(
   payload: BookingEventPayload<K>,
   executor: Db = getDb(),
   verifiedDeliveryId?: string,
+  managedScheduleRequestId?: string,
 ): Promise<Result<BookingState, BookingStateError>> {
   let event = { kind, payload } as BookingEvent;
 
@@ -175,7 +177,7 @@ export async function appendEvent<K extends BookingEventKind>(
     const [deliveryBooking]=await tx.select({eventTypeId:bookings.eventTypeId}).from(bookings).where(eq(bookings.id,bookingId));
     const deliveryKickoff=deliveryBooking?await loadKickoffContext(deliveryBooking.eventTypeId,tx):null;
     if(deliveryKickoff) {
-      if(deliveryKickoff.meetingKind==="followup" && ["rescheduled","reassigned","cancelled"].includes(kind))return err({kind,reason:"followup_managed_schedule"});
+      if(deliveryKickoff.meetingKind==="followup" && ["rescheduled","reassigned","cancelled"].includes(kind) && !await authorizeFollowupChange(deliveryKickoff,bookingId,event,managedScheduleRequestId,tx))return err({kind,reason:"followup_managed_schedule"});
       for(const hostId of [...kickoffHosts(deliveryKickoff)].sort())await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${hostId}, 0))`);
       await tx.select({id:bookings.id}).from(bookings).where(eq(bookings.id,bookingId)).for("update");
       if(["invite_sent","invite_delivered","invite_failed","reminder_sent"].includes(kind)) {
@@ -199,7 +201,7 @@ export async function appendEvent<K extends BookingEventKind>(
     if(kind==="created" || kind==="reassigned" || kind==="rescheduled") {
       const [booking]=await tx.select({eventTypeId:bookings.eventTypeId}).from(bookings).where(eq(bookings.id,bookingId));
       if(booking) {
-        const guarded=await guardKickoffBooking(booking.eventTypeId,result.value.hostUserIds,{start:result.value.startsAt,end:result.value.endsAt},tx,bookingId);
+        const guarded=await guardKickoffBooking(booking.eventTypeId,result.value.hostUserIds,{start:result.value.startsAt,end:result.value.endsAt},tx,bookingId,managedScheduleRequestId);
         if(guarded.kind==="blocked")return err({kind,reason:guarded.error});
         if(guarded.kind==="allowed" && (event.kind==="created" || event.kind==="reassigned")) {
           event={...event,payload:{...event.payload,hostUserIds:guarded.hostUserIds}} as BookingEvent;
