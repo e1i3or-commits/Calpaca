@@ -1,3 +1,4 @@
+import { FollowupSchedulePanel } from "@/components/followup-schedule-panel";
 import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
@@ -13,7 +14,6 @@ import {
   listWorkspacePlaybooks,
   updateConversationPlaybook,
   updateEngagementStatus,
-  updateOnboardingCadence,
   type ConversationPlaybook,
   type ConversationPlaybookInput,
   type DirectoryUser,
@@ -352,27 +352,17 @@ function PlaybookEditor({
 }
 
 function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDetail; reload: () => Promise<void>}) {
-  const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string|null>(null);
   const plan = engagement.onboarding;
   if (!plan) return null;
   const names = (hosts: typeof plan.attendance.kickoff) => hosts.map(host => engagement.people.find(person => person.userId === host.userId)?.name ?? "Unavailable participant").join(", ");
-  async function change(cadence: "weekly"|"biweekly"|"monthly") {
-    setSaving(true); setError(null);
-    try { await updateOnboardingCadence(engagement.id, plan!.revision, cadence); await reload(); }
-    catch (caught) { setError(caught instanceof ApiError && caught.code === "revision_conflict" ? "The plan changed. Refresh the engagement before choosing a cadence again." : "The cadence could not be saved. Refresh to confirm the current setting before retrying."); }
-    finally { setSaving(false); }
-  }
   return <section aria-labelledby="onboarding-plan-title" className="border-t border-border py-6">
     <h3 id="onboarding-plan-title" className="font-medium">Franchise onboarding plan</h3>
-    <p className="mt-2 text-sm text-muted-foreground">Kickoff booking is not available yet. Future meetings have not been scheduled.</p>
+    <p className="mt-2 text-sm text-muted-foreground">Kickoff booking is not available yet. Follow-up dates remain drafts until invitations are enabled.</p>
     <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-[10rem_1fr]">
       <dt className="text-muted-foreground">Kickoff</dt><dd>{plan.kickoffDurationMinutes} minutes. Required: {names(plan.attendance.kickoff)}.</dd>
       <dt className="text-muted-foreground">Follow-up</dt><dd>{plan.followupDurationMinutes} minutes. Required: {names(plan.attendance.followup.filter(host => host.role === "required"))}. Optional: {names(plan.attendance.followup.filter(host => host.role === "optional"))}.</dd>
     </dl>
-    <label className="mt-4 grid max-w-xs gap-2 text-sm">Planned follow-up cadence<select className="min-h-11 rounded-lg border border-input bg-background px-3" value={plan.cadence} disabled={saving || !engagement.canManage || ["archived", "completed"].includes(engagement.status)} onChange={event => void change(event.target.value as "weekly"|"biweekly"|"monthly")}><option value="weekly">Every week</option><option value="biweekly">Every two weeks</option><option value="monthly">Every month</option></select></label>
-    {saving && <p role="status" className="mt-2 text-sm">Saving cadence…</p>}{error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
     <div className="mt-6 rounded-lg border border-border p-4" aria-labelledby="kickoff-setup-title">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 id="kickoff-setup-title" className="text-sm font-medium">Kickoff calendar setup</h4>
@@ -394,6 +384,7 @@ function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDeta
         <p className="mt-3 text-xs text-muted-foreground">Checked {new Date(plan.kickoffReadiness.checkedAt).toLocaleString()}. Availability will be checked again when a time is booked.</p>
       </> : <p role="status" className="mt-2 text-sm text-muted-foreground">Calendar setup has not been checked.</p>}
     </div>
+    <FollowupSchedulePanel engagement={engagement} reload={reload} />
     <div className="mt-4 flex flex-wrap gap-4 text-sm">
       <a className="text-primary" href={`https://tyger.tourscale.com/launch/${encodeURIComponent(plan.sourceProjectKey)}`} target="_blank" rel="noopener noreferrer">Launch context in Tyger</a>
       <a className="text-primary" href={`https://crm.zoho.com/crm/org829549357/tab/CustomModule6/${plan.franchiseeId}`} target="_blank" rel="noopener noreferrer">Franchisee in CRM</a>

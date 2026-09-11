@@ -90,6 +90,185 @@
     }
   ],
   "paths": {
+    "/api/me/engagements/{id}/followup-schedule": {
+      "get": {
+        "operationId": "getApiMeEngagementsIdFollowupSchedule",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Read the planned follow-up schedule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/me/engagements/{id}/followup-schedule/preview": {
+      "post": {
+        "operationId": "postApiMeEngagementsIdFollowupSchedulePreview",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Preview future follow-up changes",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FollowupPreviewRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/me/engagements/{id}/followup-schedule/apply": {
+      "post": {
+        "operationId": "postApiMeEngagementsIdFollowupScheduleApply",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Apply a reviewed draft schedule without issuing invitations",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FollowupApplyRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/automation/kickoff-deliveries": {
       "get": {
         "operationId": "getApiAutomationKickoffDeliveries",
@@ -7480,6 +7659,266 @@
           "providerEventId",
           "recipient",
           "status"
+        ],
+        "additionalProperties": false
+      },
+      "FollowupPreviewRequest": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "const": "configure"
+                  },
+                  "rule": {
+                    "type": "object",
+                    "properties": {
+                      "cadence": {
+                        "type": "string",
+                        "enum": [
+                          "weekly",
+                          "biweekly",
+                          "monthly"
+                        ]
+                      },
+                      "anchorDate": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                      },
+                      "localTime": {
+                        "type": "string",
+                        "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+                      },
+                      "timezone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "monthlyMode": {
+                        "type": "string",
+                        "enum": [
+                          "day_of_month",
+                          "weekday_position"
+                        ]
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 12,
+                        "default": 6
+                      }
+                    },
+                    "required": [
+                      "cadence",
+                      "anchorDate",
+                      "localTime",
+                      "timezone",
+                      "monthlyMode"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "action",
+                  "rule"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "const": "move"
+                  },
+                  "occurrenceId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "time": {
+                    "type": "string",
+                    "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+                  }
+                },
+                "required": [
+                  "action",
+                  "occurrenceId",
+                  "date",
+                  "time"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "pause",
+                      "resume",
+                      "end"
+                    ]
+                  }
+                },
+                "required": [
+                  "action"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "discriminator": {
+              "propertyName": "action"
+            }
+          }
+        },
+        "required": [
+          "revision",
+          "command"
+        ],
+        "additionalProperties": false
+      },
+      "FollowupApplyRequest": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "const": "configure"
+                  },
+                  "rule": {
+                    "type": "object",
+                    "properties": {
+                      "cadence": {
+                        "type": "string",
+                        "enum": [
+                          "weekly",
+                          "biweekly",
+                          "monthly"
+                        ]
+                      },
+                      "anchorDate": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                      },
+                      "localTime": {
+                        "type": "string",
+                        "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+                      },
+                      "timezone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "monthlyMode": {
+                        "type": "string",
+                        "enum": [
+                          "day_of_month",
+                          "weekday_position"
+                        ]
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 12,
+                        "default": 6
+                      }
+                    },
+                    "required": [
+                      "cadence",
+                      "anchorDate",
+                      "localTime",
+                      "timezone",
+                      "monthlyMode"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "action",
+                  "rule"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "const": "move"
+                  },
+                  "occurrenceId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "time": {
+                    "type": "string",
+                    "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$"
+                  }
+                },
+                "required": [
+                  "action",
+                  "occurrenceId",
+                  "date",
+                  "time"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "pause",
+                      "resume",
+                      "end"
+                    ]
+                  }
+                },
+                "required": [
+                  "action"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "discriminator": {
+              "propertyName": "action"
+            }
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "previewHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "revision",
+          "command",
+          "requestId",
+          "previewHash"
         ],
         "additionalProperties": false
       },

@@ -104,6 +104,8 @@ export async function updateOnboardingCadence(workspaceId: string, actor: Engage
     if (!row) return { kind: "not_found" as const };
     if (row.revision !== parsed.data.revision) return { kind: "revision_conflict" as const };
     if (row.cadence === parsed.data.cadence) return { kind: "unchanged" as const, onboarding: onboardingOutput(row) };
+    const [schedule] = await tx.select({id:s.onboardingFollowupSchedules.onboardingId}).from(s.onboardingFollowupSchedules).where(eq(s.onboardingFollowupSchedules.onboardingId,row.id));
+    if (schedule) return { kind: "schedule_preview_required" as const };
     const [updated] = await tx.update(s.franchiseOnboarding).set({ cadence: parsed.data.cadence, revision: row.revision + 1, updatedAt: new Date() })
       .where(eq(s.franchiseOnboarding.id, row.id)).returning();
     await tx.insert(s.franchiseOnboardingChanges).values({ workspaceId, onboardingId: row.id, actorUserId: actor.userId, revision: updated!.revision, kind: "cadence_changed", cadence: updated!.cadence });

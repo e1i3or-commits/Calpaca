@@ -1,5 +1,6 @@
 import { franchiseOnboardingInput, onboardingCadenceUpdate } from "../core/engagement/franchise-onboarding";
 import { kickoffReceiptInput } from "../core/invite/kickoff-delivery";
+import { followupPreviewInput, followupApplyInput } from "../core/engagement/followup-schedule";
 import { Hono } from "hono";
 import type { ZodTypeAny } from "zod";
 import { CALPACA_VERSION } from "../version";
@@ -39,6 +40,8 @@ const requestSchemas = {
   OnboardingCadence: onboardingCadenceUpdate,
   PrepareKickoff: prepareKickoffInput,
   KickoffReceipt: kickoffReceiptInput,
+  FollowupPreview: followupPreviewInput,
+  FollowupApply: followupApplyInput,
   Hold: holdBodySchema,
   Booking: bookingBodySchema,
   Reschedule: rescheduleBodySchema,
@@ -55,6 +58,9 @@ export type RequestSchemaName = keyof typeof requestSchemas;
 export const documentedRequestSchemas = requestSchemas;
 
 export const openApiOperations: readonly Operation[] = [
+  ["get","/api/me/engagements/{id}/followup-schedule","Engagements","Read the planned follow-up schedule","personal"],
+  ["post","/api/me/engagements/{id}/followup-schedule/preview","Engagements","Preview future follow-up changes","personal","FollowupPreview"],
+  ["post","/api/me/engagements/{id}/followup-schedule/apply","Engagements","Apply a reviewed draft schedule without issuing invitations","personal","FollowupApply"],
   ["get","/api/automation/kickoff-deliveries","Engagements","Inspect workspace kickoff delivery failures and worker heartbeat","personal"],
   ["post","/api/automation/kickoff-deliveries/{id}/retry","Engagements","Retry a kickoff delivery before email dispatch (workspace admin)","personal"],
   ["post","/api/webhooks/kickoff-delivery","Webhooks","Record recipient-level kickoff delivery evidence","bearer","KickoffReceipt"],

@@ -1,5 +1,6 @@
 import { franchiseOnboardingRoutes } from "./routes/franchise-onboarding";
 import { kickoffDeliveryRoutes } from "./routes/kickoff-delivery";
+import { followupScheduleRoutes } from "./routes/followup-schedule";
 import { Hono } from "hono";
 import { getAuth } from "../auth/index";
 import { adminRoutes } from "./routes/admin";
@@ -85,5 +86,6 @@ app.route("/", bookingEmailVerificationRoutes);
 app.route("/", engagementRoutes);
 app.route("/", franchiseOnboardingRoutes);
 app.route("/", kickoffDeliveryRoutes);
+app.route("/", followupScheduleRoutes);
 app.route("/", conversationRoutes);
 app.route("/", proposalRoutes);

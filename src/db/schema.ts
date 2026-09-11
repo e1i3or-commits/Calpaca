@@ -870,3 +870,31 @@ export const kickoffDeliveryWorker = pgTable("kickoff_delivery_worker", {
   name: text("name").primaryKey(),
   lastSweepAt: timestamp("last_sweep_at", {withTimezone:true}).notNull(),
 });
+
+// Planned follow-ups remain separate from confirmed bookings and delivery.
+export const onboardingFollowupSchedules = pgTable("onboarding_followup_schedules", {
+  onboardingId: uuid("onboarding_id").primaryKey().references(() => franchiseOnboarding.id),
+  status: text("status").$type<import("../core/engagement/followup-schedule").ScheduleStatus>().notNull(),
+  rule: jsonb("rule").$type<import("../core/engagement/followup-schedule").FollowupRule>().notNull(),
+  updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
+});
+export const onboardingFollowupOccurrences = pgTable("onboarding_followup_occurrences", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  onboardingId: uuid("onboarding_id").notNull().references(() => onboardingFollowupSchedules.onboardingId),
+  position: integer("position").notNull(),
+  startsAt: timestamp("starts_at", {withTimezone: true}).notNull(),
+  endsAt: timestamp("ends_at", {withTimezone: true}).notNull(),
+  status: text("status").$type<"draft" | "paused" | "cancelled">().notNull(),
+  exception: boolean("exception").notNull().default(false),
+  updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
+}, t => [uniqueIndex("onboarding_followup_position_uq").on(t.onboardingId,t.position)]);
+export const onboardingFollowupChanges = pgTable("onboarding_followup_changes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  onboardingId: uuid("onboarding_id").notNull().references(() => franchiseOnboarding.id),
+  requestId: uuid("request_id").notNull(),
+  revision: integer("revision").notNull(),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id),
+  input: jsonb("input").$type<import("../core/engagement/followup-schedule").FollowupApplyInput>().notNull(),
+  changes: jsonb("changes").$type<import("../core/engagement/followup-schedule").ScheduleChange[]>().notNull(),
+  createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
+}, t => [uniqueIndex("onboarding_followup_request_uq").on(t.onboardingId,t.requestId), uniqueIndex("onboarding_followup_revision_uq").on(t.onboardingId,t.revision)]);

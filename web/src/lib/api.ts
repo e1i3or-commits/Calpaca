@@ -1787,3 +1787,14 @@ export function updateConversationPlaybook(
 export function analyticsCsvUrl(from: string, to: string): string {
   return `/api/me/analytics.csv?${new URLSearchParams({ from, to })}`;
 }
+
+export type { FollowupRule, FollowupPreviewInput, FollowupApplyInput, ScheduleSnapshot, SchedulePreview } from "../../../src/core/engagement/followup-schedule";
+export function getFollowupSchedule(id: string) {
+  return request<import("../../../src/core/engagement/followup-schedule").ScheduleSnapshot>(`/api/me/engagements/${encodeURIComponent(id)}/followup-schedule`);
+}
+export function previewFollowupSchedule(id: string, input: import("../../../src/core/engagement/followup-schedule").FollowupPreviewInput) {
+  return request<{preview: import("../../../src/core/engagement/followup-schedule").SchedulePreview; previewHash: string}>(`/api/me/engagements/${encodeURIComponent(id)}/followup-schedule/preview`, {method:"POST",body:JSON.stringify(input)});
+}
+export function applyFollowupSchedule(id: string, input: import("../../../src/core/engagement/followup-schedule").FollowupApplyInput) {
+  return request<import("../../../src/core/engagement/followup-schedule").ScheduleSnapshot>(`/api/me/engagements/${encodeURIComponent(id)}/followup-schedule/apply`, {method:"POST",body:JSON.stringify(input)});
+}
