@@ -17,8 +17,10 @@ A batch can use slots vacated by other bookings in that same reviewed change.
 Only their audited old reservations are ignored. A durable provider update can
 supersede an older cached Google time until the next calendar sync; fresh provider
 conflicts become authoritative again. External meetings and active holds remain
-blocking. Newly prepared private follow-up conversations use a 365-day reservation
-window so monthly and biweekly drafts can be reserved beyond the public default.
+blocking. Protected follow-up conversations reserve at most 60 days ahead, inside the
+90-day calendar cache and its required weekly full refresh. Later planned dates
+wait for the rolling reservation worker; a larger event-type window cannot
+bypass the coverage guard.
 
 The transaction refuses changes while a related delivery is processing or has
 an attempted, unresolved provider outcome. It returns a visible 409 with the

@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
-import { sameRoster, type KickoffBookingError } from "../core/engagement/kickoff-booking";
+import { PROTECTED_RESERVATION_WINDOW_DAYS, sameRoster, type KickoffBookingError } from "../core/engagement/kickoff-booking";
 import { effectiveOpenIntervals } from "../core/availability/overrides";
 import { subtract, type Interval } from "../core/availability/intervals";
 import { generateSlots } from "../core/availability/slots";
@@ -38,6 +38,7 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
   if(!sameRoster(hostIds,required))return blocked("kickoff_roster_mismatch");
   const now=Temporal.Now.instant();
   if(!(await getKickoffReadiness(ctx.onboarding,db,new Date(now.epochMilliseconds),ctx.meetingKind)).calendarSetupReady)return blocked("kickoff_setup_incomplete");
+  if(slot.end.epochMilliseconds>now.epochMilliseconds+PROTECTED_RESERVATION_WINDOW_DAYS*86400_000)return blocked("kickoff_calendar_coverage_incomplete");
   const event=ctx.eventType;
   if(slot.start.until(slot.end).total({unit:"minutes"})!==event.durationMinutes)return blocked("kickoff_slot_unavailable");
   const window={start:slot.start.subtract({minutes:event.bufferBeforeMin}),end:slot.end.add({minutes:event.bufferAfterMin})};

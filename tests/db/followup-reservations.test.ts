@@ -206,3 +206,16 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("follow-up batch changes",()=>{
   }finally{await f.pool.end();}
  });
 });
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("calendar coverage",()=>{
+ test("a larger event-type window cannot reserve outside the protected calendar coverage",async()=>{
+  const f=await fixture();try {
+   const date=Temporal.Now.plainDateISO("UTC").add({days:100}).toString();
+   const request=await reviewed(f,{action:"move",occurrenceId:f.occurrence.id,date,time:"10:00"});
+   expect((await applyFollowupSchedule(f.ws,f.actor,f.id,request,f.db)).kind).toBe("applied");
+   await f.db.update(s.eventTypes).set({rollingWindowDays:365}).where(eq(s.eventTypes.id,f.eventTypeId));
+   expect(await reserveOnboardingFollowup(f.ws,f.actor,f.id,f.occurrence.id,3,f.db)).toMatchObject({kind:"blocked",issueCode:"kickoff_calendar_coverage_incomplete"});
+   expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(0);
+  }finally{await f.pool.end();}
+ });
+});

@@ -1,3 +1,4 @@
+import { PROTECTED_RESERVATION_WINDOW_DAYS } from "../core/engagement/kickoff-booking";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { Temporal } from "@js-temporal/polyfill";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -27,7 +28,7 @@ export async function prepareOnboardingFollowups(workspaceId:string,actor:Engage
     const [conversation]=await tx.insert(s.eventTypes).values({workspaceId,engagementId,ownerUserId:onboarding.input.accountLeadUserId,
       slug:`onboarding-followup-${crypto.randomUUID()}`,title:`${onboarding.input.locationName} onboarding follow-up`,
       description:"Review launch progress, resolve blockers and agree the next actions with Franchise Success.",durationMinutes:45,
-      mode:"group",capacity:1,rollingWindowDays:365,playbookStatus:"draft",publicSelectableHostIds:[],
+      mode:"group",capacity:1,rollingWindowDays:PROTECTED_RESERVATION_WINDOW_DAYS,playbookStatus:"draft",publicSelectableHostIds:[],
       purpose:"Keep franchise onboarding moving with shared progress and next steps.",
       participantRoles:[{role:"Franchise Success",required:true},{role:"Leadership",required:false},{role:"Franchisee",required:true}],
       outcomeDefinition:"Review progress, resolve blockers and confirm action owners."}).returning();
