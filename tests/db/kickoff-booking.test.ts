@@ -77,7 +77,13 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("protected kickoff bookings", ()
    expect(await confirmHold(holdIds,invitee,db)).toEqual({ok:false,error:{kind:"kickoff_engagement_inactive"}});
    expect(await db.select().from(s.bookings)).toHaveLength(0);expect(await db.select().from(s.bookingEvents)).toHaveLength(0);
    await db.update(s.engagements).set({status:"active"}).where(eq(s.engagements.id,engagementId));
-   const confirmed=await confirmHold([...holdIds].reverse(),invitee,db);if(!confirmed.ok)throw new Error(JSON.stringify(confirmed));
+   const alternate={start:start.add({hours:2}),end:slot.end.add({hours:2})};
+   const otherHold=await createHold(event.id,ids,alternate,ttl,db);if(!otherHold.ok)throw new Error("alternate hold missing");
+   const confirmations=await Promise.all([confirmHold([...holdIds].reverse(),invitee,db),confirmHold(otherHold.value.map(row=>row.id),invitee,db)]);
+   expect(confirmations.filter(result=>result.ok)).toHaveLength(1);
+   expect(confirmations.find(result=>!result.ok)).toEqual({ok:false,error:{kind:"kickoff_already_booked"}});
+   const confirmed=confirmations.find(result=>result.ok);if(!confirmed?.ok)throw new Error("confirmed kickoff missing");
+   expect(await db.select().from(s.bookings).where(eq(s.bookings.eventTypeId,event.id))).toHaveLength(1);
    expect(confirmed.value.hostUserIds).toHaveLength(6);expect(confirmed.value.hostUserIds[0]).toBe(organizer);
    const bookingId=confirmed.value.bookingId;
    await rebuildProjection(bookingId,db);

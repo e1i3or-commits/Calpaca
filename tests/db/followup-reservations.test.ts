@@ -86,10 +86,18 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("follow-up reservations",()=>{
    const [hold]=await f.db.insert(s.holds).values({eventTypeId:f.source.eventTypeId,hostUserId:f.ids[3]!,slotStart:new Date(f.occurrence.startsAt),slotEnd:new Date(f.occurrence.endsAt),expiresAt:new Date(Date.now()+600000)}).returning();
    expect(await f.reserve()).toMatchObject({kind:"blocked",issueCode:"kickoff_slot_unavailable"});
    expect((await getFollowupReservations(f.ws,f.actor,f.id,f.db))).toMatchObject({attention:1});
+   const blockedSchedule=await getFollowupSchedule(f.ws,f.actor,f.id,f.db);
+   if(blockedSchedule.kind!=="found")throw new Error("schedule missing");
+   expect(blockedSchedule.schedule?.occurrences[0]).toMatchObject({id:f.occurrence.id,reservationIssue:{code:"kickoff_slot_unavailable",ownerUserId:f.ids[2]}});
+   expect(blockedSchedule.schedule?.occurrences[0]?.bookingId).toBeUndefined();
    expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({attention:1,reservationAttention:1});
    expect(await kickoffDeliveryReport(crypto.randomUUID(),f.db)).toMatchObject({attention:0,reservationAttention:0});
    await f.db.update(s.holds).set({status:"expired"}).where(eq(s.holds.id,hold!.id));expect((await f.reserve()).kind).toBe("reserved");
    expect((await getFollowupReservations(f.ws,f.actor,f.id,f.db))).toMatchObject({attention:0});
+   const recovered=await getFollowupSchedule(f.ws,f.actor,f.id,f.db);
+   if(recovered.kind!=="found")throw new Error("schedule missing");
+   expect(recovered.schedule?.occurrences[0]?.reservationIssue).toBeUndefined();
+   expect(recovered.schedule?.occurrences[0]?.bookingId).toBeTruthy();
   }finally{await f.pool.end();}
  });
  test("workspace, approval and kickoff evidence gate reservations; public and generic mutations cannot bypass them",async()=>{

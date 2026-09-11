@@ -23,7 +23,7 @@ async function load(workspaceId: string, actor: EngagementActor, engagementId: s
   if (!onboarding) return null;
   const [schedule] = await db.select().from(s.onboardingFollowupSchedules).where(eq(s.onboardingFollowupSchedules.onboardingId,onboarding.id));
   const rows = schedule ? await db.select().from(s.onboardingFollowupOccurrences).where(eq(s.onboardingFollowupOccurrences.onboardingId,onboarding.id)).orderBy(asc(s.onboardingFollowupOccurrences.position)) : [];
-  const reservations=await db.select({occurrenceId:s.followupReservations.occurrenceId,bookingId:s.followupReservations.bookingId,inviteStatus:s.bookings.inviteStatus,bookingStatus:s.bookings.status})
+  const reservations=await db.select({occurrenceId:s.followupReservations.occurrenceId,bookingId:s.followupReservations.bookingId,reservationStatus:s.followupReservations.status,issueCode:s.followupReservations.issueCode,ownerUserId:s.followupReservations.ownerUserId,inviteStatus:s.bookings.inviteStatus,bookingStatus:s.bookings.status})
     .from(s.followupReservations).leftJoin(s.bookings,eq(s.bookings.id,s.followupReservations.bookingId)).where(eq(s.followupReservations.onboardingId,onboarding.id));
   const deliveries=await db.select({bookingId:s.kickoffDeliveries.bookingId,status:s.kickoffDeliveries.status,kind:s.kickoffDeliveries.kind}).from(s.kickoffDeliveries)
     .where(eq(s.kickoffDeliveries.onboardingId,onboarding.id)).orderBy(desc(s.kickoffDeliveries.sequence));
@@ -34,6 +34,7 @@ async function load(workspaceId: string, actor: EngagementActor, engagementId: s
       const reservation=reservations.find(item=>item.occurrenceId===row.id);
       const delivery=deliveries.find(item=>item.bookingId===reservation?.bookingId);
       return {id:row.id,position:row.position,startsAt:row.startsAt.toISOString(),endsAt:row.endsAt.toISOString(),status:row.status,exception:row.exception,
+        ...(reservation?.reservationStatus==="blocked"&&row.status==="draft"?{reservationIssue:{code:reservation.issueCode??"followup_reservation_failed",ownerUserId:reservation.ownerUserId}}:{}),
         ...(reservation?.bookingId?{bookingId:reservation.bookingId,inviteStatus:reservation.inviteStatus!,bookingStatus:reservation.bookingStatus!,
           ...(delivery?{deliveryStatus:delivery.status,deliveryKind:delivery.kind}:{})}:{})};
     })} : null};

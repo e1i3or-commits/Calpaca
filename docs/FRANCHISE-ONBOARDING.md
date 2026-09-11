@@ -1,8 +1,9 @@
 # Franchise onboarding Engagements
 
 The automation API creates a restricted draft Engagement for a source launch
-and saves a planned meeting cadence. It does not publish booking links or
-create calendar invitations yet. The Engagement overview shows that state.
+and saves a planned meeting cadence. Separate guarded actions publish the
+kickoff and enable follow-ups once their prerequisites pass. The Engagement
+overview distinguishes preparation, publication, reservations and delivery.
 
 ## Routes
 
@@ -46,17 +47,26 @@ or calendar reconciliation is implied by reading it.
 
 ## Scheduling boundary
 
-Every automation output returns `kickoffBookingUrl: null`,
-`schedulingState: "not_published"` and the remaining publication/scheduler issues.
-An upstream welcome sender must not interpret draft creation as booking ready.
-The main Engagement's active status does not change this scheduling state.
+Source recovery returns the actual protected kickoff URL only after publication
+and current calendar/configuration checks. Draft creation alone cannot release
+the welcome email. Publication and cadence start require explicit deployment
+configuration and verified worker readiness; see
+[publication and cadence start](ONBOARDING-SCHEDULING-PUBLICATION.md).
 
-Next build publication with exact required-host enforcement at availability,
-reservation and confirmation, calendar freshness checks and a verified public
-URL. Carry optional roles into calendar and ICS invitations. Recurrence needs
-an agreed organizing calendar, timezone/local-time anchor, calendar-month rules,
-bounded future occurrences and revision-aware update/pause/completion handling.
-The planned-cadence selector does not reschedule existing meetings.
+Kickoff confirmation permits one confirmed kickoff per protected conversation.
+Concurrent requests at different times cannot create duplicate kickoffs. Holding
+a new time and rescheduling the existing booking remain supported. Follow-ups
+stay bound to the kickoff used to enable them; a different kickoff ID conflicts.
+
+Cadence changes use [reviewed schedules](FOLLOWUP-SCHEDULE.md), with weekly,
+biweekly and monthly choices, timezone-aware dates, individual exceptions and
+pause/resume/end controls. [Reservation](FOLLOWUP-RESERVATIONS.md),
+[calendar/email delivery](KICKOFF-DELIVERY.md),
+[rolling scheduling](FOLLOWUP-AUTOMATION.md) and
+[SES feedback](SES-ONBOARDING-FEEDBACK.md) have separate durable state and
+assigned failures. An unbooked follow-up's failure and owner appear beside its
+saved date. Provider deployment, live canaries and monitoring activation remain
+required; local verification does not establish production readiness.
 
 ## Verification
 

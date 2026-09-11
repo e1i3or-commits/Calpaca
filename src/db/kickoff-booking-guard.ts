@@ -12,7 +12,7 @@ type Db = NodePgDatabase<typeof s>;
 
 /** Call inside the transaction that writes the hold/booking. Availability is
  * re-read here; a public page or earlier hold is not evidence of current safety. */
-export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly string[], slot: Interval, db: Db, excludeBookingId?: string, managedRequestId?: string): Promise<
+export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly string[], slot: Interval, db: Db, excludeBookingId?: string, managedRequestId?: string, purpose: "hold"|"booking" = "booking"): Promise<
   {kind:"unprotected"} | {kind:"allowed";hostUserIds:string[]} | {kind:"blocked";error:KickoffBookingError}
 > {
   const initial=await loadKickoffContext(eventTypeId,db);
@@ -34,6 +34,13 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
   if(ctx.engagement.status!=="active")return blocked("kickoff_engagement_inactive");
   const configIssue=await kickoffConfigurationIssue(ctx,db);
   if(configIssue)return blocked(configIssue);
+  // Holds also support rescheduling. Enforce the single kickoff when confirming
+  // a booking, under the same host/context locks used by both confirmations.
+  if(ctx.meetingKind==="kickoff" && purpose==="booking") {
+    const [existing]=await db.select({id:s.bookings.id}).from(s.bookings)
+      .where(and(eq(s.bookings.eventTypeId,eventTypeId),eq(s.bookings.workspaceId,ctx.onboarding.workspaceId),eq(s.bookings.status,"confirmed"),...(excludeBookingId?[ne(s.bookings.id,excludeBookingId)]:[]))).limit(1);
+    if(existing)return blocked("kickoff_already_booked");
+  }
   const required=kickoffHosts(ctx);
   if(!sameRoster(hostIds,required))return blocked("kickoff_roster_mismatch");
   const now=Temporal.Now.instant();

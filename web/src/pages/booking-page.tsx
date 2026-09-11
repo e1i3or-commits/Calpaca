@@ -51,6 +51,7 @@ type Step =
 const ERROR_MESSAGES: Record<string, string> = {
   event_type_not_found: "This booking link doesn't exist.",
   slot_not_available: "That time was just taken. Pick another one.",
+  kickoff_already_booked: "Your kickoff is already scheduled. Use the link in your confirmation email to reschedule it.",
   slot_taken: "That time was just taken. Pick another one.",
   expired: "The hold on that time expired. Pick it again.",
   hosts_not_selectable: "That host selection is no longer available. Refresh and choose again.",

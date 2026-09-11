@@ -95,7 +95,7 @@ export async function createHold(
   const slotEnd = toDate(slot.end);
 
   const inserted = await executor.transaction(async (tx) => {
-      const kickoff=await guardKickoffBooking(eventTypeId,hostUserIds,slot,tx);
+      const kickoff=await guardKickoffBooking(eventTypeId,hostUserIds,slot,tx,undefined,undefined,"hold");
       if(kickoff.kind==="blocked")return {error:kickoff.error};
       // Event-type locking protects capacity, while stable per-host advisory
       // locks serialize claims across every event type without a lock table.

@@ -179,6 +179,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("durable kickoff delivery",()=>{
     {start:f.slot.start.add({hours:2}),end:f.slot.end.add({hours:2})},Temporal.Duration.from({minutes:10}),f.db);
    if(!holds.ok)throw new Error("rollback fixture hold failed");
    const holdIds=holds.value.map(row=>row.id);
+   // Leave no confirmed kickoff so this tests the delivery insert rollback,
+   // rather than stopping at the single-kickoff guard.
+   await f.db.update(s.bookings).set({status:"cancelled"}).where(eq(s.bookings.id,f.bookingId));
    await expect(confirmHold(holdIds,{name:"Another franchisee",email:"another@example.invalid",timezone:"UTC"},f.db)).rejects.toThrow();
    expect(await f.db.select().from(s.bookings)).toHaveLength(1);
    expect(await f.db.select().from(s.bookingEvents)).toHaveLength(before.length);

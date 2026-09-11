@@ -7,6 +7,7 @@ export type KickoffBookingError =
   | "followup_occurrence_mismatch"
   | "followup_approval_stale"
   | "followup_managed_schedule"
+  | "kickoff_already_booked"
   | "kickoff_not_published"
   | "kickoff_engagement_inactive"
   | "kickoff_configuration_changed"

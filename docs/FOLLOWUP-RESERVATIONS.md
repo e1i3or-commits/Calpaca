@@ -44,3 +44,11 @@ private activation/source delivery fixtures directly; production callers cannot.
 Controlled agreement/publication, provider feedback binding, independent monitor
 activation, automatic extension remain to implement.
 No production booking, invitation or provider resource was created by this build.
+
+The staff schedule readback includes a scoped `reservationIssue` (code and owner)
+for blocked draft occurrences even when no booking exists. The saved date shows
+an actionable message and its assigned person. Successful reservation removes
+that issue; cancelled/paused dates do not retain an active booking warning.
+A real PostgreSQL test covers failure without a booking and later recovery.
+Chrome verified the actual component with a synthetic local database record;
+no provider invitations were sent.

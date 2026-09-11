@@ -13,6 +13,16 @@ const messages: Record<string,string> = {
   invalid_input: "Check the date, time, timezone and number of meetings.",
   request_conflict: "This save request has already been used. Refresh and preview again.",
 };
+const reservationMessages: Record<string,string> = {
+  kickoff_slot_unavailable: "A required teammate is unavailable. Move this meeting to another time or resolve the calendar conflict.",
+  kickoff_setup_incomplete: "Check the required team's availability schedules and calendar sync.",
+  previous_cancellation_unverified: "The previous cancellation is awaiting verification before a replacement can be booked.",
+  kickoff_delivery_unverified: "Verify the kickoff invitation delivery before booking follow-ups.",
+  followup_approval_stale: "Review and approve the current follow-up schedule.",
+  followup_occurrence_past: "This date passed before a booking was confirmed. Move it to a future time.",
+  followup_not_enabled: "Start the follow-up cadence in call setup.",
+  kickoff_calendar_coverage_incomplete: "This date is outside the calendar coverage window. The scheduler will retry when it is in range.",
+};
 function explain(error:unknown) { return error instanceof ApiError ? messages[error.code] ?? "The request could not be confirmed. Refresh to check the saved schedule; a repeated save will not create duplicates." : "The request could not be confirmed. Check your connection and retry."; }
 export function FollowupSchedulePanel({engagement,reload}:{engagement:EngagementDetail;reload:()=>Promise<void>}) {
   const [snapshot,setSnapshot]=useState<ScheduleSnapshot|null>(null);
@@ -79,6 +89,7 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
       {schedule&&<div className="mt-5"><h5 className="text-sm font-medium">Saved dates · {schedule.rule.timezone}</h5><ul className="mt-2 divide-y divide-border">{schedule.occurrences.map(row=><li key={row.id} className="py-3 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2"><p>{format(row.startsAt,schedule.rule.timezone)} <span className="text-muted-foreground">· {row.bookingId?`${row.bookingStatus==="cancelled"?"Cancelled booking":"Booked"} · ${row.deliveryKind==="cancelled"?"Cancellation":"Invitation"} ${(row.deliveryStatus??row.inviteStatus??"pending").replaceAll("_"," ")}`:row.status}{row.exception?" · Individually moved":""}{new Date(row.startsAt).getTime()<=Date.now()?" · Past or started":""}</span></p>
         {row.status!=="cancelled"&&new Date(row.startsAt).getTime()>Date.now()&&<button className={button} disabled={locked} onClick={()=>{setMoving(row.id);setMoveDate("");setMoveTime(schedule.rule.localTime);setPending(null);}}>Move this meeting</button>}</div>
+        {row.reservationIssue&&<p role="alert" className="mt-2 text-sm text-destructive">Meeting not booked. {reservationMessages[row.reservationIssue.code]??"The booking could not be completed. Review the scheduling issue before retrying."} Assigned to {engagement.people.find(person=>person.userId===row.reservationIssue?.ownerUserId)?.name??"the account lead"}.</p>}
         {moving===row.id&&<form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={event=>{event.preventDefault();void preview({action:"move",occurrenceId:row.id,date:moveDate,time:moveTime});}}><label className="grid gap-1">New date<input required type="date" className={control} value={moveDate} onChange={event=>{setMoveDate(event.target.value);setPending(null);}}/></label><label className="grid gap-1">New time<input required type="time" className={control} value={moveTime} onChange={event=>{setMoveTime(event.target.value);setPending(null);}}/></label><button className={button} disabled={locked}>Preview this move</button></form>}
       </li>)}</ul></div>}
     </>}

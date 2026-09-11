@@ -39,6 +39,7 @@ async function change(workspaceId:string,actor:EngagementActor,engagementId:stri
     if(row.revision!==input.revision)return {kind:"revision_conflict" as const};
     const state=await onboardingSchedulingState(row,tx,runtime);
     const already=action==="publish_kickoff"?state.kickoff.published:state.followups.enabled;
+    if(already && action==="enable_followups" && state.followups.kickoffBookingId!==(input as EnableInput).kickoffBookingId)return {kind:"request_conflict" as const};
     if(already)return {kind:"already_enabled" as const,state};
     const issues=action==="publish_kickoff"?state.kickoff.issues:state.followups.issues;
     if(issues.length)return {kind:"blocked" as const,issues};

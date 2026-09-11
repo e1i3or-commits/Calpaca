@@ -62,3 +62,17 @@ The onboarding source projection also returns `workspaceId` for the authenticate
 Calpaca workspace. Tyger's n8n handoff requires it before attaching the
 Engagement to a launch, preventing a misbound API credential from supplying
 an otherwise similar source receipt. Verified with the full 854-test gate.
+
+## Single kickoff and follow-up source binding
+
+The confirmation guard runs under the existing host/context locks and refuses a
+second confirmed kickoff, including concurrent requests at different times.
+It excludes the current booking when rescheduling or validating delivery. Holds
+remain available so the original kickoff can be rescheduled. A cadence already
+enabled from one kickoff rejects another kickoff ID even with a new request ID;
+repeating the original binding remains idempotent.
+
+Validation after these changes: 854 tests / 3,012 assertions, both type checks,
+lint and production web build passed. The delivery rollback fixture now leaves
+no confirmed kickoff before testing a failed replacement insert, preserving its
+transaction rollback coverage under the new uniqueness rule.

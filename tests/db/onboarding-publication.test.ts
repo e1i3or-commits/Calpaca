@@ -109,6 +109,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("onboarding publication",()=>{
    const lead={userId:f.ids[2]!,workspaceRole:"member" as const};
    const results=await Promise.all([enableOnboardingFollowups(f.ws,lead,id,input,f.db,runtime),enableOnboardingFollowups(f.ws,lead,id,input,f.db,runtime)]);
    expect(results.map(r=>r.kind).sort()).toEqual(["applied","reused"]);
+   expect((await enableOnboardingFollowups(f.ws,lead,id,{...input,requestId:crypto.randomUUID(),kickoffBookingId:crypto.randomUUID()},f.db,runtime)).kind).toBe("request_conflict");
+   expect((await enableOnboardingFollowups(f.ws,lead,id,{...input,requestId:crypto.randomUUID()},f.db,runtime)).kind).toBe("already_enabled");
    expect(await f.db.select().from(s.bookings)).toHaveLength(1);
    await runFollowupReservationBatch(f.db);
    expect(await f.db.select().from(s.bookings)).toHaveLength(4);
