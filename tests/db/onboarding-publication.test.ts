@@ -70,6 +70,22 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("onboarding publication",()=>{
    expect(await f.db.select().from(s.onboardingSchedulingActions)).toHaveLength(0);
   }finally{await f.pool.end();}
  });
+ test("hosted kickoff URLs resolve the correct workspace in state and source recovery",async()=>{
+  const f=await fixture(),oldMode=process.env.CALPACA_DEPLOYMENT_MODE,oldOrigin=process.env.PUBLIC_URL;
+  process.env.CALPACA_DEPLOYMENT_MODE="hosted";process.env.PUBLIC_URL=runtime.publicOrigin;
+  try {
+   const published=await publishOnboardingKickoff(f.ws,f.actor,f.onboarding.engagementId,request(),f.db,runtime);
+   expect(published.kind).toBe("applied");if(published.kind!=="applied")throw new Error("publication failed");
+   const recovered=await getFranchiseOnboarding(f.ws,f.actor,f.onboarding.sourceWorkspaceId,f.onboarding.sourceProjectKey,f.db);
+   expect(recovered.kind).toBe("found");if(recovered.kind!=="found")throw new Error("recovery failed");
+   const url=new URL(published.state.kickoff.kickoffBookingUrl!);
+   expect(url.pathname).toStartWith("/book/delivery-test/onboarding-kickoff-");
+   expect(recovered.onboarding.kickoffBookingUrl).toBe(url.href);
+   const {resolvePublicWorkspace}=await import("../../src/db/workspace-repo");
+   expect(await resolvePublicWorkspace({hostname:url.hostname,workspaceSlug:url.pathname.split("/")[2]},f.db)).toMatchObject({id:f.ws});
+   expect(await resolvePublicWorkspace({hostname:url.hostname},f.db)).toBeNull();
+  }finally{if(oldMode===undefined)delete process.env.CALPACA_DEPLOYMENT_MODE;else process.env.CALPACA_DEPLOYMENT_MODE=oldMode;if(oldOrigin===undefined)delete process.env.PUBLIC_URL;else process.env.PUBLIC_URL=oldOrigin;await f.pool.end();}
+ });
  test("concurrent replay publishes once and source/preparation readback reflects the real URL",async()=>{
   const f=await fixture(),old=process.env.PUBLIC_URL;process.env.PUBLIC_URL=runtime.publicOrigin;
   try {

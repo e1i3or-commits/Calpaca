@@ -7,6 +7,11 @@ import { getKickoffReadiness } from "./kickoff-readiness-repo";
 import { onboardingAutomationActor } from "./onboarding-automation-actor";
 import * as s from "./schema";
 type Db=NodePgDatabase<typeof s>;
+async function kickoffUrl(origin:string,workspaceId:string,eventSlug:string,db:Db) {
+  if(process.env.CALPACA_DEPLOYMENT_MODE!=="hosted")return `${origin}/book/${encodeURIComponent(eventSlug)}`;
+  const [workspace]=await db.select({slug:s.workspaces.slug}).from(s.workspaces).where(eq(s.workspaces.id,workspaceId));
+  return workspace?`${origin}/book/${encodeURIComponent(workspace.slug)}/${encodeURIComponent(eventSlug)}`:null;
+}
 export const schedulingHash=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 /** Caller authorizes Engagement access. This projection contains no invitee email,
  * OAuth credentials or calendar IDs. */
@@ -48,7 +53,7 @@ export async function onboardingSchedulingState(row:typeof s.franchiseOnboarding
   if(schedule && !followup?.enabledAt && (!planned.length || planned.some(date=>date.status!=="draft" || date.startsAt<=now || date.endsAt.getTime()-date.startsAt.getTime()!==45*60_000)))followupIssues.push("followup_dates_invalid");
   const published=!!kickoff?.publishedAt;
   const available=published && engagement?.status==="active" && kickoffContext?.eventType.playbookStatus==="ready" && kickoffReady.calendarSetupReady && !kickoffIssues.includes("kickoff_configuration_changed");
-  const kickoffBookingUrl=available && runtime.publicOrigin?`${runtime.publicOrigin}/book/${encodeURIComponent(kickoffContext!.eventType.slug)}`:null;
+  const kickoffBookingUrl=available && runtime.publicOrigin?await kickoffUrl(runtime.publicOrigin,row.workspaceId,kickoffContext!.eventType.slug,db):null;
   return {revision:row.revision,checkedAt:now.toISOString(),
     kickoff:{prepared:!!kickoff,published,available:!!kickoffBookingUrl,kickoffBookingUrl,issues:kickoffIssues},
     followups:{prepared:!!followup,enabled:!!followup?.enabledAt,approvedRevision:followup?.approvedRevision??null,kickoffBookingId:followup?.kickoffBookingId??null,
@@ -64,7 +69,7 @@ export async function onboardingPublicationSummary(row:typeof s.franchiseOnboard
   const available=!!kickoff?.publishedAt && context?.engagement.status==="active" && context.eventType.playbookStatus==="ready"
     && !await kickoffConfigurationIssue(context,db) && (await getKickoffReadiness(row,db)).calendarSetupReady;
   const origin=schedulingRuntime().publicOrigin;
-  const kickoffBookingUrl=available&&origin?`${origin}/book/${encodeURIComponent(context!.eventType.slug)}`:null;
+  const kickoffBookingUrl=available&&origin?await kickoffUrl(origin,row.workspaceId,context!.eventType.slug,db):null;
   return {kickoffBookingUrl,schedulingState:!kickoff?.publishedAt?"not_published" as const:kickoffBookingUrl?"published" as const:"unavailable" as const,
     followupsEnabled:!!followup?.enabledAt,
     issues:[...(!kickoffBookingUrl?[kickoff?.publishedAt?"kickoff_booking_unavailable":"kickoff_booking_not_published"]:[]),...(!followup?.enabledAt?["followup_scheduler_not_configured"]:[])]};
