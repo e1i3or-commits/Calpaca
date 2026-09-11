@@ -56,3 +56,22 @@ queue infrastructure, workflow activation and independent alerts remain pending.
 Official contracts: [SES SMTP tags](https://docs.aws.amazon.com/ses/latest/dg/event-publishing-send-email.html),
 [SES event examples](https://docs.aws.amazon.com/ses/latest/dg/event-publishing-retrieving-sns-examples.html),
 [SNS to SQS](https://docs.aws.amazon.com/sns/latest/dg/subscribe-sqs-queue-to-sns-topic.html).
+
+## Independent queue-poller heartbeat
+
+Also bind `ONBOARDING_SES_QUEUE_URL` in Calpaca. The protected dispatcher requires
+this valid AWS queue URL. `POST /api/webhooks/ses-onboarding/poll` uses the same
+adapter secret and accepts `{queueUrl, notificationId}`. The queue must match;
+`notificationId` is null for an empty poll, otherwise the SNS message ID must
+already have an atomic saved notification record. The adapter calls this only
+after a verified empty read or successful delete, and Calpaca timestamps it.
+
+Delivery health includes `workspaceId`, `feedbackLastPollAt` and `feedbackStale`
+(three minutes). This external adapter flag is separate from `workerStale`,
+which aggregates the Calpaca dispatcher/scheduler. The independent monitor
+checks all three and verifies the intended workspace. No execution history or
+email recipient data is needed to detect an idle but stopped feedback poller.
+
+Updated verification: **847 tests / 2,949 assertions**, full gate and web build.
+Queue mismatch, unrecorded notifications, stale heartbeat and recovery are
+covered using local PostgreSQL and synthetic API calls.

@@ -232,5 +232,7 @@ export async function kickoffDeliveryReport(workspaceId:string,db:Db=getDb(),now
   const [worker]=await db.select().from(s.kickoffDeliveryWorker).where(eq(s.kickoffDeliveryWorker.name,"dispatcher"));
   const workerStale=!worker||now.getTime()-worker.lastSweepAt.getTime()>180_000;
   const automation=await followupAutomationHealth(workspaceId,db,now);
-  return {...automation,checkedAt:now.toISOString(),workerStale:workerStale||automation.schedulerStale,lastSweepAt:worker?.lastSweepAt??null,attention:(counts?.attention??0)+reservationAttention+automation.extensionAttention,reservationAttention,overdue:(counts?.overdue??0)+automation.reservationOverdue+automation.extensionOverdue,deliveries:rows};
+  const [feedback]=await db.select().from(s.kickoffDeliveryWorker).where(eq(s.kickoffDeliveryWorker.name,"ses-feedback"));
+  const feedbackStale=!feedback||now.getTime()-feedback.lastSweepAt.getTime()>180_000;
+  return {workspaceId,feedbackStale,feedbackLastPollAt:feedback?.lastSweepAt??null,...automation,checkedAt:now.toISOString(),workerStale:workerStale||automation.schedulerStale,lastSweepAt:worker?.lastSweepAt??null,attention:(counts?.attention??0)+reservationAttention+automation.extensionAttention,reservationAttention,overdue:(counts?.overdue??0)+automation.reservationOverdue+automation.extensionOverdue,deliveries:rows};
 }

@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { normalizeSesNotification,sesMessageKey,type SesBinding,type SesNotification } from "../core/invite/ses-feedback";
+import { normalizeSesNotification,sesMessageKey,type SesBinding,type SesNotification,type SesPoll } from "../core/invite/ses-feedback";
 import { getDb } from "./client";
 import { recordKickoffReceipt } from "./kickoff-delivery-repo";
 import * as s from "./schema";
@@ -30,4 +30,19 @@ export async function recordSesNotification(input:SesNotification,binding:SesBin
       return {kind:"recorded" as const};
     });
   }catch(error) {if(error instanceof FeedbackRejected)return {kind:error.kind};throw error;}
+}
+
+export async function recordSesPoll(input:SesPoll,binding:SesBinding,queueUrl:string,db:NodePgDatabase<typeof s>=getDb()) {
+  if(input.queueUrl!==queueUrl)return {kind:"queue_mismatch" as const};
+  return db.transaction(async tx=>{
+    if(input.notificationId) {
+      const id=sesMessageKey(`${binding.topicArn}\n${input.notificationId}`);
+      const [notification]=await tx.select({id:s.sesFeedbackNotifications.id}).from(s.sesFeedbackNotifications).where(eq(s.sesFeedbackNotifications.id,id));
+      if(!notification)return {kind:"notification_unrecorded" as const};
+    }
+    const checkedAt=new Date();
+    await tx.insert(s.kickoffDeliveryWorker).values({name:"ses-feedback",lastSweepAt:checkedAt})
+      .onConflictDoUpdate({target:s.kickoffDeliveryWorker.name,set:{lastSweepAt:checkedAt}});
+    return {kind:"recorded" as const,checkedAt:checkedAt.toISOString()};
+  });
 }

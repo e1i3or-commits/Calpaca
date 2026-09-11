@@ -1,4 +1,4 @@
-import { configuredSesBinding,sesInviteHeaders } from "../core/invite/ses-feedback";
+import { configuredSesBinding,sesInviteHeaders,sesPollInput } from "../core/invite/ses-feedback";
 import { loadKickoffContext } from "../db/kickoff-context";
 import { guardKickoffBooking } from "../db/kickoff-booking-guard";
 import { Temporal } from "@js-temporal/polyfill";
@@ -23,7 +23,7 @@ export interface KickoffDeliveryDeps {
 const defaults:KickoffDeliveryDeps={
   configurationIssue:()=>{
     if(!isMailerConfigured())return "mail_configuration_missing";
-    if(!process.env.ONBOARDING_SES_WEBHOOK_SECRET || !configuredSesBinding())return "delivery_feedback_not_configured";
+    if(!process.env.ONBOARDING_SES_WEBHOOK_SECRET || !configuredSesBinding() || !sesPollInput.shape.queueUrl.safeParse(process.env.ONBOARDING_SES_QUEUE_URL).success)return "delivery_feedback_not_configured";
     try {if(new URL(process.env.PUBLIC_URL??"").protocol!=="https:")return "public_url_not_configured";}catch{return "public_url_not_configured";}
     return null;
   },

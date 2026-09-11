@@ -90,6 +90,56 @@
     }
   ],
   "paths": {
+    "/api/webhooks/ses-onboarding/poll": {
+      "post": {
+        "operationId": "postApiWebhooksSesOnboardingPoll",
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Record a successful poll by the authenticated SES queue adapter",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SesPollRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/webhooks/ses-onboarding": {
       "post": {
         "operationId": "postApiWebhooksSesOnboarding",
@@ -7927,6 +7977,31 @@
           "TopicArn",
           "MessageId",
           "Message"
+        ],
+        "additionalProperties": false
+      },
+      "SesPollRequest": {
+        "type": "object",
+        "properties": {
+          "queueUrl": {
+            "type": "string",
+            "pattern": "^https:\\/\\/sqs\\.[a-z0-9-]+\\.amazonaws\\.com\\/\\d{12}\\/[a-zA-Z0-9_-]+$"
+          },
+          "notificationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "queueUrl",
+          "notificationId"
         ],
         "additionalProperties": false
       },

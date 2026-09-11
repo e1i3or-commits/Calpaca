@@ -5,7 +5,7 @@ import {createKickoffDeliveryRoutes,type KickoffDeliveryApiDeps} from "../../src
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
 function deps(role:"admin"|"member"|null):KickoffDeliveryApiDeps {
  const requireAuth:MiddlewareHandler<AuthEnv>=async(c,next)=>{if(!role)return c.json({error:"unauthorized"},401);c.set("user",{id:id(1),name:"Admin",email:"admin@example.invalid",workspaceId:id(2),workspaceRole:role});await next();};
- return {requireAuth,secret:()=>"synthetic-feedback-secret",report:async()=>({checkedAt:new Date().toISOString(),workerStale:true,lastSweepAt:null,attention:0,reservationAttention:0,reservationPending:0,extensionAttention:0,extensionOverdue:0,reservationOverdue:0,schedulerStale:false,schedulerLastSweepAt:null,overdue:0,deliveries:[]}),receipt:async()=>({kind:"recorded"}),retry:async()=>({kind:"queued"})};
+ return {requireAuth,secret:()=>"synthetic-feedback-secret",report:async()=>({workspaceId:id(2),feedbackStale:true,feedbackLastPollAt:null,checkedAt:new Date().toISOString(),workerStale:true,lastSweepAt:null,attention:0,reservationAttention:0,reservationPending:0,extensionAttention:0,extensionOverdue:0,reservationOverdue:0,schedulerStale:false,schedulerLastSweepAt:null,overdue:0,deliveries:[]}),receipt:async()=>({kind:"recorded"}),retry:async()=>({kind:"queued"})};
 }
 test("delivery reporting and retry require an administrator and use only the authenticated workspace",async()=>{
  for(const [role,status] of [[null,401],["member",403]] as const) {

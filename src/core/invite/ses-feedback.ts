@@ -7,6 +7,11 @@ export const sesNotificationInput = z.object({
   Type: z.literal("Notification"), TopicArn: z.string().min(1).max(300),
   MessageId: z.string().uuid(), Message: z.string().min(1).max(200_000),
 });
+export const sesPollInput = z.object({
+  queueUrl:z.string().regex(/^https:\/\/sqs\.[a-z0-9-]+\.amazonaws\.com\/\d{12}\/[a-zA-Z0-9_-]+$/),
+  notificationId:z.string().uuid().nullable(),
+}).strict();
+export type SesPoll = z.infer<typeof sesPollInput>;
 export type SesNotification = z.infer<typeof sesNotificationInput>;
 const mailInput = z.object({
   sendingAccountId: z.string().regex(/^\d{12}$/), messageId: z.string().min(1).max(200),

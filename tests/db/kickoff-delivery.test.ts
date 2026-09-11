@@ -1,4 +1,4 @@
-import {recordSesNotification} from "../../src/db/ses-feedback-repo";
+import {recordSesNotification,recordSesPoll} from "../../src/db/ses-feedback-repo";
 import {sesMessageKey} from "../../src/core/invite/ses-feedback";
 import {describe,expect,test} from "bun:test";
 import {Pool} from "pg";
@@ -42,6 +42,11 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("durable kickoff delivery",()=>{
   const f=await fixture();try {
    await runKickoffDeliveryBatch(deps(),f.db);
    const binding={topicArn:"arn:aws:sns:us-east-1:123456789012:synthetic",sendingAccountId:"123456789012",configurationSet:"synthetic"};
+   const queue="https://sqs.us-east-1.amazonaws.com/123456789012/synthetic";
+   expect((await recordSesPoll({queueUrl:queue+"-other",notificationId:null},binding,queue,f.db)).kind).toBe("queue_mismatch");
+   expect((await recordSesPoll({queueUrl:queue,notificationId:crypto.randomUUID()},binding,queue,f.db)).kind).toBe("notification_unrecorded");
+   await f.db.delete(s.kickoffDeliveryWorker).where(eq(s.kickoffDeliveryWorker.name,"ses-feedback"));
+   expect((await kickoffDeliveryReport(f.ws,f.db)).feedbackStale).toBe(true);
    const emails=f.delivery.recipients.map(p=>p.email);
    const event={eventType:"Delivery",mail:{sendingAccountId:binding.sendingAccountId,messageId:"SES-assigned-one",destination:emails,
     tags:{"ses:configuration-set":[binding.configurationSet],calpaca_delivery_id:[f.delivery.id],calpaca_message_key:[sesMessageKey(f.delivery.messageId)]}},delivery:{recipients:emails}};
@@ -58,6 +63,11 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("durable kickoff delivery",()=>{
    expect((await recordSesNotification({...notification,Message:JSON.stringify({...event,mail:{...event.mail,destination:[...emails,"stranger@example.invalid"]}})},binding,f.db)).kind).toBe("receipt_mismatch");
    const results=await Promise.all([recordSesNotification(notification,binding,f.db),recordSesNotification(notification,binding,f.db)]);
    expect(results.map(r=>r.kind).sort()).toEqual(["duplicate","recorded"]);
+   expect((await recordSesPoll({queueUrl:queue,notificationId:notification.MessageId},binding,queue,f.db)).kind).toBe("recorded");
+   expect(await kickoffDeliveryReport(f.ws,f.db)).toMatchObject({workspaceId:f.ws,feedbackStale:false});
+   await f.db.update(s.kickoffDeliveryWorker).set({lastSweepAt:new Date(0)}).where(eq(s.kickoffDeliveryWorker.name,"ses-feedback"));
+   expect((await kickoffDeliveryReport(f.ws,f.db)).feedbackStale).toBe(true);
+   expect((await recordSesPoll({queueUrl:queue,notificationId:null},binding,queue,f.db)).kind).toBe("recorded");
    expect(await f.db.select().from(s.kickoffDeliveryReceipts)).toHaveLength(emails.length);
    expect((await f.db.select().from(s.kickoffDeliveries))[0]).toMatchObject({status:"delivered",providerMessageId:"SES-assigned-one"});
    expect((await recordSesNotification({...notification,Message:JSON.stringify({...event,delivery:{recipients:[emails[0]]}})},binding,f.db)).kind).toBe("receipt_conflict");
