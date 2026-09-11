@@ -5,7 +5,8 @@ export type KickoffRecipient = { email: string; status: "pending" | "accepted" |
 export const kickoffReceiptInput = z.object({
   deliveryId: z.string().uuid(), messageId: z.string().min(1).max(200),
   providerEventId: z.string().min(1).max(200), recipient: z.string().email().max(320).transform(value => value.toLowerCase()),
-  status: z.enum(["delivered", "bounced", "complained"]),
+  status: z.enum(["delivered", "bounced", "complained", "rejected", "rendering_failed"]),
+  providerMessageId: z.string().min(1).max(200).optional(),
 }).strict();
 export type KickoffReceipt = z.infer<typeof kickoffReceiptInput>;
 

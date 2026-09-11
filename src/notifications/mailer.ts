@@ -35,6 +35,8 @@ export interface InviteMail {
    * value that embeds the booking id so provider bounce/delivery
    * notifications can be correlated back (see /api/webhooks/email-delivery). */
   readonly messageId?: string;
+  readonly deliveryId?: string;
+  readonly headers?: Readonly<Record<string,string>>;
   readonly ics?: {
     readonly method: "REQUEST" | "CANCEL";
     readonly content: string;
@@ -62,6 +64,7 @@ export async function sendInviteMail(mail: InviteMail): Promise<SendResult> {
     text: mail.text,
     html: mail.html,
     messageId: mail.messageId,
+    headers: mail.headers,
     ...(mail.ics
       ? {
           // both forms: an iTIP alternative part (calendar clients act on it)

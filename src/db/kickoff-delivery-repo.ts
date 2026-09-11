@@ -192,15 +192,16 @@ export async function recordKickoffReceipt(receipt:KickoffReceipt,db:Db=getDb())
     // Serializes duplicate provider event IDs even when they name different operations.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${receipt.providerEventId}, 17))`);
     const [prior]=await tx.select().from(s.kickoffDeliveryReceipts).where(eq(s.kickoffDeliveryReceipts.providerEventId,receipt.providerEventId));
-    if(prior)return Object.entries(receipt).every(([key,value])=>prior.payload[key as keyof KickoffReceipt]===value)?{kind:"duplicate" as const}:{kind:"receipt_conflict" as const};
+    if(prior)return [...new Set([...Object.keys(receipt),...Object.keys(prior.payload)])].every(key=>prior.payload[key as keyof KickoffReceipt]===receipt[key as keyof KickoffReceipt])?{kind:"duplicate" as const}:{kind:"receipt_conflict" as const};
     await lockDeliveryContext(tx,receipt.deliveryId);
     const [row]=await tx.select().from(s.kickoffDeliveries).where(eq(s.kickoffDeliveries.id,receipt.deliveryId)).for("update");
     if(!row)return {kind:"not_found" as const};
-    if(row.messageId!==receipt.messageId || !row.mailStartedAt || !row.recipients.some(person=>person.email===receipt.recipient))return {kind:"receipt_mismatch" as const};
+    if((receipt.providerMessageId && row.providerMessageId && row.providerMessageId!==receipt.providerMessageId) || row.messageId!==receipt.messageId || !row.mailStartedAt || !row.recipients.some(person=>person.email===receipt.recipient))return {kind:"receipt_mismatch" as const};
     const recipients=receiptRecipients(row.recipients,receipt),outcome=recipientOutcome(recipients);
     const allResolved=recipients.every(person=>person.status==="delivered"||person.status==="failed");
     await tx.insert(s.kickoffDeliveryReceipts).values({providerEventId:receipt.providerEventId,deliveryId:row.id,payload:receipt});
     const [updated]=await tx.update(s.kickoffDeliveries).set({recipients,
+      ...(receipt.providerMessageId?{providerMessageId:receipt.providerMessageId}:{}),
       ...(allResolved?{mailAcceptedAt:row.mailAcceptedAt??new Date()}:{}),
       ...(outcome==="failed"?{status:"needs_attention" as const,issueCode:"recipient_delivery_failed"}:outcome==="delivered"&&row.calendarVerifiedAt?{status:"delivered" as const,issueCode:null,leaseUntil:null}:{}),updatedAt:new Date()}).where(eq(s.kickoffDeliveries.id,row.id)).returning();
     await audit(tx,row.id,"provider_receipt",receipt.status,row.attemptId);await projectDelivery(updated!,tx);return {kind:"recorded" as const};

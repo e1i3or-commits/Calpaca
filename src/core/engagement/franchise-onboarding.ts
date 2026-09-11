@@ -21,8 +21,8 @@ export const franchiseOnboardingInput = z.object({
   andrewUserId: id,
   accountLeadUserId: id,
   organizerUserId: id,
-  kickoffDurationMinutes: z.number().int().min(5).max(240).default(45),
-  followupDurationMinutes: z.number().int().min(5).max(240).default(45),
+  kickoffDurationMinutes: z.literal(45).default(45),
+  followupDurationMinutes: z.literal(45).default(45),
 }).strict().superRefine((value, ctx) => {
   if (new Set([...value.franchiseSuccessUserIds, value.kaiUserId, value.andrewUserId]).size !== 6)
     ctx.addIssue({ code: "custom", path: ["franchiseSuccessUserIds"], message: "Select the four Franchise Success members and two distinct leaders" });

@@ -1,5 +1,6 @@
 import { followupReservationRoutes } from "./routes/followup-reservations";
 import { franchiseOnboardingRoutes } from "./routes/franchise-onboarding";
+import { sesFeedbackRoutes } from "./routes/ses-feedback";
 import { kickoffDeliveryRoutes } from "./routes/kickoff-delivery";
 import { followupScheduleRoutes } from "./routes/followup-schedule";
 import { Hono } from "hono";
@@ -87,6 +88,7 @@ app.route("/", bookingEmailVerificationRoutes);
 app.route("/", engagementRoutes);
 app.route("/", franchiseOnboardingRoutes);
 app.route("/", kickoffDeliveryRoutes);
+app.route("/", sesFeedbackRoutes);
 app.route("/", followupScheduleRoutes);
 app.route("/", followupReservationRoutes);
 app.route("/", conversationRoutes);

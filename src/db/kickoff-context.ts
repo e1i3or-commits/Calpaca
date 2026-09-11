@@ -31,7 +31,7 @@ export async function kickoffConfigurationIssue(ctx: KickoffContext, db: Db): Pr
   const required = attendance.map(host => host.userId);
   if (eventType.workspaceId !== onboarding.workspaceId || engagement.workspaceId !== onboarding.workspaceId
     || eventType.engagementId !== onboarding.engagementId || eventType.ownerUserId !== protectedOrganizer(ctx)
-    || eventType.mode !== "group" || eventType.capacity !== 1 || eventType.durationMinutes !== (ctx.meetingKind === "followup" ? 45 : onboarding.input.kickoffDurationMinutes)
+    || eventType.mode !== "group" || eventType.capacity !== 1 || eventType.durationMinutes !== 45
     || eventType.selectableDurations.length || eventType.publicSelectableHostIds.length || eventType.agentPolicy.enabled
     || !sameRoster(hosts.map(host => host.userId), required) || hosts.some(host => host.role !== attendance.find(person => person.userId === host.userId)?.role)) return "kickoff_configuration_changed";
   return null;

@@ -17,10 +17,10 @@
   ],
   "tags": [
     {
-      "name": "Engagements"
+      "name": "Webhooks"
     },
     {
-      "name": "Webhooks"
+      "name": "Engagements"
     },
     {
       "name": "System"
@@ -90,6 +90,56 @@
     }
   ],
   "paths": {
+    "/api/webhooks/ses-onboarding": {
+      "post": {
+        "operationId": "postApiWebhooksSesOnboarding",
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Record an SES notification from the authenticated SQS adapter",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SesNotificationRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/automation/followup-reservations/{engagementId}": {
       "get": {
         "operationId": "getApiAutomationFollowupReservationsEngagementId",
@@ -7752,15 +7802,11 @@
             "format": "uuid"
           },
           "kickoffDurationMinutes": {
-            "type": "integer",
-            "minimum": 5,
-            "maximum": 240,
+            "const": 45,
             "default": 45
           },
           "followupDurationMinutes": {
-            "type": "integer",
-            "minimum": 5,
-            "maximum": 240,
+            "const": 45,
             "default": 45
           }
         },
@@ -7835,8 +7881,15 @@
             "enum": [
               "delivered",
               "bounced",
-              "complained"
+              "complained",
+              "rejected",
+              "rendering_failed"
             ]
+          },
+          "providerMessageId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
           }
         },
         "required": [
@@ -7845,6 +7898,35 @@
           "providerEventId",
           "recipient",
           "status"
+        ],
+        "additionalProperties": false
+      },
+      "SesNotificationRequest": {
+        "type": "object",
+        "properties": {
+          "Type": {
+            "const": "Notification"
+          },
+          "TopicArn": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "MessageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "Message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200000
+          }
+        },
+        "required": [
+          "Type",
+          "TopicArn",
+          "MessageId",
+          "Message"
         ],
         "additionalProperties": false
       },

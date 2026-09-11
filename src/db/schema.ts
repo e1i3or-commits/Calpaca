@@ -837,6 +837,7 @@ export const kickoffDeliveries = pgTable("kickoff_deliveries", {
   status: text("status").$type<import("../core/invite/kickoff-delivery").KickoffDeliveryStatus>().notNull().default("queued"),
   ownerUserId: uuid("owner_user_id").notNull().references(() => users.id),
   messageId: text("message_id").notNull().unique(),
+  providerMessageId: text("provider_message_id"),
   calendarId: text("calendar_id"),
   googleEventId: text("google_event_id").notNull(),
   calendarVerifiedAt: timestamp("calendar_verified_at", {withTimezone:true}),
@@ -864,6 +865,12 @@ export const kickoffDeliveryReceipts = pgTable("kickoff_delivery_receipts", {
   providerEventId: text("provider_event_id").primaryKey(),
   deliveryId: uuid("delivery_id").notNull().references(() => kickoffDeliveries.id),
   payload: jsonb("payload").$type<import("../core/invite/kickoff-delivery").KickoffReceipt>().notNull(),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+});
+export const sesFeedbackNotifications = pgTable("ses_feedback_notifications", {
+  id: text("id").primaryKey(),
+  deliveryId: uuid("delivery_id").notNull().references(() => kickoffDeliveries.id),
+  payloadHash: text("payload_hash").notNull(),
   createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
 });
 export const kickoffDeliveryWorker = pgTable("kickoff_delivery_worker", {

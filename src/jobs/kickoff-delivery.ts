@@ -1,3 +1,4 @@
+import { configuredSesBinding,sesInviteHeaders } from "../core/invite/ses-feedback";
 import { loadKickoffContext } from "../db/kickoff-context";
 import { guardKickoffBooking } from "../db/kickoff-booking-guard";
 import { Temporal } from "@js-temporal/polyfill";
@@ -22,7 +23,7 @@ export interface KickoffDeliveryDeps {
 const defaults:KickoffDeliveryDeps={
   configurationIssue:()=>{
     if(!isMailerConfigured())return "mail_configuration_missing";
-    if(!process.env.KICKOFF_DELIVERY_WEBHOOK_SECRET)return "delivery_feedback_not_configured";
+    if(!process.env.ONBOARDING_SES_WEBHOOK_SECRET || !configuredSesBinding())return "delivery_feedback_not_configured";
     try {if(new URL(process.env.PUBLIC_URL??"").protocol!=="https:")return "public_url_not_configured";}catch{return "public_url_not_configured";}
     return null;
   },
@@ -32,7 +33,10 @@ const defaults:KickoffDeliveryDeps={
     const token=await getAuth().api.getAccessToken({body:{providerId:"google",userId:organizer.id}});
     if(!token.accessToken)throw new KickoffProviderError("organizer_authorization_missing");
     return {calendarId:connection.externalCalendarId,accessToken:token.accessToken};
-  },calendar:syncKickoffGoogle,mail:sendInviteMail,
+  },calendar:syncKickoffGoogle,mail:async mail=>{
+    const binding=configuredSesBinding();if(!binding || !mail.messageId || !mail.deliveryId)throw new Error("ses_configuration_missing");
+    return sendInviteMail({...mail,headers:sesInviteHeaders(mail.deliveryId,mail.messageId,binding.configurationSet)});
+  },
 };
 
 export async function processKickoffDelivery(row:Delivery,deps:KickoffDeliveryDeps=defaults,db:NodePgDatabase<typeof s>=getDb()) {
@@ -75,7 +79,7 @@ export async function processKickoffDelivery(row:Delivery,deps:KickoffDeliveryDe
       &&earlier.every(item=>item.status==="superseded"&&item.attemptCount===0&&!item.calendarId);
     await deps.calendar(initialReschedule?{...row,kind:"created"}:row,calendarId,credentials.accessToken);
     await verifyKickoffCalendar(row.id,attempt,db);
-    const mail={...buildMail(restoreInviteContext(row.snapshot),row.kind,Temporal.Now.instant(),{includeIcs:false}),messageId:row.messageId};
+    const mail={...buildMail(restoreInviteContext(row.snapshot),row.kind,Temporal.Now.instant(),{includeIcs:false}),messageId:row.messageId,deliveryId:row.id};
     await startKickoffEmail(row.id,attempt,db);mailStarted=true;
     let timer:ReturnType<typeof setTimeout>|undefined;
     const result=await Promise.race([deps.mail(mail),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error("email_timeout")),30_000);})]).finally(()=>{if(timer)clearTimeout(timer);});

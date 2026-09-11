@@ -1,3 +1,5 @@
+import {recordSesNotification} from "../../src/db/ses-feedback-repo";
+import {sesMessageKey} from "../../src/core/invite/ses-feedback";
 import {describe,expect,test} from "bun:test";
 import {Pool} from "pg";
 import {drizzle} from "drizzle-orm/node-postgres";
@@ -36,6 +38,37 @@ const deps=(onMail:()=>void=()=>{}):KickoffDeliveryDeps=>({configurationIssue:()
 const receipt=(delivery:{id:string;messageId:string},recipient:string,id=crypto.randomUUID(),status:"delivered"|"bounced"="delivered")=>({deliveryId:delivery.id,messageId:delivery.messageId,providerEventId:id,recipient,status});
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)("durable kickoff delivery",()=>{
+ test("SES feedback is atomic, replayable and bound to one provider message despite rewritten headers",async()=>{
+  const f=await fixture();try {
+   await runKickoffDeliveryBatch(deps(),f.db);
+   const binding={topicArn:"arn:aws:sns:us-east-1:123456789012:synthetic",sendingAccountId:"123456789012",configurationSet:"synthetic"};
+   const emails=f.delivery.recipients.map(p=>p.email);
+   const event={eventType:"Delivery",mail:{sendingAccountId:binding.sendingAccountId,messageId:"SES-assigned-one",destination:emails,
+    tags:{"ses:configuration-set":[binding.configurationSet],calpaca_delivery_id:[f.delivery.id],calpaca_message_key:[sesMessageKey(f.delivery.messageId)]}},delivery:{recipients:emails}};
+   const notification={Type:"Notification" as const,TopicArn:binding.topicArn,MessageId:crypto.randomUUID(),Message:JSON.stringify(event)};
+   // Fail the second recipient insert: neither the first receipt nor its projection may remain.
+   await f.db.execute(sql`create function reject_test_ses_receipt() returns trigger language plpgsql as $$ begin
+    if (select count(*) from kickoff_delivery_receipts)>0 then raise exception 'synthetic second receipt failure'; end if; return NEW; end $$`);
+   await f.db.execute(sql`create trigger reject_test_ses_receipt before insert on kickoff_delivery_receipts for each row execute function reject_test_ses_receipt()`);
+   try {await expect(recordSesNotification(notification,binding,f.db)).rejects.toThrow();}
+   finally {await f.db.execute(sql`drop trigger reject_test_ses_receipt on kickoff_delivery_receipts`);await f.db.execute(sql`drop function reject_test_ses_receipt()`);}
+   expect(await f.db.select().from(s.kickoffDeliveryReceipts)).toHaveLength(0);
+   expect(await f.db.select().from(s.sesFeedbackNotifications)).toHaveLength(0);
+   expect((await f.db.select().from(s.kickoffDeliveries))[0]).toMatchObject({status:"awaiting_delivery",providerMessageId:null});
+   expect((await recordSesNotification({...notification,Message:JSON.stringify({...event,mail:{...event.mail,destination:[...emails,"stranger@example.invalid"]}})},binding,f.db)).kind).toBe("receipt_mismatch");
+   const results=await Promise.all([recordSesNotification(notification,binding,f.db),recordSesNotification(notification,binding,f.db)]);
+   expect(results.map(r=>r.kind).sort()).toEqual(["duplicate","recorded"]);
+   expect(await f.db.select().from(s.kickoffDeliveryReceipts)).toHaveLength(emails.length);
+   expect((await f.db.select().from(s.kickoffDeliveries))[0]).toMatchObject({status:"delivered",providerMessageId:"SES-assigned-one"});
+   expect((await recordSesNotification({...notification,Message:JSON.stringify({...event,delivery:{recipients:[emails[0]]}})},binding,f.db)).kind).toBe("receipt_conflict");
+   expect((await recordSesNotification({...notification,MessageId:crypto.randomUUID(),Message:JSON.stringify({...event,mail:{...event.mail,messageId:"different-provider-message"}})},binding,f.db)).kind).toBe("receipt_mismatch");
+   const bounce={eventType:"Bounce",mail:event.mail,bounce:{bouncedRecipients:[{emailAddress:emails[0]}]}};
+   expect((await recordSesNotification({...notification,MessageId:crypto.randomUUID(),Message:JSON.stringify(bounce)},binding,f.db)).kind).toBe("recorded");
+   await recordSesNotification({...notification,MessageId:crypto.randomUUID()},binding,f.db);
+   expect((await f.db.select().from(s.kickoffDeliveries))[0]?.status).toBe("needs_attention");
+   expect((await getBookingById(f.bookingId,f.db))?.inviteStatus).toBe("failed");
+  }finally{await f.pool.end();}
+ });
  test("concurrent workers send once, all seven recipients need evidence, duplicate receipts and late bounces are preserved",async()=>{
   const f=await fixture();try {
    expect(f.delivery.status).toBe("queued");expect(f.delivery.recipients).toHaveLength(7);

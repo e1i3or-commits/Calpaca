@@ -11,7 +11,7 @@ describe("franchise onboarding policy", () => {
   expect(hosts.followup.filter(host=>host.role==="optional").map(host=>host.userId)).toEqual([raw.kaiUserId,raw.andrewUserId]);
  });
  test("rejects duplicates, omitted team members and arbitrary keys", () => {
-  for(const patch of [{franchiseSuccessUserIds:[id(3)]},{andrewUserId:id(3)},{sendInvites:true},{sourceProjectKey:"../other"}])expect(franchiseOnboardingInput.safeParse({...raw,...patch}).success).toBe(false);
+  for(const patch of [{franchiseSuccessUserIds:[id(3)]},{andrewUserId:id(3)},{sendInvites:true},{sourceProjectKey:"../other"},{kickoffDurationMinutes:30},{followupDurationMinutes:60}])expect(franchiseOnboardingInput.safeParse({...raw,...patch}).success).toBe(false);
  });
  test("canonicalizes roster order and accepts only the three calendar cadences", () => {
   const input=franchiseOnboardingInput.parse(raw);

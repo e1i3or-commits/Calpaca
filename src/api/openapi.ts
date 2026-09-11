@@ -1,3 +1,4 @@
+import { sesNotificationInput } from "../core/invite/ses-feedback";
 import { prepareFollowupInput, reserveFollowupInput } from "./routes/followup-reservations";
 import { franchiseOnboardingInput, onboardingCadenceUpdate } from "../core/engagement/franchise-onboarding";
 import { kickoffReceiptInput } from "../core/invite/kickoff-delivery";
@@ -41,6 +42,7 @@ const requestSchemas = {
   OnboardingCadence: onboardingCadenceUpdate,
   PrepareKickoff: prepareKickoffInput,
   KickoffReceipt: kickoffReceiptInput,
+  SesNotification: sesNotificationInput,
   FollowupPreview: followupPreviewInput,
   FollowupApply: followupApplyInput,
   PrepareFollowup: prepareFollowupInput,
@@ -61,6 +63,7 @@ export type RequestSchemaName = keyof typeof requestSchemas;
 export const documentedRequestSchemas = requestSchemas;
 
 export const openApiOperations: readonly Operation[] = [
+  ["post","/api/webhooks/ses-onboarding","Webhooks","Record an SES notification from the authenticated SQS adapter","bearer","SesNotification"],
   ["get","/api/automation/followup-reservations/{engagementId}","Engagements","Inspect assigned follow-up reservation issues (workspace admin)","personal"],
   ["post","/api/automation/followup-reservations/{engagementId}","Engagements","Prepare a protected private follow-up conversation (workspace admin)","personal","PrepareFollowup"],
   ["post","/api/automation/followup-reservations/{engagementId}/{occurrenceId}/reserve","Engagements","Reserve one approved follow-up and queue verified invitation delivery (workspace admin)","personal","ReserveFollowup"],
