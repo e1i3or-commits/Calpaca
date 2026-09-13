@@ -442,6 +442,13 @@
       "when": 1789133776283,
       "tag": "0062_onboarding_scheduling_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1789328476832,
+      "tag": "0063_onboarding_checkins",
+      "breakpoints": true
     }
   ]
 }

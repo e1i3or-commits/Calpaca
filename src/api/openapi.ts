@@ -69,6 +69,7 @@ export const documentedRequestSchemas = requestSchemas;
 export const openApiOperations: readonly Operation[] = [
   ["get","/api/me/engagements/{id}/onboarding-scheduling","Engagements","Read onboarding publication readiness and reviewed follow-up dates","personal"],
   ["post","/api/me/engagements/{id}/onboarding-scheduling/publish-kickoff","Engagements","Publish a prepared kickoff after deployment and calendar checks","personal","PublishOnboarding"],
+  ["post","/api/me/engagements/{id}/onboarding-scheduling/publish-checkin","Engagements","Publish a prepared three-month check-in after deployment and calendar checks","personal","PublishOnboarding"],
   ["post","/api/me/engagements/{id}/onboarding-scheduling/enable-followups","Engagements","Enable a reviewed follow-up cadence from a delivered kickoff","personal","EnableOnboardingFollowups"],
   ["post","/api/webhooks/ses-onboarding/poll","Webhooks","Record a successful poll by the authenticated SES queue adapter","bearer","SesPoll"],
   ["post","/api/webhooks/ses-onboarding","Webhooks","Record an SES notification from the authenticated SQS adapter","bearer","SesNotification"],
@@ -83,6 +84,7 @@ export const openApiOperations: readonly Operation[] = [
   ["post","/api/automation/kickoff-deliveries/{id}/retry","Engagements","Retry a kickoff delivery before email dispatch (workspace admin)","personal"],
   ["post","/api/webhooks/kickoff-delivery","Webhooks","Record recipient-level kickoff delivery evidence","bearer","KickoffReceipt"],
   ["post", "/api/automation/franchise-onboarding/{engagementId}/kickoff", "Engagements", "Prepare a protected unpublished kickoff (workspace admin; empty body)", "personal", "PrepareKickoff"],
+  ["post", "/api/automation/franchise-onboarding/{engagementId}/checkin", "Engagements", "Prepare a protected unpublished three-month check-in (workspace admin; empty body)", "personal", "PrepareKickoff"],
   ["post", "/api/automation/franchise-onboarding", "Engagements", "Create or recover a franchise onboarding draft (workspace admin)", "personal", "FranchiseOnboarding"],
   ["get", "/api/automation/franchise-onboarding/{sourceWorkspaceId}/{projectKey}", "Engagements", "Recover onboarding by source launch (workspace admin)", "personal"],
   ["patch", "/api/me/engagements/{id}/onboarding-cadence", "Engagements", "Change the planned onboarding cadence with revision checking", "personal", "OnboardingCadence"],

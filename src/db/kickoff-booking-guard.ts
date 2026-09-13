@@ -5,7 +5,7 @@ import { PROTECTED_RESERVATION_WINDOW_DAYS, sameRoster, type KickoffBookingError
 import { effectiveOpenIntervals } from "../core/availability/overrides";
 import { subtract, type Interval } from "../core/availability/intervals";
 import { generateSlots } from "../core/availability/slots";
-import { kickoffConfigurationIssue, kickoffHosts, loadKickoffContext, lockKickoffContext } from "./kickoff-context";
+import { kickoffConfigurationIssue, kickoffHosts, loadKickoffContext, lockKickoffContext, readinessKind } from "./kickoff-context";
 import { getKickoffReadiness } from "./kickoff-readiness-repo";
 import * as s from "./schema";
 type Db = NodePgDatabase<typeof s>;
@@ -36,7 +36,8 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
   if(configIssue)return blocked(configIssue);
   // Holds also support rescheduling. Enforce the single kickoff when confirming
   // a booking, under the same host/context locks used by both confirmations.
-  if(ctx.meetingKind==="kickoff" && purpose==="booking") {
+  // The check-in is a single protected booking too.
+  if(ctx.meetingKind!=="followup" && purpose==="booking") {
     const [existing]=await db.select({id:s.bookings.id}).from(s.bookings)
       .where(and(eq(s.bookings.eventTypeId,eventTypeId),eq(s.bookings.workspaceId,ctx.onboarding.workspaceId),eq(s.bookings.status,"confirmed"),...(excludeBookingId?[ne(s.bookings.id,excludeBookingId)]:[]))).limit(1);
     if(existing)return blocked("kickoff_already_booked");
@@ -44,7 +45,7 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
   const required=kickoffHosts(ctx);
   if(!sameRoster(hostIds,required))return blocked("kickoff_roster_mismatch");
   const now=Temporal.Now.instant();
-  if(!(await getKickoffReadiness(ctx.onboarding,db,new Date(now.epochMilliseconds),ctx.meetingKind)).calendarSetupReady)return blocked("kickoff_setup_incomplete");
+  if(!(await getKickoffReadiness(ctx.onboarding,db,new Date(now.epochMilliseconds),readinessKind(ctx.meetingKind))).calendarSetupReady)return blocked("kickoff_setup_incomplete");
   if(slot.end.epochMilliseconds>now.epochMilliseconds+PROTECTED_RESERVATION_WINDOW_DAYS*86400_000)return blocked("kickoff_calendar_coverage_incomplete");
   const event=ctx.eventType;
   if(slot.start.until(slot.end).total({unit:"minutes"})!==event.durationMinutes)return blocked("kickoff_slot_unavailable");

@@ -18,7 +18,7 @@ export async function getOnboardingScheduling(workspaceId:string,actor:Engagemen
   const state=await onboardingSchedulingState(row,db,runtime);
   return {kind:"found" as const,...state,canPublish:["admin","owner"].includes(actor.workspaceRole),canEnable:engagement.canManage};
 }
-async function change(workspaceId:string,actor:EngagementActor,engagementId:string,action:"publish_kickoff"|"enable_followups",input:PublishInput|EnableInput,db:Db,runtime:SchedulingRuntime) {
+async function change(workspaceId:string,actor:EngagementActor,engagementId:string,action:"publish_kickoff"|"enable_followups"|"publish_checkin",input:PublishInput|EnableInput,db:Db,runtime:SchedulingRuntime) {
   return db.transaction(async tx=>{
     await tx.select({id:s.workspaces.id}).from(s.workspaces).where(eq(s.workspaces.id,workspaceId)).for("update");
     const [row]=await tx.select().from(s.franchiseOnboarding).where(and(eq(s.franchiseOnboarding.workspaceId,workspaceId),eq(s.franchiseOnboarding.engagementId,engagementId)));
@@ -29,7 +29,7 @@ async function change(workspaceId:string,actor:EngagementActor,engagementId:stri
     await tx.select({id:s.eventTypes.id}).from(s.eventTypes).where(and(eq(s.eventTypes.workspaceId,workspaceId),eq(s.eventTypes.engagementId,engagementId))).for("update");
     const engagement=await getEngagement(workspaceId,actor,engagementId,tx);
     if(!engagement)return {kind:"not_found" as const};
-    if(!engagement.canManage || (action==="publish_kickoff" && !await onboardingAutomationActor(workspaceId,actor.userId,tx)))return {kind:"forbidden" as const};
+    if(!engagement.canManage || (action!=="enable_followups" && !await onboardingAutomationActor(workspaceId,actor.userId,tx)))return {kind:"forbidden" as const};
     const inputHash=schedulingHash({action,engagementId,...input});
     const [prior]=await tx.select().from(s.onboardingSchedulingActions).where(and(eq(s.onboardingSchedulingActions.workspaceId,workspaceId),eq(s.onboardingSchedulingActions.requestId,input.requestId)));
     if(prior) {
@@ -38,10 +38,10 @@ async function change(workspaceId:string,actor:EngagementActor,engagementId:stri
     }
     if(row.revision!==input.revision)return {kind:"revision_conflict" as const};
     const state=await onboardingSchedulingState(row,tx,runtime);
-    const already=action==="publish_kickoff"?state.kickoff.published:state.followups.enabled;
+    const already=action==="publish_kickoff"?state.kickoff.published:action==="publish_checkin"?state.checkin.published:state.followups.enabled;
     if(already && action==="enable_followups" && state.followups.kickoffBookingId!==(input as EnableInput).kickoffBookingId)return {kind:"request_conflict" as const};
     if(already)return {kind:"already_enabled" as const,state};
-    const issues=action==="publish_kickoff"?state.kickoff.issues:state.followups.issues;
+    const issues=action==="publish_kickoff"?state.kickoff.issues:action==="publish_checkin"?state.checkin.issues:state.followups.issues;
     if(issues.length)return {kind:"blocked" as const,issues};
     if(action==="enable_followups") {
       const enable=input as EnableInput;
@@ -51,6 +51,9 @@ async function change(workspaceId:string,actor:EngagementActor,engagementId:stri
       if(state.followups.dates.some(date=>date.startsAt<=kickoff.endsAt))return {kind:"blocked" as const,issues:["followups_before_kickoff"]};
       const [binding]=await tx.update(s.onboardingFollowups).set({enabledAt:new Date(),approvedRevision:row.revision,kickoffBookingId:enable.kickoffBookingId})
         .where(eq(s.onboardingFollowups.onboardingId,row.id)).returning();
+      await tx.update(s.eventTypes).set({playbookStatus:"ready"}).where(eq(s.eventTypes.id,binding!.eventTypeId));
+    }else if(action==="publish_checkin") {
+      const [binding]=await tx.update(s.onboardingCheckins).set({publishedAt:new Date()}).where(eq(s.onboardingCheckins.onboardingId,row.id)).returning();
       await tx.update(s.eventTypes).set({playbookStatus:"ready"}).where(eq(s.eventTypes.id,binding!.eventTypeId));
     }else {
       const [binding]=await tx.update(s.onboardingKickoffs).set({publishedAt:new Date()}).where(eq(s.onboardingKickoffs.onboardingId,row.id)).returning();
@@ -69,4 +72,9 @@ export async function publishOnboardingKickoff(workspaceId:string,actor:Engageme
 export async function enableOnboardingFollowups(workspaceId:string,actor:EngagementActor,engagementId:string,input:EnableInput,db:Db=getDb(),runtime:SchedulingRuntime=schedulingRuntime()) {
   const parsed=enableFollowupsInput.safeParse(input);if(!parsed.success)return {kind:"invalid_input" as const};
   return change(workspaceId,actor,engagementId,"enable_followups",parsed.data,db,runtime);
+}
+export async function publishOnboardingCheckin(workspaceId:string,actor:EngagementActor,engagementId:string,input:PublishInput,db:Db=getDb(),runtime:SchedulingRuntime=schedulingRuntime()) {
+  if(!["admin","owner"].includes(actor.workspaceRole))return {kind:"forbidden" as const};
+  const parsed=publishOnboardingInput.safeParse(input);if(!parsed.success)return {kind:"invalid_input" as const};
+  return change(workspaceId,actor,engagementId,"publish_checkin",parsed.data,db,runtime);
 }

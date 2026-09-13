@@ -20,8 +20,17 @@ export async function loadKickoffContext(eventTypeId: string, db: Db) {
     .innerJoin(s.eventTypes,eq(s.eventTypes.id,s.onboardingFollowups.eventTypeId))
     .innerJoin(s.engagements,eq(s.engagements.id,s.franchiseOnboarding.engagementId))
     .where(eq(s.onboardingFollowups.eventTypeId,eventTypeId));
-  return followup ? {...followup,binding:{...followup.binding,publishedAt:followup.binding.enabledAt},meetingKind:"followup" as const} : null;
+  if (followup) return {...followup,binding:{...followup.binding,publishedAt:followup.binding.enabledAt},meetingKind:"followup" as const};
+  const [checkin] = await db.select({binding:s.onboardingCheckins,onboarding:s.franchiseOnboarding,eventType:s.eventTypes,engagement:s.engagements})
+    .from(s.onboardingCheckins)
+    .innerJoin(s.franchiseOnboarding,eq(s.franchiseOnboarding.id,s.onboardingCheckins.onboardingId))
+    .innerJoin(s.eventTypes,eq(s.eventTypes.id,s.onboardingCheckins.eventTypeId))
+    .innerJoin(s.engagements,eq(s.engagements.id,s.franchiseOnboarding.engagementId))
+    .where(eq(s.onboardingCheckins.eventTypeId,eventTypeId));
+  return checkin ? {...checkin,meetingKind:"checkin" as const} : null;
 }
+/** The check-in books like a kickoff but is hosted by the follow-up roster, so readiness and attendance use the follow-up rules. */
+export const readinessKind = (kind: "kickoff"|"followup"|"checkin"): "kickoff"|"followup" => kind === "kickoff" ? "kickoff" : "followup";
 export type KickoffContext = NonNullable<Awaited<ReturnType<typeof loadKickoffContext>>>;
 
 export async function kickoffConfigurationIssue(ctx: KickoffContext, db: Db): Promise<KickoffBookingError | null> {
@@ -43,7 +52,7 @@ export async function kickoffPubliclyAvailable(eventTypeId: string, db: Db) {
   if (ctx.meetingKind === "followup") return false;
   if (!ctx.binding.publishedAt || ctx.eventType.playbookStatus !== "ready" || ctx.engagement.status !== "active") return false;
   if (await kickoffConfigurationIssue(ctx, db)) return false;
-  return (await getKickoffReadiness(ctx.onboarding, db)).calendarSetupReady;
+  return (await getKickoffReadiness(ctx.onboarding, db, new Date(), readinessKind(ctx.meetingKind))).calendarSetupReady;
 }
 
 /** Transactions holding this share lock cannot race an Engagement pause or
@@ -62,8 +71,8 @@ export function kickoffHosts(ctx: KickoffContext) {
 }
 
 export function protectedAttendance(ctx: KickoffContext) {
-  return onboardingAttendance(ctx.onboarding.input)[ctx.meetingKind === "followup" ? "followup" : "kickoff"];
+  return onboardingAttendance(ctx.onboarding.input)[readinessKind(ctx.meetingKind)];
 }
 export function protectedOrganizer(ctx: KickoffContext) {
-  return ctx.meetingKind === "followup" ? ctx.onboarding.input.accountLeadUserId : ctx.onboarding.input.organizerUserId;
+  return ctx.meetingKind === "kickoff" ? ctx.onboarding.input.organizerUserId : ctx.onboarding.input.accountLeadUserId;
 }

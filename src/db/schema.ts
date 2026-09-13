@@ -824,6 +824,15 @@ export const onboardingKickoffs = pgTable("onboarding_kickoffs", {
   publishedAt: timestamp("published_at", { withTimezone: true }),
 }, t => [uniqueIndex("onboarding_kickoff_event_type_uq").on(t.eventTypeId)]);
 
+/** The three-month check-in: one public, protected booking per onboarding, hosted by the follow-up roster. */
+export const onboardingCheckins = pgTable("onboarding_checkins", {
+  onboardingId: uuid("onboarding_id").primaryKey().references(() => franchiseOnboarding.id),
+  eventTypeId: uuid("event_type_id").notNull().references(() => eventTypes.id),
+  createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+}, t => [uniqueIndex("onboarding_checkin_event_type_uq").on(t.eventTypeId)]);
+
 export const kickoffDeliveries = pgTable("kickoff_deliveries", {
   id: uuid("id").primaryKey().defaultRandom(),
   sequence: serial("sequence").notNull(),
@@ -873,7 +882,7 @@ export const onboardingSchedulingActions = pgTable("onboarding_scheduling_action
   onboardingId: uuid("onboarding_id").notNull().references(() => franchiseOnboarding.id),
   actorUserId: uuid("actor_user_id").notNull().references(() => users.id),
   requestId: uuid("request_id").notNull(),
-  action: text("action").$type<"publish_kickoff"|"enable_followups">().notNull(),
+  action: text("action").$type<"publish_kickoff"|"enable_followups"|"publish_checkin">().notNull(),
   revision: integer("revision").notNull(),
   inputHash: text("input_hash").notNull(),
   createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),

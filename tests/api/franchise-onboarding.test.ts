@@ -6,7 +6,7 @@ const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
 const raw={sourceWorkspaceId:id(1),sourceProjectKey:"new-location",locationKey:id(2),franchiseeId:"5854883000000000001",businessUnitId:"5854883000000000002",primaryContactId:"5854883000000000003",clientName:"Sample Entity",locationName:"Sample City",franchiseSuccessUserIds:[id(3),id(4),id(5),id(6)],kaiUserId:id(7),andrewUserId:id(8),accountLeadUserId:id(3),organizerUserId:id(3)};
 function deps(role:"admin"|"member"|null):FranchiseOnboardingDeps {
  const requireAuth:MiddlewareHandler<AuthEnv>=async(c,next)=>{if(!role)return c.json({error:"unauthorized"},401);c.set("user",{id:id(7),name:"Kai",email:"kai@example.test",workspaceId:id(99),workspaceRole:role});await next();};
- return {requireAuth,provision:async()=>({kind:"source_conflict"}),get:async()=>({kind:"not_found"}),updateCadence:async()=>({kind:"revision_conflict"}),prepareKickoff:async()=>({kind:"not_found"})};
+ return {requireAuth,provision:async()=>({kind:"source_conflict"}),get:async()=>({kind:"not_found"}),updateCadence:async()=>({kind:"revision_conflict"}),prepareKickoff:async()=>({kind:"not_found"}),prepareCheckin:async()=>({kind:"not_found"})};
 }
 const request=(app:ReturnType<typeof createFranchiseOnboardingRoutes>,body:unknown=raw)=>app.request('/api/automation/franchise-onboarding',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
 describe("franchise onboarding API",()=>{

@@ -206,6 +206,69 @@
         }
       }
     },
+    "/api/me/engagements/{id}/onboarding-scheduling/publish-checkin": {
+      "post": {
+        "operationId": "postApiMeEngagementsIdOnboardingSchedulingPublishCheckin",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Publish a prepared three-month check-in after deployment and calendar checks",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishOnboardingRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/me/engagements/{id}/onboarding-scheduling/enable-followups": {
       "post": {
         "operationId": "postApiMeEngagementsIdOnboardingSchedulingEnableFollowups",
@@ -938,6 +1001,69 @@
           "Engagements"
         ],
         "summary": "Prepare a protected unpublished kickoff (workspace admin; empty body)",
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareKickoffRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
+    "/api/automation/franchise-onboarding/{engagementId}/checkin": {
+      "post": {
+        "operationId": "postApiAutomationFranchiseOnboardingEngagementIdCheckin",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Prepare a protected unpublished three-month check-in (workspace admin; empty body)",
         "parameters": [
           {
             "name": "engagementId",

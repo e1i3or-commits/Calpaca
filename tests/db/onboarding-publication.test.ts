@@ -2,15 +2,16 @@ import {describe,expect,test} from "bun:test";
 import {Pool} from "pg";
 import {drizzle} from "drizzle-orm/node-postgres";
 import {migrate} from "drizzle-orm/node-postgres/migrator";
-import {eq,sql} from "drizzle-orm";
+import {and,eq,sql} from "drizzle-orm";
 import {Temporal} from "@js-temporal/polyfill";
 import * as s from "../../src/db/schema";
 import {franchiseOnboardingInput} from "../../src/core/engagement/franchise-onboarding";
 import {provisionFranchiseOnboarding,getFranchiseOnboarding} from "../../src/db/franchise-onboarding-repo";
 import {prepareOnboardingKickoff} from "../../src/db/prepare-kickoff-repo";
+import {prepareOnboardingCheckin} from "../../src/db/prepare-checkin-repo";
 import {prepareOnboardingFollowups} from "../../src/db/followup-reservation-repo";
 import {createHold,confirmHold} from "../../src/db/holds-repo";
-import {getOnboardingScheduling,publishOnboardingKickoff,enableOnboardingFollowups} from "../../src/db/onboarding-publication-repo";
+import {getOnboardingScheduling,publishOnboardingKickoff,publishOnboardingCheckin,enableOnboardingFollowups} from "../../src/db/onboarding-publication-repo";
 import {previewFollowupSchedule,applyFollowupSchedule} from "../../src/db/followup-schedule-repo";
 import {runKickoffDeliveryBatch} from "../../src/jobs/kickoff-delivery";
 import {recordKickoffReceipt} from "../../src/db/kickoff-delivery-repo";
@@ -147,5 +148,42 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("onboarding publication",()=>{
    const bookingId=await deliveredKickoff(f2),state=await planned(f2,0);
    expect(await enableOnboardingFollowups(f2.ws,f2.actor,f2.onboarding.engagementId,{...request(state.revision),previewHash:state.followups.previewHash,kickoffBookingId:bookingId},f2.db,runtime)).toMatchObject({kind:"blocked",issues:["followups_before_kickoff"]});
   }finally{await f2.pool.end();}
+ });
+ test("three-month check-in is prepared with the follow-up roster and publishes to its own hosted URL",async()=>{
+  const f=await fixture(),old=process.env.PUBLIC_URL;process.env.PUBLIC_URL=runtime.publicOrigin;
+  try {
+   const id=f.onboarding.engagementId;
+   const prepared=await prepareOnboardingCheckin(f.ws,f.actor,id,f.db);
+   expect(prepared.kind).toBe("created");if(prepared.kind!=="created")throw new Error("prepare failed");
+   expect(await prepareOnboardingCheckin(f.ws,f.actor,id,f.db)).toMatchObject({kind:"reused",checkinSchedulingState:"not_published"});
+   expect((await prepareOnboardingCheckin(f.ws,{...f.actor,workspaceRole:"member"},id,f.db)).kind).toBe("forbidden");
+   const hosts=await f.db.select().from(s.eventTypeHosts).where(eq(s.eventTypeHosts.eventTypeId,prepared.eventTypeId));
+   expect(hosts.map(h=>h.role).sort()).toEqual(["optional","optional","required","required","required","required"]);
+   const [conversation]=await f.db.select().from(s.eventTypes).where(eq(s.eventTypes.id,prepared.eventTypeId));
+   expect(conversation).toMatchObject({ownerUserId:f.onboarding.accountLeadUserId,durationMinutes:45,capacity:1,playbookStatus:"draft"});
+   expect(await kickoffPubliclyAvailable(prepared.eventTypeId,f.db)).toBe(false);
+   const before=await getOnboardingScheduling(f.ws,f.actor,id,f.db,runtime);if(before.kind!=="found")throw new Error("state failed");
+   expect(before.checkin).toMatchObject({prepared:true,published:false,available:false,checkinBookingUrl:null,issues:[]});
+   expect((await publishOnboardingCheckin(f.ws,{...f.actor,workspaceRole:"member"},id,request(),f.db,runtime)).kind).toBe("forbidden");
+   expect(await publishOnboardingCheckin(f.ws,f.actor,id,request(),f.db,{...runtime,issues:["rollout_not_enabled"]})).toMatchObject({kind:"blocked",issues:["rollout_not_enabled"]});
+   const input=request();
+   const results=await Promise.all([publishOnboardingCheckin(f.ws,f.actor,id,input,f.db,runtime),publishOnboardingCheckin(f.ws,f.actor,id,input,f.db,runtime)]);
+   expect(results.map(result=>result.kind).sort()).toEqual(["applied","reused"]);
+   const published=results.find(result=>result.kind==="applied");if(!published || published.kind!=="applied")throw new Error("publish failed");
+   expect(published.state.checkin.checkinBookingUrl).toContain("/book/onboarding-checkin-");
+   expect(published.state.kickoff.published).toBe(false);
+   expect(await kickoffPubliclyAvailable(prepared.eventTypeId,f.db)).toBe(true);
+   expect((await f.db.select().from(s.onboardingSchedulingActions)).map(action=>action.action)).toEqual(["publish_checkin"]);
+   const recovered=await getFranchiseOnboarding(f.ws,f.actor,f.onboarding.sourceWorkspaceId,f.onboarding.sourceProjectKey,f.db);
+   expect(recovered.kind).toBe("found");if(recovered.kind!=="found")throw new Error("recovery failed");
+   expect(recovered.onboarding.checkinBookingUrl).toBe(published.state.checkin.checkinBookingUrl);
+   expect(recovered.onboarding.checkinSchedulingState).toBe("published");
+   expect(recovered.onboarding.kickoffBookingUrl).toBeNull();
+   expect(await prepareOnboardingCheckin(f.ws,f.actor,id,f.db)).toMatchObject({kind:"reused",checkinSchedulingState:"published",checkinBookingUrl:recovered.onboarding.checkinBookingUrl});
+   // A roster edit withdraws the check-in exactly like a kickoff.
+   await f.db.delete(s.eventTypeHosts).where(and(eq(s.eventTypeHosts.eventTypeId,prepared.eventTypeId),eq(s.eventTypeHosts.role,"optional")));
+   expect(await kickoffPubliclyAvailable(prepared.eventTypeId,f.db)).toBe(false);
+   expect(await prepareOnboardingCheckin(f.ws,f.actor,id,f.db)).toMatchObject({kind:"checkin_configuration_changed"});
+  }finally{if(old===undefined)delete process.env.PUBLIC_URL;else process.env.PUBLIC_URL=old;await f.pool.end();}
  });
 });

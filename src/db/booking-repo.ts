@@ -324,7 +324,7 @@ export interface InviteHost {
 }
 
 export interface InviteContext {
-  readonly meetingKind?: "kickoff" | "followup";
+  readonly meetingKind?: "kickoff" | "followup" | "checkin";
   readonly managementLinksEnabled?: boolean;
   readonly workspaceId?: string;
   readonly booking: BookingRow;

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { and,asc,desc,eq,inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { schedulingRuntime,type SchedulingRuntime } from "../core/engagement/onboarding-publication";
-import { kickoffConfigurationIssue,loadKickoffContext } from "./kickoff-context";
+import { kickoffConfigurationIssue,loadKickoffContext,readinessKind } from "./kickoff-context";
 import { getKickoffReadiness } from "./kickoff-readiness-repo";
 import { onboardingAutomationActor } from "./onboarding-automation-actor";
 import * as s from "./schema";
@@ -19,6 +19,7 @@ export async function onboardingSchedulingState(row:typeof s.franchiseOnboarding
   const [engagement]=await db.select().from(s.engagements).where(and(eq(s.engagements.id,row.engagementId),eq(s.engagements.workspaceId,row.workspaceId)));
   const [kickoff]=await db.select().from(s.onboardingKickoffs).where(eq(s.onboardingKickoffs.onboardingId,row.id));
   const [followup]=await db.select().from(s.onboardingFollowups).where(eq(s.onboardingFollowups.onboardingId,row.id));
+  const [checkin]=await db.select().from(s.onboardingCheckins).where(eq(s.onboardingCheckins.onboardingId,row.id));
   const [schedule]=await db.select().from(s.onboardingFollowupSchedules).where(eq(s.onboardingFollowupSchedules.onboardingId,row.id));
   const dates=await db.select({id:s.onboardingFollowupOccurrences.id,position:s.onboardingFollowupOccurrences.position,startsAt:s.onboardingFollowupOccurrences.startsAt,endsAt:s.onboardingFollowupOccurrences.endsAt,status:s.onboardingFollowupOccurrences.status})
     .from(s.onboardingFollowupOccurrences).where(eq(s.onboardingFollowupOccurrences.onboardingId,row.id)).orderBy(asc(s.onboardingFollowupOccurrences.position));
@@ -51,11 +52,22 @@ export async function onboardingSchedulingState(row:typeof s.franchiseOnboarding
   if(!schedule)followupIssues.push("followup_schedule_missing");
   else if(schedule.status!=="planned")followupIssues.push("followup_schedule_not_planned");
   if(schedule && !followup?.enabledAt && (!planned.length || planned.some(date=>date.status!=="draft" || date.startsAt<=now || date.endsAt.getTime()-date.startsAt.getTime()!==45*60_000)))followupIssues.push("followup_dates_invalid");
+  // The three-month check-in follows the kickoff rules with the follow-up roster.
+  const checkinContext=checkin?await loadKickoffContext(checkin.eventTypeId,db):null;
+  const checkinIssues=[...common];
+  if(!checkinContext || checkinContext.meetingKind!=="checkin")checkinIssues.push("checkin_not_prepared");
+  else if(await kickoffConfigurationIssue(checkinContext,db))checkinIssues.push("checkin_configuration_changed");
+  const checkinReady=await getKickoffReadiness(row,db,now,"followup");
+  if(!checkinReady.calendarSetupReady)checkinIssues.push("calendar_setup_incomplete");
+  const checkinPublished=!!checkin?.publishedAt;
+  const checkinAvailable=checkinPublished && engagement?.status==="active" && checkinContext?.meetingKind==="checkin" && checkinContext.eventType.playbookStatus==="ready" && checkinReady.calendarSetupReady && !checkinIssues.includes("checkin_configuration_changed");
+  const checkinBookingUrl=checkinAvailable && runtime.publicOrigin?await kickoffUrl(runtime.publicOrigin,row.workspaceId,checkinContext!.eventType.slug,db):null;
   const published=!!kickoff?.publishedAt;
   const available=published && engagement?.status==="active" && kickoffContext?.eventType.playbookStatus==="ready" && kickoffReady.calendarSetupReady && !kickoffIssues.includes("kickoff_configuration_changed");
   const kickoffBookingUrl=available && runtime.publicOrigin?await kickoffUrl(runtime.publicOrigin,row.workspaceId,kickoffContext!.eventType.slug,db):null;
   return {revision:row.revision,checkedAt:now.toISOString(),
     kickoff:{prepared:!!kickoff,published,available:!!kickoffBookingUrl,kickoffBookingUrl,issues:kickoffIssues},
+    checkin:{prepared:!!checkin,published:checkinPublished,available:!!checkinBookingUrl,checkinBookingUrl,issues:checkinIssues},
     followups:{prepared:!!followup,enabled:!!followup?.enabledAt,approvedRevision:followup?.approvedRevision??null,kickoffBookingId:followup?.kickoffBookingId??null,
       issues:followupIssues,timezone:schedule?.rule.timezone??null,eligibleKickoffs,dates:planned.map(date=>({id:date.id,startsAt:date.startsAt.toISOString(),endsAt:date.endsAt.toISOString()})),
       previewHash:schedulingHash({revision:row.revision,rule:schedule?.rule??null,status:schedule?.status??null,dates,eligibleKickoffs})}};
@@ -70,7 +82,13 @@ export async function onboardingPublicationSummary(row:typeof s.franchiseOnboard
     && !await kickoffConfigurationIssue(context,db) && (await getKickoffReadiness(row,db)).calendarSetupReady;
   const origin=schedulingRuntime().publicOrigin;
   const kickoffBookingUrl=available&&origin?await kickoffUrl(origin,row.workspaceId,context!.eventType.slug,db):null;
+  const [checkin]=await db.select().from(s.onboardingCheckins).where(eq(s.onboardingCheckins.onboardingId,row.id));
+  const checkinContext=checkin?await loadKickoffContext(checkin.eventTypeId,db):null;
+  const checkinAvailable=!!checkin?.publishedAt && checkinContext?.meetingKind==="checkin" && checkinContext.engagement.status==="active" && checkinContext.eventType.playbookStatus==="ready"
+    && !await kickoffConfigurationIssue(checkinContext,db) && (await getKickoffReadiness(row,db,new Date(),readinessKind("checkin"))).calendarSetupReady;
+  const checkinBookingUrl=checkinAvailable&&origin?await kickoffUrl(origin,row.workspaceId,checkinContext!.eventType.slug,db):null;
   return {kickoffBookingUrl,schedulingState:!kickoff?.publishedAt?"not_published" as const:kickoffBookingUrl?"published" as const:"unavailable" as const,
+    checkinBookingUrl,checkinSchedulingState:!checkin?.publishedAt?"not_published" as const:checkinBookingUrl?"published" as const:"unavailable" as const,
     followupsEnabled:!!followup?.enabledAt,
     issues:[...(!kickoffBookingUrl?[kickoff?.publishedAt?"kickoff_booking_unavailable":"kickoff_booking_not_published"]:[]),...(!followup?.enabledAt?["followup_scheduler_not_configured"]:[])]};
 }
