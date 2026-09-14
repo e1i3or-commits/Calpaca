@@ -7,6 +7,10 @@ tracked with annotated Git tags named `v<version>`.
 
 ### User-facing improvements
 
+- One-off offers now accept every event type the picker lists. A team member
+  who hosts a team event type (for example Franchise Success Call) could
+  select it and then hit `event_type_not_found` on submit, because the
+  offer endpoints only recognised owners and admins.
 - Added Engagements as a durable client-work context. Organizers can create
   Potential or Active engagements, assign an account lead and contributors,
   preserve an in-progress draft, find possible duplicate clients, and review

@@ -593,6 +593,45 @@ export async function getEventTypeForAdmin(
   return toAdminEventType(row, hosts.get(row.id) ?? []);
 }
 
+/**
+ * Load one event type the user may offer times on. Everything
+ * getEventTypeForAdmin allows, plus a listed host of the type or a member of
+ * the team that owns it. listEventTypesForAdmin shows members their team's
+ * types, so a type the dashboard offers in a picker can never be refused
+ * here — that mismatch surfaced as "event_type_not_found" on a team type the
+ * requester hosted.
+ */
+export async function getEventTypeForHost(
+  id: string,
+  userId: string,
+  executor: Db = getDb(),
+  workspaceId?: string,
+): Promise<AdminEventType | null> {
+  const managed = await getEventTypeForAdmin(id, userId, executor, workspaceId);
+  if (managed) return managed;
+  const [row] = await executor.select().from(eventTypes).where(
+    workspaceId
+      ? and(eq(eventTypes.id, id), eq(eventTypes.workspaceId, workspaceId))
+      : eq(eventTypes.id, id),
+  );
+  if (!row) return null;
+  const [host] = await executor
+    .select({ userId: eventTypeHosts.userId })
+    .from(eventTypeHosts)
+    .where(and(eq(eventTypeHosts.eventTypeId, row.id), eq(eventTypeHosts.userId, userId)))
+    .limit(1);
+  const [member] = row.teamId === null
+    ? []
+    : await executor
+        .select({ userId: teamMembers.userId })
+        .from(teamMembers)
+        .where(and(eq(teamMembers.teamId, row.teamId), eq(teamMembers.userId, userId)))
+        .limit(1);
+  if (!host && !member) return null;
+  const hosts = await hostsFor(executor, [row.id]);
+  return toAdminEventType(row, hosts.get(row.id) ?? []);
+}
+
 export interface EventTypeInput {
   readonly slug: string;
   readonly title: string;

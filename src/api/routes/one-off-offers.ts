@@ -8,7 +8,7 @@ import {
   listOneOffOffers,
   revokeOneOffOffer,
 } from "../../db/one-off-offer-repo";
-import { getEventTypeForAdmin, isAppAdmin } from "../../db/admin-repo";
+import { getEventTypeForHost, isAppAdmin } from "../../db/admin-repo";
 import { isAllowedDuration } from "../../core/booking/durations";
 import { getBusyForUsers, getSchedulesForUsers } from "../../db/availability-repo";
 import { suggestOpenSlots, suggestionWindow } from "../../core/availability/suggest";
@@ -81,7 +81,7 @@ routes.post("/api/me/one-off-offers/suggestions", async (c) => {
   const user = c.get("user");
   if (!user.workspaceId) return c.json({ error: "workspace_not_found" }, 404);
 
-  const eventType = await getEventTypeForAdmin(
+  const eventType = await getEventTypeForHost(
     parsed.data.eventTypeId,
     user.id,
     undefined,
@@ -136,7 +136,7 @@ routes.post("/api/me/one-off-offers", async (c) => {
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
   const user = c.get("user");
   if (!user.workspaceId) return c.json({ error: "workspace_not_found" }, 404);
-  const eventType = await getEventTypeForAdmin(
+  const eventType = await getEventTypeForHost(
     parsed.data.eventTypeId,
     user.id,
     undefined,
