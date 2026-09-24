@@ -16,7 +16,7 @@ export const franchiseOnboardingInput = z.object({
   locationName: name,
   existingClientId: id.optional(),
   workdriveFolderId: z.string().regex(/^[a-zA-Z0-9]{10,100}$/).optional(),
-  franchiseSuccessUserIds: z.array(id).length(4),
+  franchiseSuccessUserIds: z.array(id).min(3).max(4),
   kaiUserId: id,
   andrewUserId: id,
   accountLeadUserId: id,
@@ -24,8 +24,8 @@ export const franchiseOnboardingInput = z.object({
   kickoffDurationMinutes: z.literal(45).default(45),
   followupDurationMinutes: z.literal(45).default(45),
 }).strict().superRefine((value, ctx) => {
-  if (new Set([...value.franchiseSuccessUserIds, value.kaiUserId, value.andrewUserId]).size !== 6)
-    ctx.addIssue({ code: "custom", path: ["franchiseSuccessUserIds"], message: "Select the four Franchise Success members and two distinct leaders" });
+  if (new Set([...value.franchiseSuccessUserIds, value.kaiUserId, value.andrewUserId]).size !== value.franchiseSuccessUserIds.length + 2)
+    ctx.addIssue({ code: "custom", path: ["franchiseSuccessUserIds"], message: "Select three or four distinct Franchise Success members and two distinct leaders" });
 });
 export type FranchiseOnboardingInput = z.infer<typeof franchiseOnboardingInput>;
 export interface OnboardingHost { userId: string; role: "required"|"optional" }
