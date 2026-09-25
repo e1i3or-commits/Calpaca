@@ -87,3 +87,19 @@ test("a secondary organizing calendar still invites the human Franchise Success 
  expect(event!.attendees).toContainEqual({email:"host@example.invalid",displayName:"Host",optional:false});
  expect(event!.attendees).toHaveLength(7);
 });
+
+test("a contact change swaps the invitee on the same event and notifies only external guests",async()=>{
+ const base=fixture();
+ const row={...base,kind:"rescheduled" as const,sequence:2,snapshot:{...base.snapshot,deliveryReason:"invitee_changed" as const,booking:{...base.snapshot.booking,inviteeEmail:"owner@brand.example",inviteeName:"Owner"}}} as Delivery;
+ let event:Record<string,unknown>={id:row.googleEventId,etag:'"v1"',organizer:{email:"host@example.invalid"},start:{dateTime:row.snapshot.booking.startsAt},end:{dateTime:row.snapshot.booking.endsAt},
+  attendees:[{email:"guest@example.invalid"}],extendedProperties:{private:{tourscaleBookingId:"booking-1",tourscaleDeliveryId:"older",tourscaleSequence:"1"}},conferenceData:{entryPoints:[{entryPointType:"video",uri:"https://meet.google.com/test-meet"}]}};
+ const urls:string[]=[];
+ const request=(async(url:unknown,options?:RequestInit)=>{
+  if(options?.method==="PATCH") {urls.push(String(url));event={...event,...JSON.parse(String(options.body)),etag:'"v2"'};}
+  return Response.json(event);
+ }) as unknown as typeof fetch;
+ await syncKickoffGoogle(row,"primary","synthetic",request);
+ expect(urls).toHaveLength(1);expect(urls[0]).toContain("sendUpdates=externalOnly");
+ const attendees=(event.attendees as {email:string}[]).map(person=>person.email);
+ expect(attendees).toContain("owner@brand.example");expect(attendees).not.toContain("guest@example.invalid");
+});

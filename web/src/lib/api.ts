@@ -1616,6 +1616,8 @@ export type OnboardingPlan = {
   kickoffDurationMinutes: number; followupDurationMinutes: number;
   sourceWorkspaceId: string; sourceProjectKey: string; locationKey: string;
   franchiseeId: string; businessUnitId: string; primaryContactId: string; workdriveFolderId: string|null;
+  /** Who follow-ups invite; null until a kickoff is booked or a contact is saved. */
+  clientContact?: OnboardingClientContact | null;
   schedulingState: "not_published"|"published"|"unavailable";
   kickoffBookingUrl?: string|null;
   followupsEnabled?: boolean;
@@ -1626,6 +1628,10 @@ export type OnboardingPlan = {
     remainingSteps: string[];
   };
 };
+export type OnboardingClientContact = { name: string; email: string; source: "kickoff" | "manual" | "workspace" };
+export function updateOnboardingClientContact(id: string, input: {revision: number; requestId: string; name: string; email: string}): Promise<{kind: "applied"|"reused"|"unchanged"; contact: OnboardingClientContact; updatedBookings?: number}> {
+  return request(`/api/me/engagements/${encodeURIComponent(id)}/onboarding-contact`, {method: "PUT", body: JSON.stringify(input)});
+}
 export function updateOnboardingCadence(id: string, revision: number, cadence: OnboardingPlan["cadence"]) {
   return request(`/api/me/engagements/${encodeURIComponent(id)}/onboarding-cadence`, {method: "PATCH", body: JSON.stringify({revision, cadence})});
 }

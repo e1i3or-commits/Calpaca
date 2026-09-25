@@ -76,7 +76,11 @@ export async function syncKickoffGoogle(delivery:Delivery,calendarId:string,acce
     ...(!existing?{id:delivery.googleEventId}:{}),
     ...(!existing&&needsMeet?{conferenceData:{createRequest:{requestId:delivery.googleEventId,conferenceSolutionKey:{type:"hangoutsMeet"}}}}:{}),
   };
-  const response=await call(`${existing?url:base}?sendUpdates=all&conferenceDataVersion=1`,{method:existing?"PATCH":"POST",headers:existing?{"If-Match":existing.etag!}:{},body:JSON.stringify(body)});
+  // A contact change must not notify the team about meetings that did not
+  // move. externalOnly still sends the removed non-Google address its
+  // cancellation; the new invitee also gets the tracked SES invitation.
+  const sendUpdates=ctx.deliveryReason==="invitee_changed"?"externalOnly":"all";
+  const response=await call(`${existing?url:base}?sendUpdates=${sendUpdates}&conferenceDataVersion=1`,{method:existing?"PATCH":"POST",headers:existing?{"If-Match":existing.etag!}:{},body:JSON.stringify(body)});
   if(response.status===412)throw new KickoffProviderError("calendar_version_changed",true);
   const after=await read();
   if(!after||!matches(after))throw new KickoffProviderError("calendar_write_unverified",true);

@@ -49,3 +49,21 @@ export function canonicalOnboardingInput(input: FranchiseOnboardingInput): Franc
 export const onboardingCadenceUpdate = z.object({
   revision: z.number().int().positive(), cadence: z.enum(onboardingCadences),
 }).strict();
+
+/** Who the follow-up series invites. `kickoff` means nobody has set it and the
+ * kickoff invitee is being used; `workspace` means the franchisee's branded
+ * mailbox was confirmed by IT and the automation switched to it. */
+export const clientContactSources = ["kickoff", "manual", "workspace"] as const;
+export interface OnboardingClientContact { name: string; email: string; source: typeof clientContactSources[number] }
+export const onboardingClientContactUpdate = z.object({
+  revision: z.number().int().positive(),
+  requestId: id,
+  name,
+  email: z.string().trim().toLowerCase().email().max(254),
+  source: z.enum(["manual", "workspace"]).default("manual"),
+}).strict();
+export type OnboardingClientContactUpdate = z.input<typeof onboardingClientContactUpdate>;
+
+export function sameClientContact(a: Pick<OnboardingClientContact,"name"|"email">, b: Pick<OnboardingClientContact,"name"|"email">) {
+  return a.email.trim().toLowerCase() === b.email.trim().toLowerCase() && a.name.trim() === b.name.trim();
+}

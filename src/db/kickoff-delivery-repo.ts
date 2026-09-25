@@ -10,7 +10,10 @@ import { getDb } from "./client";
 import * as s from "./schema";
 type Db = NodePgDatabase<typeof s>;
 export type Delivery = typeof s.kickoffDeliveries.$inferSelect;
-export type StoredInviteContext = Omit<InviteContext,"booking"> & {booking:Omit<InviteContext["booking"],"startsAt"|"endsAt"> & {startsAt:string;endsAt:string}};
+/** Why an update was queued when it is not a time change: the email then
+ * reads as a first invitation for the new invitee instead of "Rescheduled". */
+export type DeliveryReason = "invitee_changed";
+export type StoredInviteContext = Omit<InviteContext,"booking"> & {booking:Omit<InviteContext["booking"],"startsAt"|"endsAt"> & {startsAt:string;endsAt:string};deliveryReason?:DeliveryReason};
 export function restoreInviteContext(snapshot:StoredInviteContext):InviteContext {
   return {...snapshot,booking:{...snapshot.booking,startsAt:Temporal.Instant.from(snapshot.booking.startsAt),endsAt:Temporal.Instant.from(snapshot.booking.endsAt)}};
 }
@@ -48,15 +51,18 @@ async function projectDelivery(row:Delivery,db:Db) {
 }
 
 /** Called in the booking-event transaction. A queue outage cannot lose intent. */
-export async function queueKickoffDelivery(bookingId:string,sourceEventId:string,kind:Delivery["kind"],db:Db) {
+export async function queueKickoffDelivery(bookingId:string,sourceEventId:string,kind:Delivery["kind"],db:Db,reason?:DeliveryReason) {
   const [booking]=await db.select({eventTypeId:s.bookings.eventTypeId}).from(s.bookings).where(eq(s.bookings.id,bookingId));
   if(!booking)return;
   const kickoff=await loadKickoffContext(booking.eventTypeId,db);if(!kickoff)return;
   const ctx=await getInviteContext(bookingId,db);if(!ctx)throw new Error("kickoff_invite_context_missing");
   const id=crypto.randomUUID();
-  const recipients=[...new Set([ctx.booking.inviteeEmail,...ctx.hosts.map(host=>host.email),...(ctx.booking.guestEmails??[])].map(email=>email.toLowerCase()))];
+  // A contact change concerns only the new invitee; the team's meetings did
+  // not move, so they get no email for it.
+  const recipients=reason==="invitee_changed"?[ctx.booking.inviteeEmail.toLowerCase()]
+    :[...new Set([ctx.booking.inviteeEmail,...ctx.hosts.map(host=>host.email),...(ctx.booking.guestEmails??[])].map(email=>email.toLowerCase()))];
   const [row]=await db.insert(s.kickoffDeliveries).values({id,workspaceId:kickoff.onboarding.workspaceId,onboardingId:kickoff.onboarding.id,
-    bookingId,sourceEventId,kind,snapshot:JSON.parse(JSON.stringify(ctx)) as StoredInviteContext,
+    bookingId,sourceEventId,kind,snapshot:{...JSON.parse(JSON.stringify(ctx)) as StoredInviteContext,...(reason?{deliveryReason:reason}:{})},
     recipients:recipients.map(email=>({email,status:"pending" as const})),ownerUserId:kickoff.engagement.accountLeadUserId,
     messageId:`<${id}.${bookingId}@scheduling-platform>`,googleEventId:ctx.booking.googleEventId??`c${bookingId.replaceAll("-","")}`,
     deadlineAt:new Date(Date.now()+15*60_000)}).onConflictDoNothing().returning();

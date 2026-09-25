@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 export const bookingEventKind = pgEnum("booking_event_kind", [
   "created", "rescheduled", "cancelled", "reassigned",
   "no_show", "invite_sent", "invite_delivered", "invite_failed",
-  "reminder_sent",
+  "reminder_sent", "invitee_changed",
 ]);
 export const assignmentMode = pgEnum("assignment_mode", [
   "solo", "round_robin", "group",
@@ -795,6 +795,9 @@ export const franchiseOnboarding = pgTable("franchise_onboarding", {
   input: jsonb("input").$type<import("../core/engagement/franchise-onboarding").FranchiseOnboardingInput>().notNull(),
   attendance: jsonb("attendance").$type<import("../core/engagement/franchise-onboarding").OnboardingAttendance>().notNull(),
   cadence: text("cadence").$type<import("../core/engagement/franchise-onboarding").OnboardingCadence>().notNull().default("biweekly"),
+  // Who follow-ups invite. Null until someone sets it: the kickoff invitee is
+  // the fallback, because that is the address the franchisee booked with.
+  clientContact: jsonb("client_contact").$type<import("../core/engagement/franchise-onboarding").OnboardingClientContact>(),
   revision: integer("revision").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -813,6 +816,20 @@ export const franchiseOnboardingChanges = pgTable("franchise_onboarding_changes"
   cadence: text("cadence").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, t => [uniqueIndex("franchise_onboarding_change_revision_uq").on(t.onboardingId, t.revision)]);
+
+// Immutable audit of client-contact changes. Its request ID is the only proof
+// that authorizes an invitee_changed event on an issued follow-up booking.
+export const onboardingContactChanges = pgTable("onboarding_contact_changes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  onboardingId: uuid("onboarding_id").notNull().references(() => franchiseOnboarding.id),
+  requestId: uuid("request_id").notNull(),
+  revision: integer("revision").notNull(),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id),
+  previous: jsonb("previous").$type<import("../core/engagement/franchise-onboarding").OnboardingClientContact>().notNull(),
+  next: jsonb("next").$type<import("../core/engagement/franchise-onboarding").OnboardingClientContact>().notNull(),
+  bookingIds: jsonb("booking_ids").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+}, t => [uniqueIndex("onboarding_contact_change_request_uq").on(t.onboardingId,t.requestId), uniqueIndex("onboarding_contact_change_revision_uq").on(t.onboardingId,t.revision)]);
 
 // Only this binding identifies the protected kickoff. Generic playbooks cannot
 // enable publication or change its source roster through editable form fields.

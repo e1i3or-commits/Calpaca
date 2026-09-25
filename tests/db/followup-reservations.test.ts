@@ -19,6 +19,8 @@ import {kickoffPubliclyAvailable} from "../../src/db/kickoff-context";
 import {createHold} from "../../src/db/holds-repo";
 import {runKickoffDeliveryBatch,type KickoffDeliveryDeps} from "../../src/jobs/kickoff-delivery";
 import {buildMail} from "../../src/jobs/invite-email";
+import {updateOnboardingClientContact} from "../../src/db/onboarding-contact-repo";
+import {resolveClientContact} from "../../src/db/onboarding-contact-state";
 async function fixture() {
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL}),db=drizzle(pool,{schema:s});
  await migrate(db,{migrationsFolder:"drizzle"});await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);await db.delete(s.kickoffDeliveryWorker);
@@ -318,6 +320,51 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("automatic follow-up extension",
    expect((await f.db.select().from(s.onboardingFollowupSchedules))[0]?.extensionCheckedAt).toBeNull();await runFollowupReservationBatch(f.db,now);
    expect(await getFollowupSchedule(f.ws,f.actor,f.id,f.db)).toMatchObject({extensionIssue:null});
    expect((await f.db.select().from(s.followupSchedulerEvents)).map(row=>row.outcome)).toEqual(["blocked","resolved"]);
+  }finally{await f.pool.end();}
+ });
+});
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("follow-up client contact",()=>{
+ test("defaults to the kickoff invitee; saving moves booked future follow-ups without emailing the team",async()=>{
+  const f=await fixture();try {
+   const [initial]=await f.db.select().from(s.franchiseOnboarding);
+   expect(await resolveClientContact(initial!,f.db)).toEqual({name:"Franchisee",email:"owner@example.invalid",source:"kickoff"});
+   const reserved=await f.reserve();if(reserved.kind!=="reserved")throw new Error("reserve failed");await deliverAll(f);
+   const input={revision:2,requestId:crypto.randomUUID(),name:"Owner Branded",email:"Owner@Brand.example"};
+   const results=await Promise.all([updateOnboardingClientContact(f.ws,f.actor,f.id,input,f.db),updateOnboardingClientContact(f.ws,f.actor,f.id,input,f.db)]);
+   expect(results.map(row=>row.kind).sort()).toEqual(["applied","reused"]);
+   expect(results.find(row=>row.kind==="applied")).toMatchObject({appliedRevision:3,updatedBookings:1,contact:{email:"owner@brand.example",source:"manual"}});
+   const [booking]=await f.db.select().from(s.bookings).where(eq(s.bookings.id,reserved.bookingId));
+   expect(booking).toMatchObject({inviteeEmail:"owner@brand.example",inviteeName:"Owner Branded",inviteStatus:"none"});
+   expect((await f.db.select().from(s.onboardingFollowups))[0]?.approvedRevision).toBe(3);
+   const deliveries=await f.db.select().from(s.kickoffDeliveries).orderBy(s.kickoffDeliveries.sequence);
+   expect(deliveries).toHaveLength(2);
+   expect(deliveries[1]).toMatchObject({kind:"rescheduled",recipients:[{email:"owner@brand.example",status:"pending"}],googleEventId:deliveries[0]!.googleEventId});
+   expect(deliveries[1]?.snapshot.deliveryReason).toBe("invitee_changed");
+   const mails:import("../../src/notifications/mailer").InviteMail[]=[];
+   await runKickoffDeliveryBatch({...dependencies(),mail:async message=>{mails.push(message);return {accepted:[message.to,...message.cc??[]],rejected:[]};}},f.db);
+   expect(mails).toHaveLength(1);expect(mails[0]).toMatchObject({to:"owner@brand.example",cc:[]});expect(mails[0]?.subject.startsWith("Confirmed:")).toBe(true);
+   await deliverAll(f);expect((await f.db.select().from(s.bookings).where(eq(s.bookings.id,reserved.bookingId)))[0]?.inviteStatus).toBe("delivered");
+   // A generic caller cannot change who a booking invites.
+   expect(await appendEvent(reserved.bookingId,"invitee_changed",{email:"x@example.invalid",name:"X",previousEmail:"owner@brand.example"},f.db)).toMatchObject({ok:false,error:{reason:"followup_managed_schedule"}});
+   expect(await appendEvent(reserved.bookingId,"invitee_changed",{email:"x@example.invalid",name:"X",previousEmail:"owner@brand.example"},f.db,undefined,input.requestId)).toMatchObject({ok:false,error:{reason:"followup_managed_schedule"}});
+   // New bookings use the saved contact, not the kickoff invitee.
+   const state=await getFollowupSchedule(f.ws,f.actor,f.id,f.db);if(state.kind!=="found"||!state.schedule)throw new Error("schedule missing");
+   const second=await reserveOnboardingFollowup(f.ws,f.actor,f.id,state.schedule.occurrences[1]!.id,3,f.db);if(second.kind!=="reserved")throw new Error(JSON.stringify(second));
+   expect((await f.db.select().from(s.bookings).where(eq(s.bookings.id,second.bookingId)))[0]?.inviteeEmail).toBe("owner@brand.example");
+   expect(await updateOnboardingClientContact(f.ws,f.actor,f.id,{...input,revision:3,requestId:crypto.randomUUID()},f.db)).toMatchObject({kind:"unchanged"});
+   expect(await updateOnboardingClientContact(f.ws,f.actor,f.id,{...input,name:"Someone else"},f.db)).toMatchObject({kind:"request_conflict"});
+  }finally{await f.pool.end();}
+ });
+ test("an in-flight invitation or stale revision leaves the contact and invitations unchanged",async()=>{
+  const f=await fixture();try {
+   expect((await f.reserve()).kind).toBe("reserved");
+   expect(await updateOnboardingClientContact(f.ws,f.actor,f.id,{revision:1,requestId:crypto.randomUUID(),name:"Owner",email:"owner@brand.example"},f.db)).toMatchObject({kind:"revision_conflict"});
+   expect(await claimKickoffDelivery(f.db)).not.toBeNull();
+   expect(await updateOnboardingClientContact(f.ws,f.actor,f.id,{revision:2,requestId:crypto.randomUUID(),name:"Owner",email:"owner@brand.example"},f.db)).toMatchObject({kind:"calendar_reconciliation_blocked"});
+   const [onboarding]=await f.db.select().from(s.franchiseOnboarding);expect(onboarding).toMatchObject({revision:2,clientContact:null});
+   expect(await f.db.select().from(s.onboardingContactChanges)).toHaveLength(0);expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(1);
+   expect(await updateOnboardingClientContact(f.ws,{...f.actor,workspaceRole:"member"},f.id,{revision:2,requestId:crypto.randomUUID(),name:"Owner",email:"owner@brand.example"},f.db)).toMatchObject({kind:"forbidden"});
   }finally{await f.pool.end();}
  });
 });

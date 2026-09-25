@@ -16,7 +16,9 @@ test("all six calendars can pass setup without authorizing publication or assumi
   expect(report.canPublish).toBe(false);
   expect(report.kickoffBookingUrl).toBeNull();
   expect(report.remainingSteps).toContain("verified_invitation_delivery");
-  expect(evaluateKickoffReadiness(roster().slice(1),"person-4",now).calendarSetupReady).toBe(false);
+  // Three Franchise Success members plus two leaders is a valid roster; four people is not.
+  expect(evaluateKickoffReadiness(roster().slice(1),"person-4",now).calendarSetupReady).toBe(true);
+  expect(evaluateKickoffReadiness(roster().slice(2),"person-4",now).calendarSetupReady).toBe(false);
 });
 
 test("missing or inactive participants and ambiguous schedules remain visible and block setup", () => {

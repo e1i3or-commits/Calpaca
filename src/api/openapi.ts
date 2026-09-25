@@ -4,6 +4,7 @@ import { prepareFollowupInput, reserveFollowupInput } from "./routes/followup-re
 import { franchiseOnboardingInput, onboardingCadenceUpdate } from "../core/engagement/franchise-onboarding";
 import { kickoffReceiptInput } from "../core/invite/kickoff-delivery";
 import { followupPreviewInput, followupApplyInput } from "../core/engagement/followup-schedule";
+import { onboardingClientContactUpdate } from "../core/engagement/franchise-onboarding";
 import { Hono } from "hono";
 import type { ZodTypeAny } from "zod";
 import { CALPACA_VERSION } from "../version";
@@ -49,6 +50,7 @@ const requestSchemas = {
   EnableOnboardingFollowups: enableFollowupsInput,
   FollowupPreview: followupPreviewInput,
   FollowupApply: followupApplyInput,
+  OnboardingClientContact: onboardingClientContactUpdate,
   PrepareFollowup: prepareFollowupInput,
   ReserveFollowup: reserveFollowupInput,
   Hold: holdBodySchema,
@@ -79,6 +81,7 @@ export const openApiOperations: readonly Operation[] = [
   ["get","/api/me/engagements/{id}/followup-schedule","Engagements","Read the planned follow-up schedule","personal"],
   ["post","/api/me/engagements/{id}/followup-schedule/preview","Engagements","Preview future follow-up changes","personal","FollowupPreview"],
   ["post","/api/me/engagements/{id}/followup-schedule/apply","Engagements","Apply reviewed follow-up dates and queue changes to issued invitations","personal","FollowupApply"],
+  ["put","/api/me/engagements/{id}/onboarding-contact","Engagements","Set who onboarding follow-ups invite and move booked future follow-ups to that person","personal","OnboardingClientContact"],
   ["get","/api/automation/kickoff-deliveries","Engagements","Inspect workspace kickoff delivery failures and worker heartbeat","personal"],
   ["get","/api/automation/monitor","Engagements","Read aggregate onboarding health with the dedicated monitor credential","bearer"],
   ["post","/api/automation/kickoff-deliveries/{id}/retry","Engagements","Retry a kickoff delivery before email dispatch (workspace admin)","personal"],

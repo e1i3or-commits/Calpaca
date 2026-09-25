@@ -797,6 +797,69 @@
         }
       }
     },
+    "/api/me/engagements/{id}/onboarding-contact": {
+      "put": {
+        "operationId": "putApiMeEngagementsIdOnboardingContact",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Set who onboarding follow-ups invite and move booked future follow-ups to that person",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingClientContactRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/automation/kickoff-deliveries": {
       "get": {
         "operationId": "getApiAutomationKickoffDeliveries",
@@ -8178,7 +8241,9 @@
             "items": {
               "type": "string",
               "format": "uuid"
-            }
+            },
+            "minItems": 3,
+            "maxItems": 4
           },
           "kaiUserId": {
             "type": "string",
@@ -8655,6 +8720,45 @@
           "command",
           "requestId",
           "previewHash"
+        ],
+        "additionalProperties": false
+      },
+      "OnboardingClientContactRequest": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "workspace"
+            ],
+            "default": "manual"
+          }
+        },
+        "required": [
+          "revision",
+          "requestId",
+          "name",
+          "email"
         ],
         "additionalProperties": false
       },
