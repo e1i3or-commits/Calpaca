@@ -16,9 +16,16 @@ test("all six calendars can pass setup without authorizing publication or assumi
   expect(report.canPublish).toBe(false);
   expect(report.kickoffBookingUrl).toBeNull();
   expect(report.remainingSteps).toContain("verified_invitation_delivery");
-  // Three Franchise Success members plus two leaders is a valid roster; four people is not.
-  expect(evaluateKickoffReadiness(roster().slice(1),"person-4",now).calendarSetupReady).toBe(true);
   expect(evaluateKickoffReadiness(roster().slice(2),"person-4",now).calendarSetupReady).toBe(false);
+});
+
+test("three-person team supports five attendees and still validates the exact required subset", () => {
+  const people=roster().filter(person=>person.userId!=="person-3");
+  expect(evaluateKickoffReadiness(people,"person-4",now).calendarSetupReady).toBe(true);
+  expect(evaluateKickoffReadiness(people,"person-4",now,["person-0","person-1","person-2"]).calendarSetupReady).toBe(true);
+  expect(evaluateKickoffReadiness(people,"person-4",now,["person-0","person-1","person-3"]).calendarSetupReady).toBe(false);
+  people[0]!.active=false;
+  expect(evaluateKickoffReadiness(people,"person-4",now).calendarSetupReady).toBe(false);
 });
 
 test("missing or inactive participants and ambiguous schedules remain visible and block setup", () => {
