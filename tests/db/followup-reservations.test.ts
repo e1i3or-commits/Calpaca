@@ -11,7 +11,7 @@ import * as s from "../../src/db/schema";
 import {franchiseOnboardingInput} from "../../src/core/engagement/franchise-onboarding";
 import {provisionFranchiseOnboarding} from "../../src/db/franchise-onboarding-repo";
 import {prepareOnboardingKickoff} from "../../src/db/prepare-kickoff-repo";
-import {applyFollowupSchedule,getFollowupSchedule,previewFollowupSchedule} from "../../src/db/followup-schedule-repo";
+import {getFollowupMoveAvailability,applyFollowupSchedule,getFollowupSchedule,previewFollowupSchedule} from "../../src/db/followup-schedule-repo";
 import {getFollowupReservations,prepareOnboardingFollowups,reserveOnboardingFollowup} from "../../src/db/followup-reservation-repo";
 import {appendEvent,getInviteContext} from "../../src/db/booking-repo";
 import {updateEngagementStatus} from "../../src/db/engagement-repo";
@@ -60,6 +60,31 @@ async function deliverAll(f:Awaited<ReturnType<typeof fixture>>) {
 }
 const dependencies=(mail:()=>void=()=>{}):KickoffDeliveryDeps=>({configurationIssue:()=>null,credentials:async()=>({calendarId:"primary",accessToken:"synthetic"}),calendar:async()=>{},mail:async message=>{mail();return {accepted:[message.to,...message.cc??[]],rejected:[]};}});
 describe.skipIf(!process.env.TEST_DATABASE_URL)("follow-up reservations",()=>{
+ test("move availability ignores optional calendars, excludes itself and respects required conflicts",async()=>{
+  const f=await fixture();try {
+   const booked=await f.reserve();expect(booked.kind).toBe("reserved");
+   if(booked.kind!=="reserved")throw new Error("booking missing");
+   const date=f.occurrence.startsAt.slice(0,10);
+   const query=()=>getFollowupMoveAvailability(f.ws,f.actor,f.id,f.occurrence.id,date,f.db);
+   const startsAt=new Date(`${date}T11:00:00Z`),endsAt=new Date(`${date}T11:45:00Z`);
+   const [optional]=await f.db.insert(s.calendarConnections).values({userId:f.ids[0]!,externalCalendarId:"optional-conflict",lastSyncedAt:new Date(),fullSyncedAt:new Date()}).returning();
+   await f.db.insert(s.calendarBusyCache).values({connectionId:optional!.id,startsAt,endsAt});
+   const available=await query();expect(available.kind).toBe("available");
+   if(available.kind!=="available")throw new Error("availability missing");
+   expect(available.slots.some(slot=>new Date(slot.start).getTime()===startsAt.getTime())).toBe(true);
+   expect(available.slots.some(slot=>new Date(slot.start).getTime()===new Date(f.occurrence.startsAt).getTime())).toBe(true);
+   const move=await reviewed(f,{action:"move",occurrenceId:f.occurrence.id,date,time:"11:00"});
+   expect((await applyFollowupSchedule(f.ws,f.actor,f.id,move,f.db)).kind).toBe("applied");
+   const staleMove=await reviewed(f,{action:"move",occurrenceId:f.occurrence.id,date,time:"12:00"});
+   await f.db.insert(s.calendarBusyCache).values({connectionId:f.calendars[0]!.id,startsAt:new Date(`${date}T12:00:00Z`),endsAt:new Date(`${date}T12:45:00Z`)});
+   const blocked=await query();expect(blocked.kind).toBe("available");
+   if(blocked.kind!=="available")throw new Error("availability missing");
+   expect(blocked.slots.some(slot=>slot.start===`${date}T12:00:00Z`)).toBe(false);
+   expect((await applyFollowupSchedule(f.ws,f.actor,f.id,staleMove,f.db)).kind).toBe("calendar_reconciliation_blocked");
+   expect((await getFollowupMoveAvailability(crypto.randomUUID(),f.actor,f.id,f.occurrence.id,date,f.db)).kind).toBe("not_found");
+   expect((await getFollowupMoveAvailability(f.ws,f.actor,f.id,crypto.randomUUID(),date,f.db)).kind).toBe("not_found");
+  }finally{await f.pool.end();}
+ });
  test("concurrent replay creates one booking with four reserved hosts and six invitation roles",async()=>{
   const f=await fixture();try {
    const results=await Promise.all([f.reserve(),f.reserve()]);expect(results.map(row=>row.kind).sort()).toEqual(["reserved","reused"]);

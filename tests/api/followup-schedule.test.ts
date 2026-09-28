@@ -5,7 +5,7 @@ import {createFollowupScheduleRoutes,type FollowupScheduleDeps} from "../../src/
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
 function deps(auth=true):FollowupScheduleDeps {
  const requireAuth:MiddlewareHandler<AuthEnv>=async(c,next)=>{if(!auth)return c.json({error:"unauthorized"},401);c.set("user",{id:id(1),name:"Lead",email:"lead@example.invalid",workspaceId:id(2),workspaceRole:"member"});await next();};
- return {requireAuth,get:async()=>({kind:"not_found"}),preview:async()=>({kind:"forbidden"}),apply:async()=>({kind:"revision_conflict"})};
+ return {requireAuth,availability:async()=>({kind:"not_found"}),get:async()=>({kind:"not_found"}),preview:async()=>({kind:"forbidden"}),apply:async()=>({kind:"revision_conflict"})};
 }
 const path=`/api/me/engagements/${id(3)}/followup-schedule`;
 const configure={revision:1,command:{action:"configure",rule:{cadence:"biweekly",anchorDate:"2027-01-05",localTime:"10:00",timezone:"America/New_York",monthlyMode:"weekday_position",count:6}}};
@@ -25,4 +25,16 @@ test("applying requires both a reviewed hash and idempotency ID; repository conf
  expect((await post(configure)).status).toBe(400);
  const response=await post({...configure,requestId:id(4),previewHash:"a".repeat(64)});expect(response.status).toBe(409);expect(await response.json()).toEqual({error:"revision_conflict"});
  expect((await app.request(path)).status).toBe(404);
+});
+test("move availability is authenticated, occurrence-scoped and validates dates",async()=>{
+ const route=`${path}/occurrences/${id(4)}/availability`;
+ expect((await createFollowupScheduleRoutes(deps(false)).request(`${route}?date=2027-01-05`)).status).toBe(401);
+ let received:unknown;const d=deps();d.availability=async(...args)=>{received=args;return {kind:"available",timezone:"America/New_York",slots:[]};};
+ const app=createFollowupScheduleRoutes(d);
+ const response=await app.request(`${route}?date=2027-01-05&workspaceId=${id(99)}`);
+ expect(response.status).toBe(200);expect(response.headers.get("cache-control")).toBe("no-store");
+ expect(received).toEqual([id(2),{userId:id(1),workspaceRole:"member"},id(3),id(4),"2027-01-05"]);
+ for(const date of ["", "2027-02-30","invalid"])expect((await app.request(`${route}?date=${date}`)).status).toBe(400);
+ d.availability=async()=>({kind:"forbidden"});expect((await app.request(`${route}?date=2027-01-05`)).status).toBe(403);
+ d.availability=async()=>({kind:"not_found"});expect((await app.request(`${route}?date=2027-01-05`)).status).toBe(404);
 });

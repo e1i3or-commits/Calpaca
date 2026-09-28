@@ -5,7 +5,7 @@ import { PROTECTED_RESERVATION_WINDOW_DAYS, sameRoster, type KickoffBookingError
 import { effectiveOpenIntervals } from "../core/availability/overrides";
 import { subtract, type Interval } from "../core/availability/intervals";
 import { generateSlots } from "../core/availability/slots";
-import { kickoffConfigurationIssue, kickoffHosts, loadKickoffContext, lockKickoffContext, readinessKind } from "./kickoff-context";
+import { kickoffConfigurationIssue, kickoffHosts, loadKickoffContext, lockKickoffContext, readinessKind, type KickoffContext } from "./kickoff-context";
 import { getKickoffReadiness } from "./kickoff-readiness-repo";
 import * as s from "./schema";
 type Db = NodePgDatabase<typeof s>;
@@ -50,10 +50,19 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
   const event=ctx.eventType;
   if(slot.start.until(slot.end).total({unit:"minutes"})!==event.durationMinutes)return blocked("kickoff_slot_unavailable");
   const window={start:slot.start.subtract({minutes:event.bufferBeforeMin}),end:slot.end.add({minutes:event.bufferAfterMin})};
+  const slots=await protectedCalendarSlots(ctx,window,db,now,excludeBookingId,managedRequestId);
+  if(!slots.some(candidate=>candidate.start.equals(slot.start)&&candidate.end.equals(slot.end)))return blocked("kickoff_slot_unavailable");
+  return {kind:"allowed",hostUserIds:required};
+}
+
+/** Shared calendar evidence for both the move picker and the final booking guard.
+ * Only the occurrence being moved (and audited batch releases) is excluded. */
+export async function protectedCalendarSlots(ctx: KickoffContext, window: Interval, db: Db, now: Temporal.Instant, excludeBookingId?: string, managedRequestId?: string): Promise<Interval[]> {
+  const required=kickoffHosts(ctx), event=ctx.eventType;
   const start=new Date(window.start.epochMilliseconds),end=new Date(window.end.epochMilliseconds);
   const schedules=await db.select().from(s.schedules).where(inArray(s.schedules.userId,required));
   const [previous]=excludeBookingId?await db.select({googleEventId:s.bookings.googleEventId}).from(s.bookings)
-    .where(and(eq(s.bookings.id,excludeBookingId),eq(s.bookings.eventTypeId,eventTypeId))):[];
+    .where(and(eq(s.bookings.id,excludeBookingId),eq(s.bookings.eventTypeId,ctx.eventType.id))):[];
   const cached=await db.select({userId:s.calendarConnections.userId,startsAt:s.calendarBusyCache.startsAt,endsAt:s.calendarBusyCache.endsAt,externalEventId:s.calendarBusyCache.externalEventId,lastSyncedAt:s.calendarConnections.lastSyncedAt})
     .from(s.calendarBusyCache).innerJoin(s.calendarConnections,eq(s.calendarConnections.id,s.calendarBusyCache.connectionId))
     .where(and(inArray(s.calendarConnections.userId,required),eq(s.calendarConnections.conflictEnabled,true),lt(s.calendarBusyCache.startsAt,end),gte(s.calendarBusyCache.endsAt,start)));
@@ -83,9 +92,10 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
   const held=ctx.meetingKind==="followup"?await db.select().from(s.holds).where(and(inArray(s.holds.hostUserId,required),eq(s.holds.status,"active"),
     gte(s.holds.expiresAt,new Date(now.epochMilliseconds)),lt(s.holds.slotStart,end),gte(s.holds.slotEnd,start))):[];
   const interval=(row:{startsAt:Date;endsAt:Date})=>({start:Temporal.Instant.fromEpochMilliseconds(row.startsAt.getTime()),end:Temporal.Instant.fromEpochMilliseconds(row.endsAt.getTime())});
+  let shared: Interval[] | null = null;
   for(const id of required) {
     const schedule=schedules.find(row=>row.userId===id);
-    if(!schedule)return blocked("kickoff_setup_incomplete");
+    if(!schedule)return [];
     const busy=[...cached.filter(row=>row.userId===id && (!previous?.googleEventId || row.externalEventId!==previous.googleEventId) && !cacheSuperseded(row)).map(interval),
       ...bookings.filter(row=>row.hostIds.includes(id)&&!releasedBookingIds.has(row.id)).map(interval),
       ...held.filter(row=>row.hostUserId===id).map(row=>interval({startsAt:row.slotStart,endsAt:row.slotEnd}))];
@@ -93,7 +103,7 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
     const slots=generateSlots(subtract(open,busy),{durationMinutes:event.durationMinutes,bufferBeforeMin:event.bufferBeforeMin,
       bufferAfterMin:event.bufferAfterMin,minimumNoticeMin:event.minimumNoticeMin,rollingWindowDays:event.rollingWindowDays,
       maxPerDay:event.maxPerDay??undefined,timezone:schedule.timezone},now);
-    if(!slots.some(candidate=>candidate.start.equals(slot.start)&&candidate.end.equals(slot.end)))return blocked("kickoff_slot_unavailable");
+    shared = shared === null ? slots : shared.filter(slot => slots.some(candidate => candidate.start.equals(slot.start) && candidate.end.equals(slot.end)));
   }
-  return {kind:"allowed",hostUserIds:required};
+  return shared ?? [];
 }
