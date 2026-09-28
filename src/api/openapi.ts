@@ -82,6 +82,7 @@ export const openApiOperations: readonly Operation[] = [
   ["post","/api/me/engagements/{id}/followup-schedule/preview","Engagements","Preview future follow-up changes","personal","FollowupPreview"],
   ["post","/api/me/engagements/{id}/followup-schedule/apply","Engagements","Apply reviewed follow-up dates and queue changes to issued invitations","personal","FollowupApply"],
   ["put","/api/me/engagements/{id}/onboarding-contact","Engagements","Set who onboarding follow-ups invite and move booked future follow-ups to that person","personal","OnboardingClientContact"],
+  ["get","/api/automation/onboarding-meetings/ended","Engagements","List ended onboarding follow-ups and their Gemini notes documents (workspace admin)","personal"],
   ["get","/api/automation/kickoff-deliveries","Engagements","Inspect workspace kickoff delivery failures and worker heartbeat","personal"],
   ["get","/api/automation/monitor","Engagements","Read aggregate onboarding health with the dedicated monitor credential","bearer"],
   ["post","/api/automation/kickoff-deliveries/{id}/retry","Engagements","Retry a kickoff delivery before email dispatch (workspace admin)","personal"],

@@ -860,6 +860,49 @@
         }
       }
     },
+    "/api/automation/onboarding-meetings/ended": {
+      "get": {
+        "operationId": "getApiAutomationOnboardingMeetingsEnded",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "List ended onboarding follow-ups and their Gemini notes documents (workspace admin)",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/automation/kickoff-deliveries": {
       "get": {
         "operationId": "getApiAutomationKickoffDeliveries",

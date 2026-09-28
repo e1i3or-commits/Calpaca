@@ -21,6 +21,7 @@ import {runKickoffDeliveryBatch,type KickoffDeliveryDeps} from "../../src/jobs/k
 import {buildMail} from "../../src/jobs/invite-email";
 import {updateOnboardingClientContact} from "../../src/db/onboarding-contact-repo";
 import {resolveClientContact} from "../../src/db/onboarding-contact-state";
+import {listEndedFollowups} from "../../src/db/onboarding-meetings-repo";
 async function fixture() {
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL}),db=drizzle(pool,{schema:s});
  await migrate(db,{migrationsFolder:"drizzle"});await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);await db.delete(s.kickoffDeliveryWorker);
@@ -365,6 +366,23 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("follow-up client contact",()=>{
    const [onboarding]=await f.db.select().from(s.franchiseOnboarding);expect(onboarding).toMatchObject({revision:2,clientContact:null});
    expect(await f.db.select().from(s.onboardingContactChanges)).toHaveLength(0);expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(1);
    expect(await updateOnboardingClientContact(f.ws,{...f.actor,workspaceRole:"member"},f.id,{revision:2,requestId:crypto.randomUUID(),name:"Owner",email:"owner@brand.example"},f.db)).toMatchObject({kind:"forbidden"});
+  }finally{await f.pool.end();}
+ });
+});
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("ended follow-ups for meeting notes",()=>{
+ test("lists delivered follow-ups in the window with their calendar event, and nothing cancelled or foreign",async()=>{
+  const f=await fixture();try {
+   const reserved=await f.reserve();if(reserved.kind!=="reserved")throw new Error("reserve failed");
+   const [booking]=await f.db.select().from(s.bookings).where(eq(s.bookings.id,reserved.bookingId));
+   const around={since:new Date(booking!.endsAt.getTime()-60_000),until:new Date(booking!.endsAt.getTime()+60_000)};
+   expect(await listEndedFollowups(f.ws,around.since,around.until,f.db)).toEqual([]);
+   await deliverAll(f);
+   const [listed]=await listEndedFollowups(f.ws,around.since,around.until,f.db);
+   expect(listed).toMatchObject({bookingId:reserved.bookingId,sourceProjectKey:"reserve",calendar:{organizerUserId:f.ids[2],calendarId:"primary"}});
+   expect(listed?.calendar.eventId).toBe((await f.db.select().from(s.kickoffDeliveries))[0]!.googleEventId);
+   expect(await listEndedFollowups(crypto.randomUUID(),around.since,around.until,f.db)).toEqual([]);
+   expect(await listEndedFollowups(f.ws,around.until,new Date(around.until.getTime()+60_000),f.db)).toEqual([]);
   }finally{await f.pool.end();}
  });
 });
