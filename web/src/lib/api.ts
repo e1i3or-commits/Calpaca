@@ -1826,3 +1826,7 @@ export function publishOnboardingKickoff(id:string,input:{revision:number;reques
 export function enableOnboardingFollowups(id:string,input:{revision:number;requestId:string;kickoffBookingId:string;previewHash:string}) {
   return request(`/api/me/engagements/${encodeURIComponent(id)}/onboarding-scheduling/enable-followups`,{method:"POST",body:JSON.stringify(input)});
 }
+
+export function getFollowupMoveAvailability(id:string,occurrenceId:string,date:string) {
+  return request<{timezone:string;slots:{start:string;end:string}[]}>(`/api/me/engagements/${encodeURIComponent(id)}/followup-schedule/occurrences/${encodeURIComponent(occurrenceId)}/availability?${new URLSearchParams({date})}`);
+}

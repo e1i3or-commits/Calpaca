@@ -1,3 +1,7 @@
+import { Temporal } from "@js-temporal/polyfill";
+import { PROTECTED_RESERVATION_WINDOW_DAYS } from "../core/engagement/kickoff-booking";
+import { protectedCalendarSlots } from "./kickoff-booking-guard";
+import { getKickoffReadiness } from "./kickoff-readiness-repo";
 import { hasFollowupReservations } from "./followup-reservation-state";
 import { createHash } from "node:crypto";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
@@ -7,7 +11,7 @@ import type { EngagementActor } from "../core/engagement/permissions";
 import { getDb } from "./client";
 import { getEngagement } from "./engagement-repo";
 import * as s from "./schema";
-import { kickoffHosts, loadKickoffContext } from "./kickoff-context";
+import { kickoffConfigurationIssue, kickoffHosts, loadKickoffContext } from "./kickoff-context";
 import { FollowupReconciliationBlocked, reconcileFollowupChanges } from "./followup-reconciliation";
 type Db = NodePgDatabase<typeof s>;
 function canonical(value: unknown): string {
@@ -118,5 +122,35 @@ export async function applyFollowupSchedule(workspaceId:string,actor:EngagementA
   }).catch((error:unknown)=>{
     if(error instanceof FollowupReconciliationBlocked)return {kind:"calendar_reconciliation_blocked" as const,issues:[error.message]};
     throw error;
+  });
+}
+
+/** Private, occurrence-scoped availability; follow-up event types stay non-public. */
+export async function getFollowupMoveAvailability(workspaceId:string,actor:EngagementActor,engagementId:string,occurrenceId:string,date:string,db:Db=getDb(),now=new Date()) {
+  return db.transaction(async tx => {
+    await lock(workspaceId,engagementId,tx,false);
+    const result=await load(workspaceId,actor,engagementId,tx);
+    if(!result)return {kind:"not_found" as const};
+    const denied=allowed(result.snapshot);if(denied)return {kind:denied};
+    const schedule=result.snapshot.schedule;
+    const occurrence=schedule?.occurrences.find(row=>row.id===occurrenceId);
+    if(!schedule||!occurrence)return {kind:"not_found" as const};
+    if(schedule.status==="ended"||occurrence.status==="cancelled"||new Date(occurrence.startsAt)<=now)return {kind:"invalid_input" as const};
+    const [binding]=await tx.select().from(s.onboardingFollowups).where(eq(s.onboardingFollowups.onboardingId,result.onboarding.id));
+    const ctx=binding?await loadKickoffContext(binding.eventTypeId,tx):null;
+    if(!ctx||await kickoffConfigurationIssue(ctx,tx)||!(await getKickoffReadiness(ctx.onboarding,tx,now,"followup")).calendarSetupReady)return {kind:"calendar_setup_incomplete" as const};
+    let start:Temporal.Instant,end:Temporal.Instant;
+    try {
+      const day=Temporal.PlainDate.from(date);
+      start=day.toZonedDateTime(schedule.rule.timezone).toInstant();
+      end=day.add({days:1}).toZonedDateTime(schedule.rule.timezone).toInstant();
+    }catch{return {kind:"invalid_input" as const};}
+    const instant=Temporal.Instant.fromEpochMilliseconds(now.getTime());
+    const slots=await protectedCalendarSlots(ctx,{start:start.subtract({minutes:ctx.eventType.bufferBeforeMin}),end:end.add({minutes:ctx.eventType.bufferAfterMin})},tx,instant,occurrence.bookingId);
+    return {kind:"available" as const,timezone:schedule.rule.timezone,slots:slots.filter(slot=>
+      Temporal.Instant.compare(slot.start,start)>=0&&Temporal.Instant.compare(slot.start,end)<0&&
+      slot.end.epochMilliseconds<=now.getTime()+PROTECTED_RESERVATION_WINDOW_DAYS*86400_000&&
+      !schedule.occurrences.some(other=>other.id!==occurrenceId&&other.status!=="cancelled"&&new Date(other.startsAt).getTime()<slot.end.epochMilliseconds&&new Date(other.endsAt).getTime()>slot.start.epochMilliseconds)
+    ).map(slot=>({start:slot.start.toString(),end:slot.end.toString()}))};
   });
 }

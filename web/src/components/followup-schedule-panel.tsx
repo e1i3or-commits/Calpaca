@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiError, applyFollowupSchedule, getFollowupSchedule, previewFollowupSchedule, type EngagementDetail, type FollowupPreviewInput, type FollowupRule, type SchedulePreview, type ScheduleSnapshot } from "@/lib/api";
+import { ApiError, getFollowupMoveAvailability, applyFollowupSchedule, getFollowupSchedule, previewFollowupSchedule, type EngagementDetail, type FollowupPreviewInput, type FollowupRule, type SchedulePreview, type ScheduleSnapshot } from "@/lib/api";
 
 const control = "min-h-11 rounded-lg border border-input bg-background px-3 text-sm disabled:opacity-50";
 const button = "min-h-11 rounded-lg border border-input px-4 text-sm disabled:opacity-50";
@@ -10,6 +10,7 @@ const messages: Record<string,string> = {
   engagement_paused: "This Engagement is paused. Resume the Engagement before editing its schedule.",
   engagement_closed: "This Engagement is closed. Its schedule history is preserved.",
   forbidden: "Only the account lead or a workspace administrator can change this schedule.",
+  calendar_setup_incomplete: "Set up follow-up calls and the required team’s calendars before choosing a new time.",
   invalid_input: "Check the date, time, timezone and number of meetings.",
   request_conflict: "This save request has already been used. Refresh and preview again.",
 };
@@ -29,7 +30,7 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
   const [rule,setRule]=useState<FollowupRule>({cadence:engagement.onboarding?.cadence??"biweekly",anchorDate:"",localTime:"10:00",timezone:Intl.DateTimeFormat().resolvedOptions().timeZone,monthlyMode:"weekday_position",count:6});
   const [busy,setBusy]=useState(false), [error,setError]=useState<string|null>(null), [notice,setNotice]=useState<string|null>(null);
   const [pending,setPending]=useState<{input:FollowupPreviewInput;preview:SchedulePreview;previewHash:string;requestId:string}|null>(null);
-  const [moving,setMoving]=useState<string|null>(null),[moveDate,setMoveDate]=useState(""),[moveTime,setMoveTime]=useState("");
+  const [moving,setMoving]=useState<string|null>(null);
   useEffect(()=>{
     let alive=true;
     getFollowupSchedule(engagement.id).then(data=>{if(alive){setSnapshot(data);if(data.schedule)setRule(data.schedule.rule);setPending(null);}}).catch(e=>{if(alive)setError(explain(e));});
@@ -88,10 +89,48 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
       </div>}
       {schedule&&<div className="mt-5"><h5 className="text-sm font-medium">Saved dates · {schedule.rule.timezone}</h5><ul className="mt-2 divide-y divide-border">{schedule.occurrences.map(row=><li key={row.id} className="py-3 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2"><p>{format(row.startsAt,schedule.rule.timezone)} <span className="text-muted-foreground">· {row.bookingId?`${row.bookingStatus==="cancelled"?"Cancelled booking":"Booked"} · ${row.deliveryKind==="cancelled"?"Cancellation":"Invitation"} ${(row.deliveryStatus??row.inviteStatus??"pending").replaceAll("_"," ")}`:row.status}{row.exception?" · Individually moved":""}{new Date(row.startsAt).getTime()<=Date.now()?" · Past or started":""}</span></p>
-        {row.status!=="cancelled"&&new Date(row.startsAt).getTime()>Date.now()&&<button className={button} disabled={locked} onClick={()=>{setMoving(row.id);setMoveDate("");setMoveTime(schedule.rule.localTime);setPending(null);}}>Move this meeting</button>}</div>
+        {row.status!=="cancelled"&&new Date(row.startsAt).getTime()>Date.now()&&<button className={button} disabled={locked} onClick={()=>{setMoving(row.id);setPending(null);}}>Move this meeting</button>}</div>
         {row.reservationIssue&&<p role="alert" className="mt-2 text-sm text-destructive">Meeting not booked. {reservationMessages[row.reservationIssue.code]??"The booking could not be completed. Review the scheduling issue before retrying."} Assigned to {engagement.people.find(person=>person.userId===row.reservationIssue?.ownerUserId)?.name??"the account lead"}.</p>}
-        {moving===row.id&&<form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={event=>{event.preventDefault();void preview({action:"move",occurrenceId:row.id,date:moveDate,time:moveTime});}}><label className="grid gap-1">New date<input required type="date" className={control} value={moveDate} onChange={event=>{setMoveDate(event.target.value);setPending(null);}}/></label><label className="grid gap-1">New time<input required type="time" className={control} value={moveTime} onChange={event=>{setMoveTime(event.target.value);setPending(null);}}/></label><button className={button} disabled={locked}>Preview this move</button></form>}
+        {moving===row.id&&<MoveMeetingPicker key={`${row.id}:${snapshot.revision}`} engagementId={engagement.id} occurrenceId={row.id} timezone={schedule.rule.timezone} locked={locked} onChange={()=>setPending(null)} onPreview={(date,time)=>void preview({action:"move",occurrenceId:row.id,date,time})}/>}
+
       </li>)}</ul></div>}
     </>}
   </section>;
+}
+
+function MoveMeetingPicker({engagementId,occurrenceId,timezone,locked,onChange,onPreview}:{engagementId:string;occurrenceId:string;timezone:string;locked:boolean;onChange:()=>void;onPreview:(date:string,time:string)=>void}) {
+  const [date,setDate]=useState("");
+  const [selected,setSelected]=useState("");
+  const [availability,setAvailability]=useState<{date:string;slots:{start:string;end:string}[]}|null>(null);
+  const [error,setError]=useState<string|null>(null);
+  const [retry,setRetry]=useState(0);
+  useEffect(()=>{
+    if(!date)return;
+    let alive=true;
+    setError(null);setAvailability(null);
+    getFollowupMoveAvailability(engagementId,occurrenceId,date).then(result=>{
+      if(alive)setAvailability({date,slots:result.slots});
+    }).catch(error=>{if(alive)setError(explain(error));});
+    return()=>{alive=false;};
+  },[engagementId,occurrenceId,date,retry]);
+  const slots=availability?.date===date?availability.slots:[];
+  const loading=!!date&&!error&&availability?.date!==date;
+  const time=(start:string)=>new Intl.DateTimeFormat("en-GB",{timeZone:timezone,hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(start));
+  return <form className="mt-3" onSubmit={event=>{
+    event.preventDefault();
+    if(!locked&&slots.some(slot=>slot.start===selected))onPreview(date,time(selected));
+  }}>
+    <p className="mb-3 text-muted-foreground">Choose a time from the required team’s shared availability. Optional attendees do not block times. Times shown in {timezone}.</p>
+    <fieldset disabled={locked} className="flex flex-wrap items-end gap-3">
+      <label className="grid gap-1">New date<input required type="date" className={control} value={date} onChange={event=>{setDate(event.target.value);setSelected("");setError(null);onChange();}}/></label>
+      <label className="grid gap-1">Available times<select required className={control} value={selected} disabled={loading||!slots.length} onChange={event=>{setSelected(event.target.value);onChange();}}>
+        <option value="">{loading?"Checking calendars…":"Choose an available time"}</option>
+        {slots.map(slot=><option key={slot.start} value={slot.start}>{new Intl.DateTimeFormat(undefined,{timeZone:timezone,hour:"numeric",minute:"2-digit"}).format(new Date(slot.start))}</option>)}
+      </select></label>
+      <button className={button} disabled={locked||loading||!slots.some(slot=>slot.start===selected)}>Preview this move</button>
+      {date&&<button type="button" className={button} disabled={locked||loading} onClick={()=>{setSelected("");setAvailability(null);setError(null);setRetry(value=>value+1);onChange();}}>Refresh availability</button>}
+    </fieldset>
+    {error&&<p role="alert" className="mt-2 text-destructive">{error}</p>}
+    {date&&!error&&!loading&&!slots.length&&<p role="status" className="mt-2 text-muted-foreground">No shared times available on this date. Choose another date.</p>}
+  </form>;
 }

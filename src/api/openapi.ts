@@ -78,6 +78,7 @@ export const openApiOperations: readonly Operation[] = [
   ["get","/api/automation/followup-reservations/{engagementId}","Engagements","Inspect assigned follow-up reservation issues (workspace admin)","personal"],
   ["post","/api/automation/followup-reservations/{engagementId}","Engagements","Prepare a protected private follow-up conversation (workspace admin)","personal","PrepareFollowup"],
   ["post","/api/automation/followup-reservations/{engagementId}/{occurrenceId}/reserve","Engagements","Reserve one approved follow-up and queue verified invitation delivery (workspace admin)","personal","ReserveFollowup"],
+  ["get","/api/me/engagements/{id}/followup-schedule/occurrences/{occurrenceId}/availability","Engagements","Find replacement times using required attendees’ shared calendar availability","personal"],
   ["get","/api/me/engagements/{id}/followup-schedule","Engagements","Read the planned follow-up schedule","personal"],
   ["post","/api/me/engagements/{id}/followup-schedule/preview","Engagements","Preview future follow-up changes","personal","FollowupPreview"],
   ["post","/api/me/engagements/{id}/followup-schedule/apply","Engagements","Apply reviewed follow-up dates and queue changes to issued invitations","personal","FollowupApply"],
@@ -245,6 +246,9 @@ function parameters(path: string) {
 }
 
 function queryParameters(path: string) {
+  if (path === "/api/me/engagements/{id}/followup-schedule/occurrences/{occurrenceId}/availability") {
+    return [{name:"date",in:"query",required:true,schema:{type:"string",format:"date"}}];
+  }
   if (path === "/availability") {
     return [
       ["eventTypeSlug", true], ["start", true], ["end", true], ["inviteeTimezone", true],
