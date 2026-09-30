@@ -99,6 +99,7 @@ export function ReschedulePage({ bookingId, token }: { bookingId: string; token:
           {ctx && step.name === "pick" && (
             <SlotPicker
               slug={ctx.eventTypeSlug}
+              workspaceSlug={ctx.workspaceSlug}
               timezone={timezone}
               reloadKey={reloadKey}
               onLoadError={(e) => setError(errorMessage(e))}

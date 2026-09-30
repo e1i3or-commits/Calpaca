@@ -85,6 +85,22 @@ describe("GET /bookings/:id/reschedule-context", () => {
     expect(body.inviteeTimezone).toBe("America/New_York");
   });
 
+  // Hosted app.calpaca.io cannot resolve a bare event-type slug; without the
+  // workspace the reschedule page's slot picker 404s (event_type_not_found).
+  test("returns the owning workspace slug so the slot picker can resolve it", async () => {
+    const router = createBookingRoutes(
+      makeDeps({
+        getEventTypeForBookingById: async (id) =>
+          id === "et-solo" ? { ...eventType, workspaceSlug: "tourscale" } : null,
+      }),
+    );
+    const res = await router.request(
+      "/bookings/booking-1/reschedule-context?token=reschedule-token-123",
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { workspaceSlug?: string }).workspaceSlug).toBe("tourscale");
+  });
+
   test("403 on a wrong token, 400 without one, 404 for unknown booking", async () => {
     const router = createBookingRoutes(makeDeps());
     expect((await router.request("/bookings/booking-1/reschedule-context?token=nope")).status).toBe(403);

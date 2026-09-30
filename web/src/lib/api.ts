@@ -212,6 +212,8 @@ export class ApiError extends Error {
     readonly code: string,
     /** field-level detail, present on invalid_answers responses */
     readonly issues?: AnswerIssue[],
+    /** state-machine detail, present on illegal_transition responses */
+    readonly reason?: string,
   ) {
     super(`${status}: ${code}`);
   }
@@ -223,8 +225,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string; issues?: AnswerIssue[] };
-    throw new ApiError(res.status, body.error ?? "unknown_error", body.issues);
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      issues?: AnswerIssue[];
+      reason?: string;
+    };
+    throw new ApiError(res.status, body.error ?? "unknown_error", body.issues, body.reason);
   }
   return res.json() as Promise<T>;
 }
@@ -619,6 +625,7 @@ export function suggestTimes(args: {
 export type RescheduleContext = {
   bookingId: string;
   eventTypeSlug: string;
+  workspaceSlug?: string;
   durationMinutes: number;
   status: string;
   start: RenderedInstant;
