@@ -28,3 +28,14 @@ test("monitor fails closed when configuration or its workspace is unavailable", 
   const app = createAutomationMonitorRoutes({ binding: () => ({ token, workspaceId }), workspaceExists: async () => false, report: async () => report });
   expect((await app.request("/api/automation/monitor", { headers: { authorization: `Bearer ${token}` } })).status).toBe(503);
 });
+
+test("meeting notes monitor shares only aggregate health and cannot acknowledge jobs",async()=>{
+ let received="";
+ const app=createAutomationMonitorRoutes({binding:()=>({token,workspaceId}),workspaceExists:async()=>true,report:async()=>report,
+  notesReport:async id=>{received=id;return {worker:null,pending:2,failed:1,expired:0,oldest_due:new Date(),privateDetail:"hidden"};}});
+ const url="/api/automation/monitor/meeting-notes",headers={authorization:`Bearer ${token}`};
+ expect((await app.request(url)).status).toBe(401);
+ const response=await app.request(url+"?workspaceId=other",{headers});expect(response.status).toBe(200);expect(received).toBe(workspaceId);
+ const body=await response.json();expect(body).toMatchObject({workspaceId,pending:2,failed:1});expect(body).not.toHaveProperty("privateDetail");
+ expect((await app.request(url,{method:"POST",headers})).status).toBe(404);
+});
