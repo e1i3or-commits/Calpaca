@@ -68,7 +68,8 @@ export async function readClaimedMeeting(workspaceId:string, bookingId:string, d
 }
 
 export async function finishMeetingNotes(workspaceId:string, bookingId:string, leaseToken:string, outcome:MeetingNotesOutcome, now=new Date(), db:Db=getDb()) {
-  const delay=outcome==='no_notes'?24*3600_000:15*60_000;
+  // Existing reviews need occasional refresh; do not let them crowd out new meetings.
+  const delay=outcome==='no_notes'?24*3600_000:outcome==='pending'?6*3600_000:15*60_000;
   const r=await db.execute(sql`update meeting_notes_jobs set
     completed_at=${outcome==='complete'?now.toISOString():null}::timestamptz,
     next_attempt_at=${new Date(now.getTime()+delay).toISOString()}::timestamptz,
