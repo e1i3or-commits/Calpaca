@@ -1,3 +1,4 @@
+import { reconcileCalendarBookingTimes } from "./calendar-booking-reconciliation";
 import { and, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
@@ -21,6 +22,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 /** The Drizzle-backed SyncRepo the engine's fakes stand in for. */
 export function makeSyncRepo(executor: Db = getDb()): SyncRepo {
   return {
+    reconcileBookingTimes: (id,events,now)=>reconcileCalendarBookingTimes(id,events,executor,now),
     // full sync: swap the whole cache in one transaction so availability
     // reads never see a half-replaced state
     async replaceBusy(connectionId, busy) {

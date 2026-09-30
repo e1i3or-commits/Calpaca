@@ -163,3 +163,16 @@ describe("syncConnection", () => {
     expect(calls.map((c) => c.method)).toEqual(["markUnhealthy"]);
   });
 });
+
+test("reconciles organizer events before advancing the sync cursor; failures retain the old cursor", async () => {
+  const event={...busyEvent("owned"),etag:"version",updated:NOW.toISOString(),organizer:{email:"owner@example.com"},extendedProperties:{private:{tourscaleBookingId:"booking"}}};
+  const {repo,calls}=fakeRepo();
+  repo.reconcileBookingTimes=async (...args)=>void calls.push({method:"reconcileBookingTimes",args});
+  const deps={...fakeList([ok({items:[event],nextSyncToken:"next"})]),now:()=>NOW};
+  expect((await syncConnection(CONN,"token",deps,repo)).ok).toBe(true);
+  expect(calls.map(c=>c.method)).toEqual(["reconcileBookingTimes","replaceBusy","saveSyncState"]);
+  expect(calls[0]!.args[1]).toEqual([event]);
+  const broken=fakeRepo();broken.repo.reconcileBookingTimes=async()=>{throw new Error("busy delivery");};
+  await expect(syncConnection(CONN,"token",{...fakeList([ok({items:[event],nextSyncToken:"must-not-save"})]),now:()=>NOW},broken.repo)).rejects.toThrow("busy delivery");
+  expect(broken.calls.some(c=>c.method==="saveSyncState")).toBe(false);
+});

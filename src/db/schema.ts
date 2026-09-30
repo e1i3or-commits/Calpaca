@@ -1013,3 +1013,10 @@ export const meetingNotesJobs = pgTable("meeting_notes_jobs", {
   completedAt: timestamp("completed_at", {withTimezone:true}),
 }, t => [primaryKey({columns:[t.workspaceId,t.bookingId]}),
   index("meeting_notes_jobs_due_idx").on(t.workspaceId,t.nextAttemptAt,t.bookingId).where(sql`${t.completedAt} is null`)]);
+
+// Last trusted organizer version seen, including observations with no time change.
+export const bookingCalendarObservations = pgTable("booking_calendar_observations", {
+  bookingId:uuid("booking_id").primaryKey().references(()=>bookings.id),
+  providerUpdatedAt:timestamp("provider_updated_at",{withTimezone:true}).notNull(),
+  etag:text("etag").notNull(), observedAt:timestamp("observed_at",{withTimezone:true}).notNull(),
+});

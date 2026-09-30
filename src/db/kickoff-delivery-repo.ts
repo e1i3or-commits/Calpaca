@@ -35,7 +35,7 @@ async function lockDeliveryContext(db:Db,id:string) {
 async function projectDelivery(row:Delivery,db:Db) {
   if(!row.calendarVerifiedAt||!row.mailAcceptedAt||row.kind==="cancelled")return;
   const [latest]=await db.select().from(s.kickoffDeliveries).where(and(eq(s.kickoffDeliveries.bookingId,row.bookingId),inArray(s.kickoffDeliveries.kind,["created","rescheduled","cancelled"]))).orderBy(desc(s.kickoffDeliveries.sequence)).limit(1);
-  if(latest?.sourceEventId!==row.sourceEventId||latest.kind==="cancelled")return;
+  if(row.kind!=="reminder" && (latest?.sourceEventId!==row.sourceEventId||latest.kind==="cancelled"))return;
   const markers=await db.select({kind:s.kickoffDeliveryEvents.kind}).from(s.kickoffDeliveryEvents).where(eq(s.kickoffDeliveryEvents.deliveryId,row.id));
   for(const [marker,kind] of [["handoff_projected",row.kind==="reminder"?"reminder_sent":"invite_sent"],
     ...(row.status==="delivered"&&row.kind!=="reminder"?[["delivery_projected","invite_delivered"] as const]:[]),
@@ -81,8 +81,8 @@ export async function queueKickoffReminder(bookingId:string,db:Db=getDb()) {
     await lockDeliveryBooking(tx,bookingId);
     const [booking]=await tx.select().from(s.bookings).where(eq(s.bookings.id,bookingId)).for("update");
     if(!booking||booking.status!=="confirmed"||booking.startsAt.getTime()<=Date.now()||booking.startsAt.getTime()>Date.now()+86400_000)return;
-    const [source]=await tx.select().from(s.kickoffDeliveries).where(and(eq(s.kickoffDeliveries.bookingId,bookingId),inArray(s.kickoffDeliveries.kind,["created","rescheduled"]))).orderBy(desc(s.kickoffDeliveries.sequence)).limit(1);
-    if(source)await queueKickoffDelivery(bookingId,source.sourceEventId,"reminder",tx);
+    const [source]=await tx.select().from(s.bookingEvents).where(and(eq(s.bookingEvents.bookingId,bookingId),inArray(s.bookingEvents.kind,["created","rescheduled","invitee_changed"]))).orderBy(desc(s.bookingEvents.createdAt)).limit(1);
+    if(source)await queueKickoffDelivery(bookingId,source.id,"reminder",tx);
   });
 }
 
