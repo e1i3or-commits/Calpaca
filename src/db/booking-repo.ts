@@ -1,4 +1,5 @@
 import { authorizeFollowupChange } from "./followup-change-authorization";
+import { authorizeInviteeChange } from "./onboarding-contact-state";
 import { and, asc, count, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
@@ -64,6 +65,8 @@ function serializePayload(event: BookingEvent): StoredPayload {
       return {};
     case "invite_failed":
       return { reason: event.payload.reason };
+    case "invitee_changed":
+      return { email: event.payload.email, name: event.payload.name, previousEmail: event.payload.previousEmail };
   }
 }
 
@@ -122,6 +125,8 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
       return { kind: "invite_failed", payload: { reason: payload["reason"] as string | undefined } };
     case "reminder_sent":
       return { kind: "reminder_sent", payload: {} };
+    case "invitee_changed":
+      return { kind: "invitee_changed", payload: { email: payload["email"] as string, name: payload["name"] as string, previousEmail: payload["previousEmail"] as string } };
   }
 }
 
@@ -178,6 +183,7 @@ export async function appendEvent<K extends BookingEventKind>(
     const deliveryKickoff=deliveryBooking?await loadKickoffContext(deliveryBooking.eventTypeId,tx):null;
     if(deliveryKickoff) {
       if(deliveryKickoff.meetingKind==="followup" && ["rescheduled","reassigned","cancelled"].includes(kind) && !await authorizeFollowupChange(deliveryKickoff,bookingId,event,managedScheduleRequestId,tx))return err({kind,reason:"followup_managed_schedule"});
+      if(kind==="invitee_changed" && !await authorizeInviteeChange(deliveryKickoff,bookingId,event,managedScheduleRequestId,tx))return err({kind,reason:"followup_managed_schedule"});
       for(const hostId of [...kickoffHosts(deliveryKickoff)].sort())await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${hostId}, 0))`);
       await tx.select({id:bookings.id}).from(bookings).where(eq(bookings.id,bookingId)).for("update");
       if(["invite_sent","invite_delivered","invite_failed","reminder_sent"].includes(kind)) {
@@ -191,6 +197,9 @@ export async function appendEvent<K extends BookingEventKind>(
         if(latestDeliverySource?.id!==verified.sourceEventId)return err({kind,reason:"kickoff_delivery_superseded"});
       }
     }
+    // Only an audited contact change on an issued onboarding follow-up may
+    // change who a booking invites.
+    if(kind==="invitee_changed" && !deliveryKickoff)return err({kind,reason:"followup_managed_schedule"});
     const events = await loadEvents(tx, bookingId);
     const stateResult = currentStateResult(events);
     if (!stateResult.ok) return stateResult;
@@ -219,6 +228,11 @@ export async function appendEvent<K extends BookingEventKind>(
     await writeProjection(tx, bookingId, result.value);
     if(deliveryKickoff && recorded && (kind==="created"||kind==="rescheduled"||kind==="cancelled")) {
       await queueKickoffDelivery(bookingId,recorded.id,kind,tx);
+    }
+    // Updating the existing calendar event is a reschedule to the provider
+    // (same event, new attendee list); the email reads as a new invitation.
+    if(deliveryKickoff && recorded && kind==="invitee_changed") {
+      await queueKickoffDelivery(bookingId,recorded.id,"rescheduled",tx,"invitee_changed");
     }
 
     return ok(result.value);

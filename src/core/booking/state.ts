@@ -17,7 +17,8 @@ export type BookingEventKind =
   | "invite_sent"
   | "invite_delivered"
   | "invite_failed"
-  | "reminder_sent";
+  | "reminder_sent"
+  | "invitee_changed";
 
 export interface CreatedPayload {
   readonly startsAt: Temporal.Instant;
@@ -53,6 +54,13 @@ export type InviteSentPayload = Record<string, never>;
 export type InviteDeliveredPayload = Record<string, never>;
 export type ReminderSentPayload = Record<string, never>;
 
+/** The person the invitation is for changed; time and hosts did not. */
+export interface InviteeChangedPayload {
+  readonly email: string;
+  readonly name: string;
+  readonly previousEmail: string;
+}
+
 export interface InviteFailedPayload {
   readonly reason?: string;
 }
@@ -66,7 +74,8 @@ export type BookingEvent =
   | { readonly kind: "invite_sent"; readonly payload: InviteSentPayload }
   | { readonly kind: "invite_delivered"; readonly payload: InviteDeliveredPayload }
   | { readonly kind: "invite_failed"; readonly payload: InviteFailedPayload }
-  | { readonly kind: "reminder_sent"; readonly payload: ReminderSentPayload };
+  | { readonly kind: "reminder_sent"; readonly payload: ReminderSentPayload }
+  | { readonly kind: "invitee_changed"; readonly payload: InviteeChangedPayload };
 
 /** Extracts the payload type for a given event kind, for callers that build
  * one event at a time (e.g. a db-layer appendEvent(bookingId, kind, payload)). */
@@ -181,6 +190,14 @@ export function applyEvent(
       if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
       if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
       return ok(state);
+    }
+
+    case "invitee_changed": {
+      // The invitee lives on the booking row, not in the projection. A new
+      // recipient still needs a fresh delivery, so the invite resets.
+      if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
+      return ok({ ...state, inviteStatus: "none" });
     }
   }
 }

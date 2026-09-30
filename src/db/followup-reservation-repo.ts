@@ -40,8 +40,9 @@ export async function prepareOnboardingFollowups(workspaceId:string,actor:Engage
 }
 class ReservationBlocked extends Error { constructor(readonly code:string){super(code);} }
 
-/** One occurrence -> one booking. The source kickoff supplies verified person
- * details; callers cannot override recipients, hosts, dates or organizer. */
+/** One occurrence -> one booking. The saved client contact, or else the
+ * verified kickoff invitee, is the recipient; callers cannot override
+ * recipients, hosts, dates or organizer. */
 export async function reserveOnboardingFollowup(workspaceId:string,actor:EngagementActor,engagementId:string,occurrenceId:string,revision:number,db:Db=getDb()) {
   if(!admin(actor))return {kind:"forbidden" as const};
   return db.transaction(async tx=>{
@@ -76,12 +77,14 @@ export async function reserveOnboardingFollowup(workspaceId:string,actor:Engagem
       .where(and(eq(s.bookings.id,ctx.binding.kickoffBookingId),eq(s.bookings.workspaceId,workspaceId),eq(s.onboardingKickoffs.onboardingId,ctx.onboarding.id)));
     if(!kickoff||kickoff.booking.status!=="confirmed"||kickoff.booking.inviteStatus!=="delivered")return blocked("kickoff_delivery_unverified");
     if(occurrence.startsAt<=new Date())return blocked("followup_occurrence_past");
+    // The saved client contact wins; the kickoff invitee is only the default.
+    const invitee=ctx.onboarding.clientContact??{email:kickoff.booking.inviteeEmail,name:kickoff.booking.inviteeName};
     try {
       return await tx.transaction(async reservationTx=>{
         const bookingId=crypto.randomUUID();
         await reservationTx.insert(s.bookings).values({id:bookingId,workspaceId,eventTypeId:binding.eventTypeId,
           startsAt:occurrence.startsAt,endsAt:occurrence.endsAt,hostUserIds:kickoffHosts(ctx),
-          inviteeEmail:kickoff.booking.inviteeEmail,inviteeName:kickoff.booking.inviteeName,inviteeTimezone:kickoff.booking.inviteeTimezone,
+          inviteeEmail:invitee.email,inviteeName:invitee.name,inviteeTimezone:kickoff.booking.inviteeTimezone,
           guestEmails:kickoff.booking.guestEmails,meetingFormat:"google_meet",rescheduleToken:crypto.randomUUID(),cancelToken:crypto.randomUUID()});
         await reservationTx.insert(s.followupReservations).values({occurrenceId,onboardingId:ctx.onboarding.id,bookingId,status:"reserved",ownerUserId:owner})
           .onConflictDoUpdate({target:s.followupReservations.occurrenceId,set:{bookingId,status:"reserved",issueCode:null,ownerUserId:owner,updatedAt:new Date()}});

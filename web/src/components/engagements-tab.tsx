@@ -1,5 +1,6 @@
 import { OnboardingSchedulingPanel } from "@/components/onboarding-scheduling-panel";
 import { FollowupSchedulePanel } from "@/components/followup-schedule-panel";
+import { ClientContactRow } from "@/components/client-contact-panel";
 import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
@@ -363,6 +364,7 @@ function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDeta
     <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-[10rem_1fr]">
       <dt className="text-muted-foreground">Kickoff</dt><dd>{plan.kickoffDurationMinutes} minutes. Required: {names(plan.attendance.kickoff)}.</dd>
       <dt className="text-muted-foreground">Follow-up</dt><dd>{plan.followupDurationMinutes} minutes. Required: {names(plan.attendance.followup.filter(host => host.role === "required"))}. Optional: {names(plan.attendance.followup.filter(host => host.role === "optional"))}.</dd>
+      <ClientContactRow engagement={engagement} reload={reload} />
     </dl>
     <div className="mt-6 rounded-lg border border-border p-4" aria-labelledby="kickoff-setup-title">
       <div className="flex flex-wrap items-center justify-between gap-2">

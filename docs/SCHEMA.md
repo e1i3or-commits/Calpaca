@@ -25,7 +25,7 @@ import {
 export const bookingEventKind = pgEnum("booking_event_kind", [
   "created", "rescheduled", "cancelled", "reassigned",
   "no_show", "invite_sent", "invite_delivered", "invite_failed",
-  "reminder_sent",
+  "reminder_sent", "invitee_changed",
 ]);
 export const assignmentMode = pgEnum("assignment_mode", [
   "solo", "round_robin", "group",

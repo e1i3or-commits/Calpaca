@@ -16,7 +16,7 @@ export const franchiseOnboardingInput = z.object({
   locationName: name,
   existingClientId: id.optional(),
   workdriveFolderId: z.string().regex(/^[a-zA-Z0-9]{10,100}$/).optional(),
-  franchiseSuccessUserIds: z.array(id).length(4),
+  franchiseSuccessUserIds: z.array(id).min(3).max(4),
   kaiUserId: id,
   andrewUserId: id,
   accountLeadUserId: id,
@@ -24,8 +24,8 @@ export const franchiseOnboardingInput = z.object({
   kickoffDurationMinutes: z.literal(45).default(45),
   followupDurationMinutes: z.literal(45).default(45),
 }).strict().superRefine((value, ctx) => {
-  if (new Set([...value.franchiseSuccessUserIds, value.kaiUserId, value.andrewUserId]).size !== 6)
-    ctx.addIssue({ code: "custom", path: ["franchiseSuccessUserIds"], message: "Select the four Franchise Success members and two distinct leaders" });
+  if (new Set([...value.franchiseSuccessUserIds, value.kaiUserId, value.andrewUserId]).size !== value.franchiseSuccessUserIds.length + 2)
+    ctx.addIssue({ code: "custom", path: ["franchiseSuccessUserIds"], message: "Select three or four distinct Franchise Success members and two distinct leaders" });
 });
 export type FranchiseOnboardingInput = z.infer<typeof franchiseOnboardingInput>;
 export interface OnboardingHost { userId: string; role: "required"|"optional" }
@@ -49,3 +49,21 @@ export function canonicalOnboardingInput(input: FranchiseOnboardingInput): Franc
 export const onboardingCadenceUpdate = z.object({
   revision: z.number().int().positive(), cadence: z.enum(onboardingCadences),
 }).strict();
+
+/** Who the follow-up series invites. `kickoff` means nobody has set it and the
+ * kickoff invitee is being used; `workspace` means the franchisee's branded
+ * mailbox was confirmed by IT and the automation switched to it. */
+export const clientContactSources = ["kickoff", "manual", "workspace"] as const;
+export interface OnboardingClientContact { name: string; email: string; source: typeof clientContactSources[number] }
+export const onboardingClientContactUpdate = z.object({
+  revision: z.number().int().positive(),
+  requestId: id,
+  name,
+  email: z.string().trim().toLowerCase().email().max(254),
+  source: z.enum(["manual", "workspace"]).default("manual"),
+}).strict();
+export type OnboardingClientContactUpdate = z.input<typeof onboardingClientContactUpdate>;
+
+export function sameClientContact(a: Pick<OnboardingClientContact,"name"|"email">, b: Pick<OnboardingClientContact,"name"|"email">) {
+  return a.email.trim().toLowerCase() === b.email.trim().toLowerCase() && a.name.trim() === b.name.trim();
+}

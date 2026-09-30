@@ -55,7 +55,8 @@ export async function processKickoffDelivery(row:Delivery,deps:KickoffDeliveryDe
       const issue=await db.transaction(async tx=>{
         const [booking]=await tx.select().from(s.bookings).where(eq(s.bookings.id,row.bookingId));
         if(!booking)return "followup_booking_missing";
-        if(booking.status!=="confirmed" || booking.startsAt.toISOString()!==new Date(row.snapshot.booking.startsAt).toISOString() || booking.endsAt.toISOString()!==new Date(row.snapshot.booking.endsAt).toISOString())return "followup_booking_version_changed";
+        if(booking.status!=="confirmed" || booking.startsAt.toISOString()!==new Date(row.snapshot.booking.startsAt).toISOString() || booking.endsAt.toISOString()!==new Date(row.snapshot.booking.endsAt).toISOString()
+          || booking.inviteeEmail!==row.snapshot.booking.inviteeEmail)return "followup_booking_version_changed";
         const ctx=await loadKickoffContext(booking.eventTypeId,tx);
         if(!ctx||ctx.meetingKind!=="followup")return "followup_configuration_missing";
         const [kickoff]=ctx.binding.kickoffBookingId?await tx.select({booking:s.bookings}).from(s.bookings)
@@ -79,7 +80,10 @@ export async function processKickoffDelivery(row:Delivery,deps:KickoffDeliveryDe
       &&earlier.every(item=>item.status==="superseded"&&item.attemptCount===0&&!item.calendarId);
     await deps.calendar(initialReschedule?{...row,kind:"created"}:row,calendarId,credentials.accessToken);
     await verifyKickoffCalendar(row.id,attempt,db);
-    const mail={...buildMail(restoreInviteContext(row.snapshot),row.kind,Temporal.Now.instant(),{includeIcs:false}),messageId:row.messageId,deliveryId:row.id};
+    // A new invitee has never seen this meeting, so it is an invitation to them.
+    const mailKind=row.snapshot.deliveryReason==="invitee_changed"&&row.kind==="rescheduled"?"created":row.kind;
+    const built=buildMail(restoreInviteContext(row.snapshot),mailKind,Temporal.Now.instant(),{includeIcs:false});
+    const mail={...built,...(row.snapshot.deliveryReason==="invitee_changed"?{cc:[]}:{}),messageId:row.messageId,deliveryId:row.id};
     await startKickoffEmail(row.id,attempt,db);mailStarted=true;
     let timer:ReturnType<typeof setTimeout>|undefined;
     const result=await Promise.race([deps.mail(mail),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error("email_timeout")),30_000);})]).finally(()=>{if(timer)clearTimeout(timer);});
