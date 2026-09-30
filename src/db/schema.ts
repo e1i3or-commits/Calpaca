@@ -994,3 +994,22 @@ export const followupSchedulerEvents = pgTable("followup_scheduler_events", {
   issueCode: text("issue_code"),
   createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
 });
+
+export const meetingNotesWorkers = pgTable("meeting_notes_workers", {
+  workspaceId: uuid("workspace_id").primaryKey().references(() => workspaces.id),
+  since: timestamp("since", {withTimezone:true}).notNull(),
+  lastPolledAt: timestamp("last_polled_at", {withTimezone:true}).notNull(),
+});
+export const meetingNotesJobs = pgTable("meeting_notes_jobs", {
+  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id),
+  bookingId: uuid("booking_id").notNull().references(() => bookings.id),
+  nextAttemptAt: timestamp("next_attempt_at", {withTimezone:true}).notNull(),
+  leaseToken: uuid("lease_token"),
+  leaseUntil: timestamp("lease_until", {withTimezone:true}),
+  attempts: integer("attempts").notNull().default(0),
+  lastAttemptAt: timestamp("last_attempt_at", {withTimezone:true}),
+  lastSucceededAt: timestamp("last_succeeded_at", {withTimezone:true}),
+  lastIssue: text("last_issue"),
+  completedAt: timestamp("completed_at", {withTimezone:true}),
+}, t => [primaryKey({columns:[t.workspaceId,t.bookingId]}),
+  index("meeting_notes_jobs_due_idx").on(t.workspaceId,t.nextAttemptAt,t.bookingId).where(sql`${t.completedAt} is null`)]);
