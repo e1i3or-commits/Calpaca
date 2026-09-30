@@ -1,3 +1,4 @@
+import {claimMeetingNotes,readClaimedMeeting,finishMeetingNotes,meetingNotesHealth} from "../../src/db/meeting-notes-queue";
 import { runFollowupReservationBatch } from "../../src/jobs/followup-reservations";
 import { FOLLOWUP_SCHEDULER_NAME } from "../../src/db/followup-automation-state";
 import { claimKickoffDelivery, recordKickoffReceipt, kickoffDeliveryReport } from "../../src/db/kickoff-delivery-repo";
@@ -21,7 +22,7 @@ import {runKickoffDeliveryBatch,type KickoffDeliveryDeps} from "../../src/jobs/k
 import {buildMail} from "../../src/jobs/invite-email";
 import {updateOnboardingClientContact} from "../../src/db/onboarding-contact-repo";
 import {resolveClientContact} from "../../src/db/onboarding-contact-state";
-import {listEndedFollowups} from "../../src/db/onboarding-meetings-repo";
+import {listEndedFollowups,listEndedFollowupsPage} from "../../src/db/onboarding-meetings-repo";
 async function fixture() {
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL}),db=drizzle(pool,{schema:s});
  await migrate(db,{migrationsFolder:"drizzle"});await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);await db.delete(s.kickoffDeliveryWorker);
@@ -396,6 +397,31 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("follow-up client contact",()=>{
 });
 
 describe.skipIf(!process.env.TEST_DATABASE_URL)("ended follow-ups for meeting notes",()=>{
+ test("pagination crosses fifty undelivered rows with identical timestamps without losing a delivered meeting",async()=>{
+  const f=await fixture();try {
+   const reserved=await f.reserve();if(reserved.kind!=="reserved")throw new Error("reserve failed");
+   await deliverAll(f);
+   const [booking]=await f.db.select().from(s.bookings).where(eq(s.bookings.id,reserved.bookingId));
+   const [reservation]=await f.db.select().from(s.followupReservations).where(eq(s.followupReservations.bookingId,reserved.bookingId));
+   const [occurrence]=await f.db.select().from(s.onboardingFollowupOccurrences).where(eq(s.onboardingFollowupOccurrences.id,reservation!.occurrenceId));
+   const ids=Array.from({length:51},(_,i)=>`00000000-0000-4000-8000-${String(i+1).padStart(12,"0")}`);
+   expect(ids.at(-1)! < booking!.id).toBe(true);
+   for(const [i,id] of ids.entries()) {
+    const oid=crypto.randomUUID();
+    await f.db.insert(s.bookings).values({...booking!,id,cancelToken:crypto.randomUUID(),rescheduleToken:crypto.randomUUID()});
+    await f.db.insert(s.onboardingFollowupOccurrences).values({...occurrence!,id:oid,position:100+i});
+    await f.db.insert(s.followupReservations).values({...reservation!,occurrenceId:oid,bookingId:id});
+   }
+   const since=new Date(booking!.endsAt.getTime()-60_000),until=new Date(booking!.endsAt.getTime()+60_000);
+   const first=await listEndedFollowupsPage(f.ws,since,until,null,f.db);
+   expect(first.meetings).toEqual([]);
+   expect(first.nextCursor).toEqual({endsAt:booking!.endsAt.toISOString(),bookingId:ids[49]!});
+   const second=await listEndedFollowupsPage(f.ws,since,until,first.nextCursor,f.db);
+   expect(second.meetings.map(m=>m.bookingId)).toEqual([reserved.bookingId]);
+   expect(second.nextCursor).toBeNull();
+   expect(await listEndedFollowupsPage(crypto.randomUUID(),since,until,null,f.db)).toEqual({meetings:[],nextCursor:null});
+  }finally{await f.pool.end();}
+ });
  test("lists delivered follow-ups in the window with their calendar event, and nothing cancelled or foreign",async()=>{
   const f=await fixture();try {
    const reserved=await f.reserve();if(reserved.kind!=="reserved")throw new Error("reserve failed");
@@ -408,6 +434,49 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("ended follow-ups for meeting no
    expect(listed?.calendar.eventId).toBe((await f.db.select().from(s.kickoffDeliveries))[0]!.googleEventId);
    expect(await listEndedFollowups(crypto.randomUUID(),around.since,around.until,f.db)).toEqual([]);
    expect(await listEndedFollowups(f.ws,around.until,new Date(around.until.getTime()+60_000),f.db)).toEqual([]);
+  }finally{await f.pool.end();}
+ });
+});
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("durable meeting-notes queue",()=>{
+ test("retains undelivered meetings over long outages, fences stale acknowledgements, and finishes idempotently",async()=>{
+  const f=await fixture();try {
+   const reserved=await f.reserve();if(reserved.kind!=="reserved")throw new Error("reserve failed");
+   const [b]=await f.db.select().from(s.bookings).where(eq(s.bookings.id,reserved.bookingId));
+   const since=new Date(b!.endsAt.getTime()-60_000),now=new Date(b!.endsAt.getTime()+21*60_000);
+   const jobs=await Promise.all([claimMeetingNotes(f.ws,since,now,f.db),claimMeetingNotes(f.ws,since,now,f.db)]);
+   expect(jobs.filter(Boolean)).toHaveLength(1);const job=jobs.find(Boolean)!;
+   expect((await readClaimedMeeting(f.ws,job.bookingId,f.db))?.calendar).toBeNull();
+   expect(await finishMeetingNotes(crypto.randomUUID(),job.bookingId,job.leaseToken,"complete",now,f.db)).toBe(false);
+   const later=new Date(now.getTime()+30*86400_000);
+   const retry=await claimMeetingNotes(f.ws,since,later,f.db);expect(retry?.bookingId).toBe(job.bookingId);expect(retry?.attempts).toBe(2);
+   expect(retry?.leaseToken).not.toBe(job.leaseToken);
+   expect(await finishMeetingNotes(f.ws,job.bookingId,job.leaseToken,"complete",later,f.db)).toBe(false);
+   await deliverAll(f);
+   expect((await readClaimedMeeting(f.ws,job.bookingId,f.db))?.calendar?.calendarId).toBe("primary");
+   expect(await finishMeetingNotes(f.ws,job.bookingId,retry!.leaseToken,"failed",later,f.db)).toBe(true);
+   expect((await meetingNotesHealth(f.ws,later,f.db)).failed).toBe(1);
+   expect(await claimMeetingNotes(f.ws,since,new Date(later.getTime()+14*60_000),f.db)).toBeNull();
+   const due=new Date(later.getTime()+15*60_000),third=await claimMeetingNotes(f.ws,since,due,f.db);expect(third?.attempts).toBe(3);
+   expect(await finishMeetingNotes(f.ws,job.bookingId,third!.leaseToken,"complete",due,f.db)).toBe(true);
+   expect(await finishMeetingNotes(f.ws,job.bookingId,third!.leaseToken,"complete",due,f.db)).toBe(false);
+   expect(await claimMeetingNotes(f.ws,since,new Date(due.getTime()+86400_000),f.db)).toBeNull();
+   expect((await meetingNotesHealth(f.ws,due,f.db)).pending).toBe(0);
+   await expect(claimMeetingNotes(f.ws,new Date(since.getTime()-1),due,f.db)).rejects.toThrow("meeting_notes_start_conflict");
+  }finally{await f.pool.end();}
+ });
+ test("late notes remain eligible after no-notes acknowledgement; cancelled meetings cannot be claimed",async()=>{
+  const f=await fixture();try{
+   const reserved=await f.reserve();if(reserved.kind!=="reserved")throw new Error("reserve failed");
+   const [b]=await f.db.select().from(s.bookings).where(eq(s.bookings.id,reserved.bookingId));
+   const since=new Date(b!.endsAt.getTime()-60_000),now=new Date(b!.endsAt.getTime()+21*60_000);
+   const first=await claimMeetingNotes(f.ws,since,now,f.db);
+   expect(await finishMeetingNotes(f.ws,first!.bookingId,first!.leaseToken,"no_notes",now,f.db)).toBe(true);
+   expect(await claimMeetingNotes(f.ws,since,new Date(now.getTime()+3600_000),f.db)).toBeNull();
+   const next=await claimMeetingNotes(f.ws,since,new Date(now.getTime()+86400_000),f.db);expect(next?.bookingId).toBe(first?.bookingId);
+   await f.db.update(s.bookings).set({status:"cancelled"}).where(eq(s.bookings.id,reserved.bookingId));
+   expect(await claimMeetingNotes(f.ws,since,new Date(now.getTime()+2*86400_000),f.db)).toBeNull();
+   expect((await meetingNotesHealth(f.ws,now,f.db)).pending).toBe(0);
   }finally{await f.pool.end();}
  });
 });
