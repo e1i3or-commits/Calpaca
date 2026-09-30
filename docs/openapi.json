@@ -1168,6 +1168,49 @@
         }
       }
     },
+    "/api/automation/monitor/meeting-notes": {
+      "get": {
+        "operationId": "getApiAutomationMonitorMeetingNotes",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Read aggregate meeting-notes queue health (monitor credential)",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/automation/monitor": {
       "get": {
         "operationId": "getApiAutomationMonitor",
