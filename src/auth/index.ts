@@ -53,11 +53,12 @@ function buildAuth() {
       google: {
         clientId: process.env.GOOGLE_CLIENT_ID ?? "",
         clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-        // offline + consent: Google only issues a refresh token on an
-        // explicit consent prompt; without it sync dies when the first
-        // access token expires.
+        // offline: Google issues the refresh token on the first grant, and a
+        // later sign-in without one leaves the stored token in place
+        // (BetterAuth drops undefined tokens on update). Forcing "consent"
+        // here made every sign-in re-show the calendar permission screen.
         accessType: "offline",
-        prompt: "select_account consent",
+        prompt: "select_account",
         scope: GOOGLE_CALENDAR_SCOPES,
       },
     },
