@@ -86,9 +86,10 @@ export async function meetingNotesHealth(workspaceId:string, now=new Date(), db:
   const state=await db.execute<{last_polled_at:Date;since:Date}>(sql`select last_polled_at,since from meeting_notes_workers where workspace_id=${workspaceId}`);
   const counts=await db.execute<{pending:number;failed:number;expired:number;oldest_due:Date|null}>(sql`
     select count(*)::int as pending,
-      count(*) filter(where last_issue is not null)::int as failed,
-      count(*) filter(where lease_until <= ${now.toISOString()}::timestamptz)::int as expired,
-      min(next_attempt_at) as oldest_due
-    from meeting_notes_jobs where workspace_id=${workspaceId} and completed_at is null`);
+      count(*) filter(where last_issue is not null and b.ends_at <= ${new Date(now.getTime()-20*60_000).toISOString()}::timestamptz)::int as failed,
+      count(*) filter(where lease_until <= ${now.toISOString()}::timestamptz and b.ends_at <= ${new Date(now.getTime()-20*60_000).toISOString()}::timestamptz)::int as expired,
+      min(greatest(next_attempt_at,b.ends_at+interval '20 minutes')) as oldest_due
+    from meeting_notes_jobs j join bookings b on b.id=j.booking_id
+    where j.workspace_id=${workspaceId} and completed_at is null and b.status='confirmed'`);
   return {worker:state.rows[0]??null,...counts.rows[0]};
 }

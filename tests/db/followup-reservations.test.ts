@@ -448,6 +448,12 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("durable meeting-notes queue",()
    expect(jobs.filter(Boolean)).toHaveLength(1);const job=jobs.find(Boolean)!;
    expect((await readClaimedMeeting(f.ws,job.bookingId,f.db))?.calendar).toBeNull();
    expect(await finishMeetingNotes(crypto.randomUUID(),job.bookingId,job.leaseToken,"complete",now,f.db)).toBe(false);
+   const futureEnd=new Date(now.getTime()+60*86400_000);
+   await f.db.update(s.bookings).set({endsAt:futureEnd}).where(eq(s.bookings.id,reserved.bookingId));
+   const futureHealth=await meetingNotesHealth(f.ws,new Date(now.getTime()+3600_000),f.db);
+   expect(futureHealth.expired).toBe(0);
+   expect(new Date(futureHealth.oldest_due!).getTime()).toBe(futureEnd.getTime()+20*60_000);
+   await f.db.update(s.bookings).set({endsAt:b!.endsAt}).where(eq(s.bookings.id,reserved.bookingId));
    const later=new Date(now.getTime()+30*86400_000);
    const retry=await claimMeetingNotes(f.ws,since,later,f.db);expect(retry?.bookingId).toBe(job.bookingId);expect(retry?.attempts).toBe(2);
    expect(retry?.leaseToken).not.toBe(job.leaseToken);
