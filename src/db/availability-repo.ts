@@ -169,6 +169,9 @@ export interface BookingEventTypeConfig {
   readonly fixedRoster?: boolean;
   readonly id: string;
   readonly slug: string;
+  /** owning workspace's public slug, set only by getEventTypeForBookingById:
+   * hosted mode needs it to resolve the bare event-type slug on app.calpaca.io */
+  readonly workspaceSlug?: string;
   /** optional for the same fixture-compatibility reason as EventTypeConfig */
   readonly theme?: string;
   readonly layout?: string;
@@ -321,9 +324,18 @@ export async function getEventTypeForBookingById(
   id: string,
   executor: Db = getDb(),
 ): Promise<BookingEventTypeConfig | null> {
-  const [row] = await executor.select().from(eventTypes).where(eq(eventTypes.id, id));
+  const [joined] = await executor
+    .select({ row: eventTypes, workspaceSlug: workspaces.slug })
+    .from(eventTypes)
+    .innerJoin(workspaces, eq(workspaces.id, eventTypes.workspaceId))
+    .where(eq(eventTypes.id, id));
+  const row = joined?.row;
   if(!row || !await kickoffPubliclyAvailable(row.id,executor))return null;
-  return {...toBookingEventTypeConfig(row),fixedRoster:(await loadKickoffContext(row.id,executor))!==null};
+  return {
+    ...toBookingEventTypeConfig(row),
+    workspaceSlug: joined.workspaceSlug,
+    fixedRoster:(await loadKickoffContext(row.id,executor))!==null,
+  };
 }
 
 /** Public identity of who the invitee is booking with: the team name when the

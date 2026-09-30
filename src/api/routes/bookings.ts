@@ -805,6 +805,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     return c.json({
       bookingId: booking.id,
       eventTypeSlug: eventType.slug,
+      workspaceSlug: eventType.workspaceSlug,
       durationMinutes: booking.startsAt.until(booking.endsAt).total({ unit: "minutes" }),
       status: booking.status,
       start: renderInstant(booking.startsAt, booking.inviteeTimezone),
