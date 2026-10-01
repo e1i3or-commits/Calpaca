@@ -21,7 +21,7 @@ import {kickoffPubliclyAvailable} from "../../src/db/kickoff-context";
 import {createHold} from "../../src/db/holds-repo";
 import {runKickoffDeliveryBatch,type KickoffDeliveryDeps} from "../../src/jobs/kickoff-delivery";
 import {buildMail} from "../../src/jobs/invite-email";
-import {updateOnboardingClientContact} from "../../src/db/onboarding-contact-repo";
+import {updateOnboardingClientContact,syncWorkspaceClientContact} from "../../src/db/onboarding-contact-repo";
 import {resolveClientContact} from "../../src/db/onboarding-contact-state";
 import {listEndedFollowups,listEndedFollowupsPage} from "../../src/db/onboarding-meetings-repo";
 async function fixture() {
@@ -564,6 +564,42 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("organizer calendar time reconci
    await f.db.update(s.kickoffDeliveries).set({status:"needs_attention",issueCode:"reminder_calendar_unverified"}).where(eq(s.kickoffDeliveries.id,reminder!.id));
    await reconcileCalendarBookingTimes(f.connection.id,[f.google],f.db);
    expect((await f.db.select().from(s.kickoffDeliveries).where(eq(s.kickoffDeliveries.id,reminder!.id)))[0]!.status).toBe("superseded");
+  }finally{await f.pool.end();}
+ });
+});
+
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("verified Workspace contact synchronization",()=>{
+ async function evidence(f:Awaited<ReturnType<typeof fixture>>) {
+  const [o]=await f.db.select().from(s.franchiseOnboarding);
+  return {requestId:crypto.randomUUID(),sourceWorkspaceId:o!.sourceWorkspaceId,sourceProjectKey:o!.sourceProjectKey,locationKey:o!.input.locationKey,primaryContactId:o!.input.primaryContactId,name:"Franchisee",email:"owner@brand.example",previousEmail:"owner@example.invalid",accountId:crypto.randomUUID(),googleUserId:"123456789012345678901",verifiedAt:new Date().toISOString()};
+ }
+ test("changes future invitations once, preserves kickoff and does not undo a later manual choice",async()=>{
+  const f=await fixture();try{
+   const booked=await f.reserve();if(booked.kind!=="reserved")throw Error("reserve");await deliverAll(f);
+   const input=await evidence(f),sync=()=>syncWorkspaceClientContact(f.ws,f.actor,f.id,input,f.db);
+   expect((await Promise.all([sync(),sync()])).map(r=>r.kind).sort()).toEqual(["applied","reused"]);
+   expect(await f.db.select().from(s.onboardingContactChanges)).toHaveLength(1);
+   expect((await f.db.select().from(s.bookings).where(eq(s.bookings.id,f.source.id)))[0]!.inviteeEmail).toBe("owner@example.invalid");
+   const booking=(await f.db.select().from(s.bookings).where(eq(s.bookings.id,booked.bookingId)))[0]!;
+   expect(booking.inviteeEmail).toBe(input.email);expect(booking.startsAt.toISOString()).toBe(f.occurrence.startsAt);
+   const deliveries=await f.db.select().from(s.kickoffDeliveries);expect(deliveries).toHaveLength(2);expect(new Set(deliveries.map(d=>d.googleEventId)).size).toBe(1);
+   await deliverAll(f);
+   expect((await updateOnboardingClientContact(f.ws,f.actor,f.id,{revision:3,requestId:crypto.randomUUID(),name:"Other client",email:"other@example.invalid",source:"manual"},f.db)).kind).toBe("applied");
+   expect((await sync()).kind).toBe("reused");
+   expect((await f.db.select().from(s.franchiseOnboarding))[0]!.clientContact!.email).toBe("other@example.invalid");
+   expect((await syncWorkspaceClientContact(f.ws,f.actor,f.id,{...input,requestId:crypto.randomUUID()},f.db)).kind).toBe("manual_override");
+  }finally{await f.pool.end();}
+ });
+ test("rejects stale evidence, wrong source and non-admin callers without any mutation",async()=>{
+  const f=await fixture();try{
+   const input=await evidence(f);
+   expect((await syncWorkspaceClientContact(f.ws,{...f.actor,workspaceRole:"member"},f.id,input,f.db)).kind).toBe("forbidden");
+   for(const patch of [{sourceWorkspaceId:crypto.randomUUID()},{sourceProjectKey:"other"},{locationKey:crypto.randomUUID()},{primaryContactId:"9999999999999999999"}])expect((await syncWorkspaceClientContact(f.ws,f.actor,f.id,{...input,...patch},f.db)).kind).toBe("source_mismatch");
+   expect((await syncWorkspaceClientContact(f.ws,f.actor,f.id,{...input,verifiedAt:new Date(Date.now()-180001).toISOString()},f.db)).kind).toBe("workspace_evidence_stale");
+   expect((await syncWorkspaceClientContact(f.ws,f.actor,f.id,{...input,verifiedAt:new Date(Date.now()+60000).toISOString()},f.db)).kind).toBe("workspace_evidence_stale");
+   expect(await f.db.select().from(s.onboardingContactChanges)).toHaveLength(0);
+   expect((await f.db.select().from(s.franchiseOnboarding))[0]!.revision).toBe(2);
   }finally{await f.pool.end();}
  });
 });
