@@ -18,7 +18,9 @@ export async function claimMeetingNotes(workspaceId: string, since: Date, now = 
     await tx.execute(sql`insert into meeting_notes_jobs(workspace_id, booking_id, next_attempt_at)
       select f.workspace_id, b.id, ${now.toISOString()}::timestamptz
       from (select booking_id,onboarding_id from followup_reservations
-        union all select b.id,o.onboarding_id from onboarding_one_offs o join bookings b on b.event_type_id=o.event_type_id) r join bookings b on b.id=r.booking_id
+        union all select b.id,o.onboarding_id from onboarding_one_offs o join bookings b on b.event_type_id=o.event_type_id
+        union all select b.id,k.onboarding_id from onboarding_kickoffs k join bookings b on b.event_type_id=k.event_type_id
+        union all select b.id,c.onboarding_id from onboarding_checkins c join bookings b on b.event_type_id=c.event_type_id) r join bookings b on b.id=r.booking_id
       join franchise_onboarding f on f.id=r.onboarding_id
       where f.workspace_id=${workspaceId} and b.status='confirmed'
         and b.ends_at > ${since.toISOString()}::timestamptz and b.ends_at <= ${settled.toISOString()}::timestamptz
@@ -55,7 +57,9 @@ export async function readClaimedMeeting(workspaceId:string, bookingId:string, d
   const row=await db.execute<{starts_at:Date;ends_at:Date;source_project_key:string;source_workspace_id:string}>(sql`
     select b.starts_at,b.ends_at,f.source_project_key,f.source_workspace_id
     from (select booking_id,onboarding_id from followup_reservations
-        union all select b.id,o.onboarding_id from onboarding_one_offs o join bookings b on b.event_type_id=o.event_type_id) r join bookings b on b.id=r.booking_id
+        union all select b.id,o.onboarding_id from onboarding_one_offs o join bookings b on b.event_type_id=o.event_type_id
+        union all select b.id,k.onboarding_id from onboarding_kickoffs k join bookings b on b.event_type_id=k.event_type_id
+        union all select b.id,c.onboarding_id from onboarding_checkins c join bookings b on b.event_type_id=c.event_type_id) r join bookings b on b.id=r.booking_id
     join franchise_onboarding f on f.id=r.onboarding_id
     where f.workspace_id=${workspaceId} and b.id=${bookingId} and b.status='confirmed'`);
   const b=row.rows[0];if(!b)return null;
