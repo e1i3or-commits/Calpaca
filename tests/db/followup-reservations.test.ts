@@ -603,3 +603,35 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("verified Workspace contact sync
   }finally{await f.pool.end();}
  });
 });
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("kickoff and check-in meeting notes",()=>{
+ test("discovers both bound meeting types once, keeps undelivered meetings visible, and excludes cancelled and foreign bookings",async()=>{
+  const f=await fixture();try{
+   const {prepareOnboardingCheckin}=await import("../../src/db/prepare-checkin-repo");
+   const prepared=await prepareOnboardingCheckin(f.ws,f.actor,f.id,f.db);if(prepared.kind!=="created")throw Error("checkin fixture");
+   const since=new Date(f.source.startsAt.getTime()-60000),now=new Date(f.source.endsAt.getTime()+21*60000);
+   const [checkin]=await f.db.insert(s.bookings).values({...f.source,id:crypto.randomUUID(),eventTypeId:prepared.eventTypeId,cancelToken:crypto.randomUUID(),rescheduleToken:crypto.randomUUID()}).returning();
+   const discovered=[];
+   for(let i=0;i<2;i++){
+    const claimed=await claimMeetingNotes(f.ws,since,now,f.db);expect(claimed).not.toBeNull();discovered.push(claimed!.bookingId);
+    const meeting=await readClaimedMeeting(f.ws,claimed!.bookingId,f.db);expect(meeting?.sourceProjectKey).toBe("reserve");expect(meeting?.calendar).toBeNull();
+    expect(await readClaimedMeeting(crypto.randomUUID(),claimed!.bookingId,f.db)).toBeNull();
+    expect(await finishMeetingNotes(f.ws,claimed!.bookingId,claimed!.leaseToken,"complete",now,f.db)).toBe(true);
+   }
+   expect(discovered.sort()).toEqual([f.source.id,checkin!.id].sort());
+   expect(await claimMeetingNotes(f.ws,since,now,f.db)).toBeNull();
+   expect((await listEndedFollowupsPage(f.ws,since,now,null,f.db)).meetings).toHaveLength(0);
+   // Copy a synthetic verified calendar receipt to each meeting; no provider writes.
+   const booked=await f.reserve();if(booked.kind!=="reserved")throw Error("followup fixture");await deliverAll(f);
+   const [delivery]=await f.db.select().from(s.kickoffDeliveries),[event]=await f.db.select().from(s.bookingEvents).where(eq(s.bookingEvents.id,delivery!.sourceEventId));
+   for(const bookingId of discovered){
+    const eventId=crypto.randomUUID();await f.db.insert(s.bookingEvents).values({...event!,id:eventId,bookingId});
+    await f.db.insert(s.kickoffDeliveries).values({...delivery!,id:crypto.randomUUID(),sequence:undefined,bookingId,sourceEventId:eventId,messageId:crypto.randomUUID(),googleEventId:`synthetic-${bookingId}`});
+   }
+   expect((await listEndedFollowupsPage(f.ws,since,now,null,f.db)).meetings.map(m=>m.bookingId).sort()).toEqual(discovered.sort());
+   await f.db.update(s.bookings).set({status:"cancelled"}).where(eq(s.bookings.id,checkin!.id));
+   expect(await readClaimedMeeting(f.ws,checkin!.id,f.db)).toBeNull();
+   expect((await listEndedFollowupsPage(f.ws,since,now,null,f.db)).meetings.map(m=>m.bookingId)).toEqual([f.source.id]);
+  }finally{await f.pool.end();}
+ });
+});
