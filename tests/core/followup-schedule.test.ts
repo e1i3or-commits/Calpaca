@@ -75,3 +75,12 @@ test("shortening a plan advances its next date independently of retired occurren
  const next=previewSchedule({...current,rule:{...current.rule,count:2},nextRecurrenceIndex:shortened.nextRecurrenceIndex,occurrences:shortened.changes.map(change=>({...change,id:change.id!}))},{action:"extend"},"2027-01-06T00:00:00Z");
  expect(next.canApply).toBe(true);expect(next.changes[0]).toMatchObject({position:5,startsAt:"2027-01-19T10:00:00.000Z"});
 });
+
+test("manual extension appends the requested dates without moving existing calls or changing the rolling horizon",()=>{
+ const r=rule({cadence:"weekly",anchorDate:"2027-01-05",timezone:"UTC",count:2});
+ const current={status:"planned" as const,rule:r,nextRecurrenceIndex:2,occurrences:[row("1","2027-01-05"),row("2","2027-01-12")]};
+ expect(previewSchedule(current,{action:"extend"},"2027-01-01T00:00:00Z").changes).toHaveLength(0);
+ const p=previewSchedule(current,{action:"extend",addCount:3},"2027-01-01T00:00:00Z");
+ expect(p.canApply).toBe(true);expect(p.changes.map(row=>row.startsAt)).toEqual(["2027-01-19T10:00:00.000Z","2027-01-26T10:00:00.000Z","2027-02-02T10:00:00.000Z"]);
+ expect(p.changes.every(row=>row.action==="create"&&row.id===null)).toBe(true);expect(p.rule?.count).toBe(2);expect(p.nextRecurrenceIndex).toBe(5);
+});

@@ -689,6 +689,120 @@
         }
       }
     },
+    "/api/me/engagements/{id}/one-off-meetings": {
+      "get": {
+        "operationId": "getApiMeEngagementsIdOneOffMeetings",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "List tracked one-off meetings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      },
+      "post": {
+        "operationId": "postApiMeEngagementsIdOneOffMeetings",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Prepare a tracked one-off meeting with custom duration and attendees",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OneOffMeetingRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/me/engagements/{id}/followup-schedule": {
       "get": {
         "operationId": "getApiMeEngagementsIdFollowupSchedule",
@@ -8769,6 +8883,58 @@
         ],
         "additionalProperties": false
       },
+      "OneOffMeetingRequest": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "minimum": 15,
+            "maximum": 180
+          },
+          "attendees": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "required",
+                    "optional"
+                  ]
+                }
+              },
+              "required": [
+                "userId",
+                "role"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 30
+          }
+        },
+        "required": [
+          "requestId",
+          "title",
+          "durationMinutes",
+          "attendees"
+        ],
+        "additionalProperties": false
+      },
       "FollowupPreviewRequest": {
         "type": "object",
         "properties": {
@@ -8873,9 +9039,25 @@
                     "enum": [
                       "pause",
                       "resume",
-                      "end",
-                      "extend"
+                      "end"
                     ]
+                  }
+                },
+                "required": [
+                  "action"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "const": "extend"
+                  },
+                  "addCount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
                   }
                 },
                 "required": [
@@ -8999,9 +9181,25 @@
                     "enum": [
                       "pause",
                       "resume",
-                      "end",
-                      "extend"
+                      "end"
                     ]
+                  }
+                },
+                "required": [
+                  "action"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "const": "extend"
+                  },
+                  "addCount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
                   }
                 },
                 "required": [

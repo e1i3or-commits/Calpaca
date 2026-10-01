@@ -850,6 +850,19 @@ export const onboardingCheckins = pgTable("onboarding_checkins", {
   publishedAt: timestamp("published_at", { withTimezone: true }),
 }, t => [uniqueIndex("onboarding_checkin_event_type_uq").on(t.eventTypeId)]);
 
+export const onboardingOneOffs = pgTable("onboarding_one_offs", {
+  eventTypeId: uuid("event_type_id").primaryKey().references(() => eventTypes.id),
+  onboardingId: uuid("onboarding_id").notNull().references(() => franchiseOnboarding.id),
+  requestId: uuid("request_id").notNull(),
+  title: text("title").notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  attendees: jsonb("attendees").$type<{userId:string;role:"required"|"optional"}[]>().notNull(),
+  organizerUserId: uuid("organizer_user_id").notNull().references(() => users.id),
+  createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+  publishedAt: timestamp("published_at", {withTimezone:true}).notNull().defaultNow(),
+}, t => [uniqueIndex("onboarding_one_off_request_uq").on(t.onboardingId,t.requestId)]);
+
 export const kickoffDeliveries = pgTable("kickoff_deliveries", {
   id: uuid("id").primaryKey().defaultRandom(),
   sequence: serial("sequence").notNull(),
