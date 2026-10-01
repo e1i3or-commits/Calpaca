@@ -67,3 +67,12 @@ export type OnboardingClientContactUpdate = z.input<typeof onboardingClientConta
 export function sameClientContact(a: Pick<OnboardingClientContact,"name"|"email">, b: Pick<OnboardingClientContact,"name"|"email">) {
   return a.email.trim().toLowerCase() === b.email.trim().toLowerCase() && a.name.trim() === b.name.trim();
 }
+
+/** Trusted automation receipt; never accepted by the staff contact form. */
+export const workspaceClientContactSync = z.object({
+  requestId:id, sourceWorkspaceId:id, sourceProjectKey:z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(64),
+  locationKey:id, primaryContactId:z.string().regex(/^[0-9]{10,30}$/), name,
+  email:z.string().trim().toLowerCase().email().max(254), previousEmail:z.string().trim().toLowerCase().email().max(254),
+  accountId:id, googleUserId:z.string().regex(/^[0-9]{10,30}$/), verifiedAt:z.string().datetime(),
+}).strict();
+export type WorkspaceClientContactSync = z.infer<typeof workspaceClientContactSync>;

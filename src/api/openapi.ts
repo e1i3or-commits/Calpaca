@@ -1,7 +1,7 @@
 import { publishOnboardingInput,enableFollowupsInput } from "../core/engagement/onboarding-publication";
 import { sesNotificationInput,sesPollInput } from "../core/invite/ses-feedback";
 import { prepareFollowupInput, reserveFollowupInput } from "./routes/followup-reservations";
-import { franchiseOnboardingInput, onboardingCadenceUpdate } from "../core/engagement/franchise-onboarding";
+import { franchiseOnboardingInput, onboardingCadenceUpdate, workspaceClientContactSync } from "../core/engagement/franchise-onboarding";
 import { kickoffReceiptInput } from "../core/invite/kickoff-delivery";
 import { oneOffMeetingInput } from "../core/engagement/one-off-meeting";
 import { followupPreviewInput, followupApplyInput } from "../core/engagement/followup-schedule";
@@ -42,6 +42,7 @@ type Operation = readonly [
  * `components.schemas` entry and the reference stays readable. */
 const requestSchemas = {
   FranchiseOnboarding: franchiseOnboardingInput,
+  WorkspaceClientContactSync: workspaceClientContactSync,
   OnboardingCadence: onboardingCadenceUpdate,
   PrepareKickoff: prepareKickoffInput,
   KickoffReceipt: kickoffReceiptInput,
@@ -71,6 +72,7 @@ export type RequestSchemaName = keyof typeof requestSchemas;
 export const documentedRequestSchemas = requestSchemas;
 
 export const openApiOperations: readonly Operation[] = [
+  ["put","/api/automation/franchise-onboarding/{engagementId}/workspace-contact","Engagements","Sync an IT-confirmed primary contact mailbox for future follow-ups","personal","WorkspaceClientContactSync"],
   ["get","/api/me/engagements/{id}/onboarding-scheduling","Engagements","Read onboarding publication readiness and reviewed follow-up dates","personal"],
   ["post","/api/me/engagements/{id}/onboarding-scheduling/publish-kickoff","Engagements","Publish a prepared kickoff after deployment and calendar checks","personal","PublishOnboarding"],
   ["post","/api/me/engagements/{id}/onboarding-scheduling/publish-checkin","Engagements","Publish a prepared three-month check-in after deployment and calendar checks","personal","PublishOnboarding"],

@@ -7,6 +7,8 @@ tracked with annotated Git tags named `v<version>`.
 
 ### User-facing improvements
 
+- Future onboarding follow-ups switch to the primary contact’s branded mailbox after IT confirms setup and Google verifies the account. Existing meeting times and Meet links are retained; a different contact selected by the team is preserved.
+
 - One-off offers now accept every event type the picker lists. A team member
   who hosts a team event type (for example Franchise Success Call) could
   select it and then hit `event_type_not_found` on submit, because the

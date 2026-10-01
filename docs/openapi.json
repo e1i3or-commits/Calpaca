@@ -90,6 +90,69 @@
     }
   ],
   "paths": {
+    "/api/automation/franchise-onboarding/{engagementId}/workspace-contact": {
+      "put": {
+        "operationId": "putApiAutomationFranchiseOnboardingEngagementIdWorkspaceContact",
+        "tags": [
+          "Engagements"
+        ],
+        "summary": "Sync an IT-confirmed primary contact mailbox for future follow-ups",
+        "parameters": [
+          {
+            "name": "engagementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceClientContactSyncRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "personal": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/me/engagements/{id}/onboarding-scheduling": {
       "get": {
         "operationId": "getApiMeEngagementsIdOnboardingScheduling",
@@ -8706,6 +8769,74 @@
           "andrewUserId",
           "accountLeadUserId",
           "organizerUserId"
+        ],
+        "additionalProperties": false
+      },
+      "WorkspaceClientContactSyncRequest": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceWorkspaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceProjectKey": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "maxLength": 64
+          },
+          "locationKey": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "primaryContactId": {
+            "type": "string",
+            "pattern": "^[0-9]{10,30}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "previousEmail": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "googleUserId": {
+            "type": "string",
+            "pattern": "^[0-9]{10,30}$"
+          },
+          "verifiedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "requestId",
+          "sourceWorkspaceId",
+          "sourceProjectKey",
+          "locationKey",
+          "primaryContactId",
+          "name",
+          "email",
+          "previousEmail",
+          "accountId",
+          "googleUserId",
+          "verifiedAt"
         ],
         "additionalProperties": false
       },
