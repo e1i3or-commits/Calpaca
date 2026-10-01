@@ -20,7 +20,8 @@ export const followupPreviewInput = z.object({
   command: z.discriminatedUnion("action", [
     z.object({action: z.literal("configure"), rule: followupRule}).strict(),
     z.object({action: z.literal("move"), occurrenceId: z.string().uuid(), date, time}).strict(),
-    z.object({action: z.enum(["pause", "resume", "end", "extend"])}).strict(),
+    z.object({action: z.enum(["pause", "resume", "end"])}).strict(),
+    z.object({action: z.literal("extend"), addCount: z.number().int().min(1).max(12).optional()}).strict(),
   ]),
 }).strict();
 export type FollowupPreviewInput = z.infer<typeof followupPreviewInput>;
@@ -106,7 +107,7 @@ export function previewSchedule(current: ScheduleSnapshot["schedule"], command: 
   else if(command.action==="extend") {
     if(status!=="planned")issues.push("Only a planned schedule can be extended.");
     else {
-      const needed=Math.max(0,current.rule.count-future.length);
+      const needed=command.addCount ?? Math.max(0,current.rule.count-future.length);
       if(needed) {
         const anchor=Temporal.PlainDate.from(current.rule.anchorDate),today=instant.toZonedDateTimeISO(current.rule.timezone).toPlainDate();
         const elapsed=current.rule.cadence==="monthly"?today.since(anchor,{largestUnit:"months"}).months:

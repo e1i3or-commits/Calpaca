@@ -1,3 +1,4 @@
+import { OneOffMeetingsPanel } from "./one-off-meetings-panel";
 import { OnboardingSchedulingPanel } from "@/components/onboarding-scheduling-panel";
 import { FollowupSchedulePanel } from "@/components/followup-schedule-panel";
 import { ClientContactRow } from "@/components/client-contact-panel";
@@ -245,7 +246,7 @@ function ConversationList({
     <div className="py-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div><h3 className="font-medium">Conversation playbooks</h3><p className="mt-1 text-sm text-muted-foreground">Purpose, people, preparation, and outcomes for this client work.</p></div>
-        {engagement.canManage && <div className="flex flex-wrap gap-2"><button className="min-h-11 rounded-lg border border-input px-4 text-sm" onClick={openTemplates}>Add workspace playbook</button><button className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground" onClick={() => go(`/app/engagements/${engagement.id}/conversations/new`)}>New conversation</button></div>}
+        {engagement.canManage && <div className="flex flex-wrap gap-2"><button className="min-h-11 rounded-lg border border-input px-4 text-sm" onClick={openTemplates}>Add workspace playbook</button><button className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground" onClick={() => go(`/app/engagements/${engagement.id}/conversations/new`)}>New meeting template</button></div>}
       </div>
       {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
       {!items && !error && <p role="status" className="text-sm text-muted-foreground">Loading conversations…</p>}
@@ -359,8 +360,12 @@ function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDeta
   if (!plan) return null;
   const names = (hosts: typeof plan.attendance.kickoff) => hosts.map(host => engagement.people.find(person => person.userId === host.userId)?.name ?? "Unavailable participant").join(", ");
   return <section aria-labelledby="onboarding-plan-title" className="border-t border-border py-6">
-    <h3 id="onboarding-plan-title" className="font-medium">Franchise onboarding plan</h3>
-    <p className="mt-2 text-sm text-muted-foreground">Kickoff and follow-up calls share this Engagement’s team, context and schedule.</p>
+    <h3 id="onboarding-plan-title" className="font-medium">Meetings and follow-ups</h3>
+    <p className="mt-2 text-sm text-muted-foreground">Book a call, manage follow-up dates, and track invitations.</p>
+    <OneOffMeetingsPanel engagement={engagement} />
+    <FollowupSchedulePanel engagement={engagement} reload={reload} />
+    <OnboardingSchedulingPanel engagement={engagement} reload={reload} />
+    <details className="mt-6 rounded-lg border border-border p-4"><summary className="min-h-11 py-3 font-medium">Team, client contact and calendar setup</summary>
     <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-[10rem_1fr]">
       <dt className="text-muted-foreground">Kickoff</dt><dd>{plan.kickoffDurationMinutes} minutes. Required: {names(plan.attendance.kickoff)}.</dd>
       <dt className="text-muted-foreground">Follow-up</dt><dd>{plan.followupDurationMinutes} minutes. Required: {names(plan.attendance.followup.filter(host => host.role === "required"))}. Optional: {names(plan.attendance.followup.filter(host => host.role === "optional"))}.</dd>
@@ -387,8 +392,7 @@ function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDeta
         <p className="mt-3 text-xs text-muted-foreground">Checked {new Date(plan.kickoffReadiness.checkedAt).toLocaleString()}. Availability will be checked again when a time is booked.</p>
       </> : <p role="status" className="mt-2 text-sm text-muted-foreground">Calendar setup has not been checked.</p>}
     </div>
-    <OnboardingSchedulingPanel engagement={engagement} reload={reload} />
-    <FollowupSchedulePanel engagement={engagement} reload={reload} />
+    </details>
     <div className="mt-4 flex flex-wrap gap-4 text-sm">
       <a className="text-primary" href={`https://tyger.tourscale.com/launch/${encodeURIComponent(plan.sourceProjectKey)}`} target="_blank" rel="noopener noreferrer">Launch context in Tyger</a>
       <a className="text-primary" href={`https://crm.zoho.com/crm/org829549357/tab/CustomModule6/${plan.franchiseeId}`} target="_blank" rel="noopener noreferrer">Franchisee in CRM</a>
@@ -423,22 +427,22 @@ function DetailView({
       <button className="mb-4 min-h-11 text-sm text-muted-foreground hover:text-foreground" onClick={() => go("/app/engagements")}>Engagements /</button>
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
         <div><div className="flex items-center gap-3"><h2 className="text-2xl font-semibold">{item.name}</h2><span className="text-sm">{label(item.status)}</span></div><p className="mt-1 text-sm text-muted-foreground">{item.clientName} · Account lead {item.accountLeadName}</p></div>
-        <button className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground" onClick={() => go(`/app/engagements/${item.id}/conversations/new`)}>{item.eventTypes.length?"Create conversation":"Create first conversation"}</button>
+        {!item.onboarding && item.canManage && <button className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground" onClick={() => go(`/app/engagements/${item.id}/conversations/new`)}>Create meeting template</button>}
       </div>
       <nav aria-label="Engagement" className="flex gap-5 overflow-x-auto border-b border-border">
-        <button className={`min-h-11 whitespace-nowrap text-sm ${section === "overview" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}`)}>Overview</button>
-        <button className={`min-h-11 whitespace-nowrap text-sm ${section === "conversations" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}/conversations`)}>Conversations</button>
+        <button className={`min-h-11 whitespace-nowrap text-sm ${section === "overview" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}`)}>{item.onboarding?"Meetings":"Overview"}</button>
+        <button className={`min-h-11 whitespace-nowrap text-sm ${section === "conversations" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}/conversations`)}>Meeting templates</button>
         <button className={`min-h-11 whitespace-nowrap text-sm ${section === "proposals" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}/proposals`)}>Proposals</button>
       </nav>
       {section === "conversations" && (playbookId ? <PlaybookEditor engagement={item} playbookId={playbookId} users={users} /> : <ConversationList engagement={item} />)}
       {section === "proposals" && (newProposal ? <NewProposal engagement={item} /> : <ProposalList engagement={item} />)}
       {section === "overview" && <>
-      <div className="grid gap-8 py-6 md:grid-cols-2">
+      {!item.onboarding && <div className="grid gap-8 py-6 md:grid-cols-2">
         <div><h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next</h3><p className="mt-2 font-medium">{item.eventTypes.length ? "Schedule a client conversation" : "Create the first conversation playbook"}</p><p className="mt-1 text-sm text-muted-foreground">Keep scheduling attached to this client context.</p></div>
         <div><h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Engagement health</h3><dl className="mt-2 grid grid-cols-[8rem_1fr] gap-y-2 text-sm"><dt className="text-muted-foreground">Team</dt><dd>{item.people.length} assigned</dd><dt className="text-muted-foreground">Conversations</dt><dd>{item.eventTypes.length}</dd><dt className="text-muted-foreground">Meetings</dt><dd>{item.meetings.length}</dd></dl></div>
-      </div>
+      </div>}
       <OnboardingPlanPanel key={item.id} engagement={item} reload={load} />
-      <div className="border-t border-border py-6"><h3 className="font-medium">People</h3><ul className="mt-3 divide-y divide-border">{item.people.map((person) => <li key={person.userId} className="flex justify-between py-3 text-sm"><span>{person.name} <span className="text-muted-foreground">{person.email}</span></span><span>{label(person.role)}</span></li>)}</ul></div>
+      <details className="border-t border-border py-6"><summary className="font-medium">Engagement team</summary><ul className="mt-3 divide-y divide-border">{item.people.map((person) => <li key={person.userId} className="flex justify-between py-3 text-sm"><span>{person.name} <span className="text-muted-foreground">{person.email}</span></span><span>{label(person.role)}</span></li>)}</ul></details>
       {item.canManage && item.status !== "archived" && <div className="border-t border-border py-5"><button className="min-h-11 text-sm text-muted-foreground hover:text-foreground" onClick={() => void updateEngagementStatus(item.id, "archived").then(load)}>Archive engagement</button></div>}
       </>}
     </section>

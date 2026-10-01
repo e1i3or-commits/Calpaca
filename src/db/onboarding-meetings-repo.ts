@@ -10,9 +10,10 @@ export interface MeetingPageCursor { endsAt: string; bookingId: string }
  * with the calendar event their notes are attached to. Cancelled bookings and
  * meetings that were never delivered to a calendar are left out. */
 export async function listEndedFollowupsPage(workspaceId: string, since: Date, until: Date, cursor: MeetingPageCursor | null = null, db: Db = getDb()) {
-  const rows = await db.select({ booking: s.bookings, onboarding: s.franchiseOnboarding }).from(s.followupReservations)
-    .innerJoin(s.bookings, eq(s.bookings.id, s.followupReservations.bookingId))
-    .innerJoin(s.franchiseOnboarding, eq(s.franchiseOnboarding.id, s.followupReservations.onboardingId))
+  const rows = await db.select({ booking: s.bookings, onboarding: s.franchiseOnboarding }).from(s.bookings)
+    .leftJoin(s.followupReservations, eq(s.bookings.id, s.followupReservations.bookingId))
+    .leftJoin(s.onboardingOneOffs, eq(s.bookings.eventTypeId, s.onboardingOneOffs.eventTypeId))
+    .innerJoin(s.franchiseOnboarding, or(eq(s.franchiseOnboarding.id, s.followupReservations.onboardingId),eq(s.franchiseOnboarding.id,s.onboardingOneOffs.onboardingId)))
     .where(and(eq(s.franchiseOnboarding.workspaceId, workspaceId), eq(s.bookings.status, "confirmed"), gt(s.bookings.endsAt, since), lte(s.bookings.endsAt, until),
       cursor ? or(gt(s.bookings.endsAt, new Date(cursor.endsAt)), and(eq(s.bookings.endsAt, new Date(cursor.endsAt)), gt(s.bookings.id, cursor.bookingId))) : undefined))
     .orderBy(s.bookings.endsAt, s.bookings.id).limit(51);

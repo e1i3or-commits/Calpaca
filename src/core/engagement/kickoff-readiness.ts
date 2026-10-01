@@ -51,7 +51,7 @@ function calendarIssues(calendars: KickoffCalendarEvidence[], now: Date): Kickof
 
 /** All roster entries are retained, including people whose setup is incomplete.
  * Only stored, non-secret evidence is considered; no provider writes occur. */
-export function evaluateKickoffReadiness(evidence: KickoffParticipantEvidence[], organizerUserId: string, now: Date, requiredUserIds?: readonly string[]) {
+export function evaluateKickoffReadiness(evidence: KickoffParticipantEvidence[], organizerUserId: string, now: Date, requiredUserIds?: readonly string[], flexibleRoster = false) {
   const participants = evidence.map(person => {
     const issues: KickoffSetupIssue[] = [];
     if (!person.active) issues.push(issue("participant_inactive"));
@@ -84,10 +84,10 @@ export function evaluateKickoffReadiness(evidence: KickoffParticipantEvidence[],
   else organizerIssues.push(...calendarIssues(organizingCalendars, now));
   return {
     checkedAt: now.toISOString(),
-    calendarSetupReady: [5,6].includes(participants.length) && new Set(participants.map(person => person.userId)).size === participants.length
+    calendarSetupReady: (flexibleRoster ? participants.length >= 1 && participants.length <= 30 : [5,6].includes(participants.length)) && new Set(participants.map(person => person.userId)).size === participants.length
       && participants.filter(person => person.required).every(person => person.ready)
       && participants.every(person => !person.issues.some(issue => issue.code === "participant_inactive"))
-      && (!requiredUserIds || (requiredUserIds.length === participants.length - 2 && new Set(requiredUserIds).size === requiredUserIds.length && requiredUserIds.every(id => participants.some(person => person.userId === id))))
+      && (!requiredUserIds || ((flexibleRoster ? requiredUserIds.length >= 1 && requiredUserIds.includes(organizerUserId) : requiredUserIds.length === participants.length - 2) && new Set(requiredUserIds).size === requiredUserIds.length && requiredUserIds.every(id => participants.some(person => person.userId === id))))
       && organizerIssues.length === 0,
     participants,
     organizer: { userId: organizerUserId, ready: organizerIssues.length === 0, issues: organizerIssues },
