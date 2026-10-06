@@ -1671,6 +1671,7 @@ function EventTypeForm({
           users={users}
           selected={requiredHosts}
           max={form.mode === "solo" ? 1 : undefined}
+          fullHint="Solo events have one host. To add more, change Mode to Round robin or Group (all hosts)."
           onChange={(ids) => setHosts(ids, optionalHosts)}
         />
       </div>

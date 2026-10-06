@@ -10,12 +10,15 @@ export function PeoplePicker({
   selected,
   onChange,
   max,
+  fullHint,
   hideSelected = false,
 }: {
   users: DirectoryUser[];
   selected: string[];
   onChange: (userIds: string[]) => void;
   max?: number;
+  /** Shown under the search box once `max` is reached, e.g. how to raise the limit. */
+  fullHint?: string;
   /** For callers that render the selection themselves (e.g. a member list). */
   hideSelected?: boolean;
 }) {
@@ -64,6 +67,7 @@ export function PeoplePicker({
         disabled={atCapacity}
         onChange={(e) => setQuery(e.target.value)}
       />
+      {atCapacity && fullHint && <p className="text-xs text-muted-foreground">{fullHint}</p>}
       {!atCapacity && query.trim() !== "" && (
         <ul className="max-h-40 overflow-y-auto rounded-md border border-border">
           {candidates.length === 0 && (
