@@ -35,6 +35,7 @@ export interface CreatedPayload {
 }
 
 export interface RescheduledPayload {
+  readonly calendarObserved?: boolean;
   readonly startsAt: Temporal.Instant;
   readonly endsAt: Temporal.Instant;
 }
@@ -141,7 +142,7 @@ export function applyEvent(
     case "rescheduled": {
       if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
       if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
-      return ok({ ...state, startsAt: event.payload.startsAt, endsAt: event.payload.endsAt, inviteStatus: "none" });
+      return ok({ ...state, startsAt: event.payload.startsAt, endsAt: event.payload.endsAt, inviteStatus: event.payload.calendarObserved ? state.inviteStatus : "none" });
     }
 
     case "cancelled": {

@@ -1,6 +1,6 @@
 import { and, eq, gt, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { onboardingClientContactUpdate, sameClientContact, type OnboardingClientContact, type OnboardingClientContactUpdate } from "../core/engagement/franchise-onboarding";
+import { onboardingClientContactUpdate, workspaceClientContactSync, type WorkspaceClientContactSync, sameClientContact, type OnboardingClientContact, type OnboardingClientContactUpdate } from "../core/engagement/franchise-onboarding";
 import type { EngagementActor } from "../core/engagement/permissions";
 import { appendEvent } from "./booking-repo";
 import { getDb } from "./client";
@@ -25,7 +25,7 @@ async function lock(workspaceId: string, engagementId: string, db: Db) {
  * person in the same transaction. Google swaps the attendee on the existing
  * event, so the previous address gets a cancellation and the new one an
  * invitation; the time and Meet link stay. Past meetings are never changed. */
-export async function updateOnboardingClientContact(workspaceId: string, actor: EngagementActor, engagementId: string, raw: OnboardingClientContactUpdate, db: Db = getDb(), now = new Date()) {
+export async function updateOnboardingClientContact(workspaceId: string, actor: EngagementActor, engagementId: string, raw: OnboardingClientContactUpdate, db: Db = getDb(), now = new Date(), verifiedWorkspace?: WorkspaceClientContactSync) {
   const input = onboardingClientContactUpdate.safeParse(raw); if (!input.success) return {kind: "invalid_input" as const};
   const value = input.data, next: OnboardingClientContact = {name: value.name, email: value.email, source: value.source};
   return db.transaction(async tx => {
@@ -34,13 +34,21 @@ export async function updateOnboardingClientContact(workspaceId: string, actor: 
     const [onboarding] = await tx.select().from(s.franchiseOnboarding).where(and(eq(s.franchiseOnboarding.workspaceId, workspaceId), eq(s.franchiseOnboarding.engagementId, engagementId)));
     if (!engagement || !onboarding) return {kind: "not_found" as const};
     if (!engagement.canManage) return {kind: "forbidden" as const};
+    if (verifiedWorkspace && (onboarding.sourceWorkspaceId !== verifiedWorkspace.sourceWorkspaceId || onboarding.sourceProjectKey !== verifiedWorkspace.sourceProjectKey || onboarding.input.locationKey !== verifiedWorkspace.locationKey || onboarding.input.primaryContactId !== verifiedWorkspace.primaryContactId)) return {kind: "source_mismatch" as const};
     const [prior] = await tx.select().from(s.onboardingContactChanges).where(and(eq(s.onboardingContactChanges.onboardingId, onboarding.id), eq(s.onboardingContactChanges.requestId, value.requestId)));
     if (prior) return sameClientContact(prior.next, next) && prior.next.source === next.source
       ? {kind: "reused" as const, appliedRevision: prior.revision, contact: prior.next, updatedBookings: prior.bookingIds.length}
       : {kind: "request_conflict" as const};
     if (["archived", "completed"].includes(engagement.status)) return {kind: "engagement_closed" as const};
-    if (onboarding.revision !== value.revision) return {kind: "revision_conflict" as const};
+    if (!verifiedWorkspace && onboarding.revision !== value.revision) return {kind: "revision_conflict" as const};
     const previous = await resolveClientContact(onboarding, tx);
+    if (verifiedWorkspace) {
+      const age = now.getTime() - new Date(verifiedWorkspace.verifiedAt).getTime();
+      if (age < 0 || age >= 180_000) return {kind:"workspace_evidence_stale" as const};
+      // Do not replace another client selected by the team. A deliberate later
+      // override is also preserved by the stable request receipt above.
+      if (previous && previous.email.toLowerCase() !== next.email && previous.email.toLowerCase() !== verifiedWorkspace.previousEmail && previous.source !== "workspace") return {kind:"manual_override" as const,contact:previous};
+    }
     const affected = (await tx.select({booking: s.bookings}).from(s.followupReservations)
       .innerJoin(s.bookings, eq(s.bookings.id, s.followupReservations.bookingId))
       .where(and(eq(s.followupReservations.onboardingId, onboarding.id), eq(s.bookings.status, "confirmed"), gt(s.bookings.startsAt, now))))
@@ -57,7 +65,7 @@ export async function updateOnboardingClientContact(workspaceId: string, actor: 
     }
     const [binding] = await tx.select().from(s.onboardingFollowups).where(eq(s.onboardingFollowups.onboardingId, onboarding.id));
     if (affected.length && !binding?.enabledAt) throw new ContactChangeBlocked("Calendar changes require the enabled follow-up binding. Restore that configuration first.");
-    if (binding?.enabledAt && binding.approvedRevision !== value.revision) throw new ContactChangeBlocked("The follow-up approval is out of date. Review the current plan before changing the contact.");
+    if (binding?.enabledAt && binding.approvedRevision !== onboarding.revision) throw new ContactChangeBlocked("The follow-up approval is out of date. Review the current plan before changing the contact.");
     const revision = onboarding.revision + 1;
     await tx.update(s.franchiseOnboarding).set({clientContact: next, revision, updatedAt: now}).where(eq(s.franchiseOnboarding.id, onboarding.id));
     await tx.insert(s.franchiseOnboardingChanges).values({workspaceId, onboardingId: onboarding.id, actorUserId: actor.userId, revision, kind: "client_contact", cadence: onboarding.cadence});
@@ -77,4 +85,13 @@ export async function updateOnboardingClientContact(workspaceId: string, actor: 
     if (error instanceof ContactChangeBlocked) return {kind: "calendar_reconciliation_blocked" as const, issues: [error.message]};
     throw error;
   });
+}
+
+/** Reuses the audited contact-change transaction and delivery guards. The
+ * source identity is checked under the same lock as the contact mutation. */
+export async function syncWorkspaceClientContact(workspaceId:string,actor:EngagementActor,engagementId:string,raw:WorkspaceClientContactSync,db:Db=getDb(),now=new Date()) {
+  if(!["owner","admin"].includes(actor.workspaceRole))return {kind:"forbidden" as const};
+  const parsed=workspaceClientContactSync.safeParse(raw);if(!parsed.success)return {kind:"invalid_input" as const};
+  const value=parsed.data;
+  return updateOnboardingClientContact(workspaceId,actor,engagementId,{requestId:value.requestId,revision:1,name:value.name,email:value.email,source:"workspace"},db,now,value);
 }

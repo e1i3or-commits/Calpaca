@@ -1,5 +1,5 @@
 import { err, ok, type Result } from "../lib/result";
-import { mapEventToBusyChange, type BusyChange } from "./busy-mapping";
+import { mapEventToBusyChange, type BusyChange, type GoogleEvent } from "./busy-mapping";
 import type { EventsPage, GoogleApiError, ListEventsArgs } from "./google";
 
 // Sync orchestration with injected I/O so tests run against fakes. The
@@ -13,6 +13,7 @@ export type SyncDeps = {
 };
 
 export type SyncRepo = {
+  reconcileBookingTimes?: (connectionId:string, events:GoogleEvent[], now:Date)=>Promise<void>;
   // full sync: atomically swap the connection's cache for `busy`
   replaceBusy(connectionId: string, busy: BusyChange[]): Promise<void>;
   // incremental: upsert by (connectionId, externalEventId), delete cancelled
@@ -74,7 +75,7 @@ export async function syncConnection(
   return commit(conn.id, mode, result.value, deps, repo);
 }
 
-type WalkResult = { changes: BusyChange[]; nextSyncToken?: string };
+type WalkResult = { events: GoogleEvent[]; changes: BusyChange[]; nextSyncToken?: string };
 
 async function walkPages(
   conn: SyncConnection,
@@ -83,6 +84,7 @@ async function walkPages(
   mode: SyncOutcome["mode"],
 ): Promise<Result<WalkResult, GoogleApiError>> {
   const changes: BusyChange[] = [];
+  const events: GoogleEvent[] = [];
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
 
@@ -103,6 +105,7 @@ async function walkPages(
     });
     if (!page.ok) return page;
 
+    events.push(...page.value.items);
     const tz = page.value.timeZone ?? "UTC";
     for (const event of page.value.items) {
       const change = mapEventToBusyChange(event, tz);
@@ -112,7 +115,7 @@ async function walkPages(
     nextSyncToken = page.value.nextSyncToken ?? nextSyncToken;
   } while (pageToken);
 
-  return ok({ changes, nextSyncToken });
+  return ok({ events, changes, nextSyncToken });
 }
 
 async function commit(
@@ -129,6 +132,7 @@ async function commit(
     return err({ kind: "no_sync_token", message: "events.list returned no nextSyncToken" });
   }
 
+  await repo.reconcileBookingTimes?.(connectionId,walk.events,deps.now());
   if (mode === "full") {
     await repo.replaceBusy(connectionId, walk.changes);
   } else {

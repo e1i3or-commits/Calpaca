@@ -1,7 +1,8 @@
+import {reconcileCalendarBookingTimes} from "../../src/db/calendar-booking-reconciliation";
 import {claimMeetingNotes,readClaimedMeeting,finishMeetingNotes,meetingNotesHealth} from "../../src/db/meeting-notes-queue";
 import { runFollowupReservationBatch } from "../../src/jobs/followup-reservations";
 import { FOLLOWUP_SCHEDULER_NAME } from "../../src/db/followup-automation-state";
-import { claimKickoffDelivery, recordKickoffReceipt, kickoffDeliveryReport } from "../../src/db/kickoff-delivery-repo";
+import { queueKickoffReminder, claimKickoffDelivery, recordKickoffReceipt, kickoffDeliveryReport } from "../../src/db/kickoff-delivery-repo";
 import {describe,expect,test} from "bun:test";
 import {Pool} from "pg";
 import {drizzle} from "drizzle-orm/node-postgres";
@@ -14,13 +15,13 @@ import {provisionFranchiseOnboarding} from "../../src/db/franchise-onboarding-re
 import {prepareOnboardingKickoff} from "../../src/db/prepare-kickoff-repo";
 import {getFollowupMoveAvailability,applyFollowupSchedule,getFollowupSchedule,previewFollowupSchedule} from "../../src/db/followup-schedule-repo";
 import {getFollowupReservations,prepareOnboardingFollowups,reserveOnboardingFollowup} from "../../src/db/followup-reservation-repo";
-import {appendEvent,getInviteContext} from "../../src/db/booking-repo";
+import {appendEvent,getInviteContext,rebuildProjection} from "../../src/db/booking-repo";
 import {updateEngagementStatus} from "../../src/db/engagement-repo";
 import {kickoffPubliclyAvailable} from "../../src/db/kickoff-context";
 import {createHold} from "../../src/db/holds-repo";
 import {runKickoffDeliveryBatch,type KickoffDeliveryDeps} from "../../src/jobs/kickoff-delivery";
 import {buildMail} from "../../src/jobs/invite-email";
-import {updateOnboardingClientContact} from "../../src/db/onboarding-contact-repo";
+import {updateOnboardingClientContact,syncWorkspaceClientContact} from "../../src/db/onboarding-contact-repo";
 import {resolveClientContact} from "../../src/db/onboarding-contact-state";
 import {listEndedFollowups,listEndedFollowupsPage} from "../../src/db/onboarding-meetings-repo";
 async function fixture() {
@@ -483,6 +484,154 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("durable meeting-notes queue",()
    await f.db.update(s.bookings).set({status:"cancelled"}).where(eq(s.bookings.id,reserved.bookingId));
    expect(await claimMeetingNotes(f.ws,since,new Date(now.getTime()+2*86400_000),f.db)).toBeNull();
    expect((await meetingNotesHealth(f.ws,now,f.db)).pending).toBe(0);
+  }finally{await f.pool.end();}
+ });
+});
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("organizer calendar time reconciliation",()=>{
+ async function calendarFixture(){
+  const f=await fixture();const reserved=await f.reserve();if(reserved.kind!=="reserved")throw new Error("reserve failed");await deliverAll(f);
+  const [delivery]=await f.db.select().from(s.kickoffDeliveries).where(eq(s.kickoffDeliveries.bookingId,reserved.bookingId));
+  const organizer=delivery!.snapshot.hosts[0]!;
+  const [connection]=await f.db.insert(s.calendarConnections).values({userId:organizer.id,externalCalendarId:"primary",lastSyncedAt:new Date(),fullSyncedAt:new Date()}).returning();
+  const start=new Date(new Date(f.occurrence.startsAt).getTime()-2*3600000),end=new Date(start.getTime()+45*60000);
+  const observedAt=new Date(Date.now()+1000);
+  const google={id:delivery!.googleEventId,status:"confirmed",etag:"v1",updated:observedAt.toISOString(),organizer:{email:organizer.email},start:{dateTime:start.toISOString()},end:{dateTime:end.toISOString()},extendedProperties:{private:{tourscaleBookingId:reserved.bookingId,tourscaleDeliveryId:delivery!.id,tourscaleSequence:String(delivery!.sequence)}}};
+  return {...f,reserved,delivery:delivery!,connection:connection!,google,start,end,observedAt};
+ }
+ test("imports a two-hour move once, preserves verified delivery and the event projection, and updates the occurrence",async()=>{
+  const f=await calendarFixture();try{
+   const before=(await f.db.select().from(s.franchiseOnboarding))[0]!;
+   await reconcileCalendarBookingTimes(f.connection.id,[f.google],f.db,f.observedAt);
+   await reconcileCalendarBookingTimes(f.connection.id,[f.google],f.db,f.observedAt);
+   const [booking]=await f.db.select().from(s.bookings).where(eq(s.bookings.id,f.reserved.bookingId));
+   expect(booking!.startsAt.toISOString()).toBe(f.start.toISOString());expect(booking!.inviteStatus).toBe("delivered");
+   const [occurrence]=await f.db.select().from(s.onboardingFollowupOccurrences).where(eq(s.onboardingFollowupOccurrences.id,f.occurrence.id));
+   expect(occurrence!.startsAt.toISOString()).toBe(f.start.toISOString());expect(occurrence!.exception).toBe(true);
+   expect((await f.db.select().from(s.franchiseOnboarding))[0]!.revision).toBe(before.revision+1);
+   expect((await f.db.select().from(s.onboardingFollowups))[0]!.approvedRevision).toBe(before.revision+1);
+   const events=await f.db.select().from(s.bookingEvents).where(eq(s.bookingEvents.bookingId,f.reserved.bookingId));
+   expect(events.filter(e=>e.kind==="rescheduled")).toHaveLength(1);
+   expect((await rebuildProjection(f.reserved.bookingId,f.db)).ok).toBe(true);
+   expect((await f.db.select().from(s.bookings).where(eq(s.bookings.id,f.reserved.bookingId)))[0]!.inviteStatus).toBe("delivered");
+   expect(await f.db.select().from(s.kickoffDeliveries)).toHaveLength(1);
+   // Old provider versions cannot move it back.
+   await reconcileCalendarBookingTimes(f.connection.id,[{...f.google,updated:new Date(f.observedAt.getTime()-1).toISOString(),start:{dateTime:f.occurrence.startsAt},end:{dateTime:f.occurrence.endsAt}}],f.db);
+   expect((await f.db.select().from(s.bookings).where(eq(s.bookings.id,f.reserved.bookingId)))[0]!.startsAt.toISOString()).toBe(f.start.toISOString());
+  }finally{await f.pool.end();}
+ });
+ test("unchanged newer observations fence an older move, and cancelled bookings stay cancelled",async()=>{
+  const f=await calendarFixture();try{
+   await reconcileCalendarBookingTimes(f.connection.id,[{...f.google,updated:new Date(f.observedAt.getTime()+1000).toISOString(),start:{dateTime:f.occurrence.startsAt},end:{dateTime:f.occurrence.endsAt}}],f.db);
+   await reconcileCalendarBookingTimes(f.connection.id,[f.google],f.db);
+   expect((await f.db.select().from(s.bookings).where(eq(s.bookings.id,f.reserved.bookingId)))[0]!.startsAt.toISOString()).toBe(f.occurrence.startsAt);
+   await f.db.update(s.bookings).set({status:"cancelled"}).where(eq(s.bookings.id,f.reserved.bookingId));
+   await reconcileCalendarBookingTimes(f.connection.id,[{...f.google,updated:new Date(f.observedAt.getTime()+2000).toISOString()}],f.db);
+   expect((await f.db.select().from(s.bookings).where(eq(s.bookings.id,f.reserved.bookingId)))[0]!.status).toBe("cancelled");
+   expect((await f.db.select().from(s.bookingEvents).where(eq(s.bookingEvents.bookingId,f.reserved.bookingId))).filter(e=>e.kind==="rescheduled")).toHaveLength(0);
+  }finally{await f.pool.end();}
+ });
+ test("a reminder uses the imported time source once and projects a verified receipt",async()=>{
+  const f=await calendarFixture();try{
+   const start=new Date(Math.ceil((Date.now()+3600000)/3600000)*3600000),end=new Date(start.getTime()+45*60000);
+   await f.db.update(s.schedules).set({rules:Array.from({length:7},(_,i)=>({dow:i+1,start:"00:00",end:"23:59"}))});
+   await reconcileCalendarBookingTimes(f.connection.id,[{...f.google,start:{dateTime:start.toISOString()},end:{dateTime:end.toISOString()}}],f.db);
+   await queueKickoffReminder(f.reserved.bookingId,f.db);await queueKickoffReminder(f.reserved.bookingId,f.db);
+   const deliveries=await f.db.select().from(s.kickoffDeliveries);
+   expect(deliveries.filter(d=>d.kind==="reminder")).toHaveLength(1);
+   const events=await f.db.select().from(s.bookingEvents).where(eq(s.bookingEvents.bookingId,f.reserved.bookingId));
+   expect(deliveries.find(d=>d.kind==="reminder")!.sourceEventId).toBe(events.find(e=>e.kind==="rescheduled")!.id);
+   await deliverAll(f);
+   const after=await f.db.select().from(s.bookingEvents).where(eq(s.bookingEvents.bookingId,f.reserved.bookingId));
+   expect((await f.db.select().from(s.kickoffDeliveries)).find(d=>d.kind==="reminder")!.issueCode).toBeNull();
+   expect(after.filter(e=>e.kind==="reminder_sent")).toHaveLength(1);
+   expect((await rebuildProjection(f.reserved.bookingId,f.db)).ok).toBe(true);
+  }finally{await f.pool.end();}
+ });
+ test("ignores attendee copies and refuses wrong event identity without changing a booking",async()=>{
+  const f=await calendarFixture();try{
+   const [other]=await f.db.insert(s.calendarConnections).values({userId:f.ids[1]!,externalCalendarId:"primary"}).returning();
+   await reconcileCalendarBookingTimes(other!.id,[f.google],f.db);
+   await expect(reconcileCalendarBookingTimes(f.connection.id,[{...f.google,extendedProperties:{private:{...f.google.extendedProperties.private,tourscaleBookingId:crypto.randomUUID()}}}],f.db)).rejects.toThrow("identity_conflict");
+   expect(await f.db.select().from(s.bookingCalendarObservations)).toHaveLength(0);
+   expect((await f.db.select().from(s.bookings).where(eq(s.bookings.id,f.reserved.bookingId)))[0]!.startsAt.toISOString()).toBe(f.occurrence.startsAt);
+  }finally{await f.pool.end();}
+ });
+ test("holds a concurrent reminder send and retires the old unsent reminder after recovery",async()=>{
+  const f=await calendarFixture();try{
+   const [reminder]=await f.db.insert(s.kickoffDeliveries).values({...f.delivery,id:crypto.randomUUID(),sequence:undefined,kind:"reminder",status:"processing",mailStartedAt:null,mailAcceptedAt:null,attemptCount:1,messageId:"<calendar-reminder-test>",calendarVerifiedAt:null}).returning();
+   await expect(reconcileCalendarBookingTimes(f.connection.id,[f.google],f.db)).rejects.toThrow("unsettled");
+   await f.db.update(s.kickoffDeliveries).set({status:"needs_attention",issueCode:"reminder_calendar_unverified"}).where(eq(s.kickoffDeliveries.id,reminder!.id));
+   await reconcileCalendarBookingTimes(f.connection.id,[f.google],f.db);
+   expect((await f.db.select().from(s.kickoffDeliveries).where(eq(s.kickoffDeliveries.id,reminder!.id)))[0]!.status).toBe("superseded");
+  }finally{await f.pool.end();}
+ });
+});
+
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("verified Workspace contact synchronization",()=>{
+ async function evidence(f:Awaited<ReturnType<typeof fixture>>) {
+  const [o]=await f.db.select().from(s.franchiseOnboarding);
+  return {requestId:crypto.randomUUID(),sourceWorkspaceId:o!.sourceWorkspaceId,sourceProjectKey:o!.sourceProjectKey,locationKey:o!.input.locationKey,primaryContactId:o!.input.primaryContactId,name:"Franchisee",email:"owner@brand.example",previousEmail:"owner@example.invalid",accountId:crypto.randomUUID(),googleUserId:"123456789012345678901",verifiedAt:new Date().toISOString()};
+ }
+ test("changes future invitations once, preserves kickoff and does not undo a later manual choice",async()=>{
+  const f=await fixture();try{
+   const booked=await f.reserve();if(booked.kind!=="reserved")throw Error("reserve");await deliverAll(f);
+   const input=await evidence(f),sync=()=>syncWorkspaceClientContact(f.ws,f.actor,f.id,input,f.db);
+   expect((await Promise.all([sync(),sync()])).map(r=>r.kind).sort()).toEqual(["applied","reused"]);
+   expect(await f.db.select().from(s.onboardingContactChanges)).toHaveLength(1);
+   expect((await f.db.select().from(s.bookings).where(eq(s.bookings.id,f.source.id)))[0]!.inviteeEmail).toBe("owner@example.invalid");
+   const booking=(await f.db.select().from(s.bookings).where(eq(s.bookings.id,booked.bookingId)))[0]!;
+   expect(booking.inviteeEmail).toBe(input.email);expect(booking.startsAt.toISOString()).toBe(f.occurrence.startsAt);
+   const deliveries=await f.db.select().from(s.kickoffDeliveries);expect(deliveries).toHaveLength(2);expect(new Set(deliveries.map(d=>d.googleEventId)).size).toBe(1);
+   await deliverAll(f);
+   expect((await updateOnboardingClientContact(f.ws,f.actor,f.id,{revision:3,requestId:crypto.randomUUID(),name:"Other client",email:"other@example.invalid",source:"manual"},f.db)).kind).toBe("applied");
+   expect((await sync()).kind).toBe("reused");
+   expect((await f.db.select().from(s.franchiseOnboarding))[0]!.clientContact!.email).toBe("other@example.invalid");
+   expect((await syncWorkspaceClientContact(f.ws,f.actor,f.id,{...input,requestId:crypto.randomUUID()},f.db)).kind).toBe("manual_override");
+  }finally{await f.pool.end();}
+ });
+ test("rejects stale evidence, wrong source and non-admin callers without any mutation",async()=>{
+  const f=await fixture();try{
+   const input=await evidence(f);
+   expect((await syncWorkspaceClientContact(f.ws,{...f.actor,workspaceRole:"member"},f.id,input,f.db)).kind).toBe("forbidden");
+   for(const patch of [{sourceWorkspaceId:crypto.randomUUID()},{sourceProjectKey:"other"},{locationKey:crypto.randomUUID()},{primaryContactId:"9999999999999999999"}])expect((await syncWorkspaceClientContact(f.ws,f.actor,f.id,{...input,...patch},f.db)).kind).toBe("source_mismatch");
+   expect((await syncWorkspaceClientContact(f.ws,f.actor,f.id,{...input,verifiedAt:new Date(Date.now()-180001).toISOString()},f.db)).kind).toBe("workspace_evidence_stale");
+   expect((await syncWorkspaceClientContact(f.ws,f.actor,f.id,{...input,verifiedAt:new Date(Date.now()+60000).toISOString()},f.db)).kind).toBe("workspace_evidence_stale");
+   expect(await f.db.select().from(s.onboardingContactChanges)).toHaveLength(0);
+   expect((await f.db.select().from(s.franchiseOnboarding))[0]!.revision).toBe(2);
+  }finally{await f.pool.end();}
+ });
+});
+
+describe.skipIf(!process.env.TEST_DATABASE_URL)("kickoff and check-in meeting notes",()=>{
+ test("discovers both bound meeting types once, keeps undelivered meetings visible, and excludes cancelled and foreign bookings",async()=>{
+  const f=await fixture();try{
+   const {prepareOnboardingCheckin}=await import("../../src/db/prepare-checkin-repo");
+   const prepared=await prepareOnboardingCheckin(f.ws,f.actor,f.id,f.db);if(prepared.kind!=="created")throw Error("checkin fixture");
+   const since=new Date(f.source.startsAt.getTime()-60000),now=new Date(f.source.endsAt.getTime()+21*60000);
+   const [checkin]=await f.db.insert(s.bookings).values({...f.source,id:crypto.randomUUID(),eventTypeId:prepared.eventTypeId,cancelToken:crypto.randomUUID(),rescheduleToken:crypto.randomUUID()}).returning();
+   const discovered=[];
+   for(let i=0;i<2;i++){
+    const claimed=await claimMeetingNotes(f.ws,since,now,f.db);expect(claimed).not.toBeNull();discovered.push(claimed!.bookingId);
+    const meeting=await readClaimedMeeting(f.ws,claimed!.bookingId,f.db);expect(meeting?.sourceProjectKey).toBe("reserve");expect(meeting?.calendar).toBeNull();
+    expect(await readClaimedMeeting(crypto.randomUUID(),claimed!.bookingId,f.db)).toBeNull();
+    expect(await finishMeetingNotes(f.ws,claimed!.bookingId,claimed!.leaseToken,"complete",now,f.db)).toBe(true);
+   }
+   expect(discovered.sort()).toEqual([f.source.id,checkin!.id].sort());
+   expect(await claimMeetingNotes(f.ws,since,now,f.db)).toBeNull();
+   expect((await listEndedFollowupsPage(f.ws,since,now,null,f.db)).meetings).toHaveLength(0);
+   // Copy a synthetic verified calendar receipt to each meeting; no provider writes.
+   const booked=await f.reserve();if(booked.kind!=="reserved")throw Error("followup fixture");await deliverAll(f);
+   const [delivery]=await f.db.select().from(s.kickoffDeliveries),[event]=await f.db.select().from(s.bookingEvents).where(eq(s.bookingEvents.id,delivery!.sourceEventId));
+   for(const bookingId of discovered){
+    const eventId=crypto.randomUUID();await f.db.insert(s.bookingEvents).values({...event!,id:eventId,bookingId});
+    await f.db.insert(s.kickoffDeliveries).values({...delivery!,id:crypto.randomUUID(),sequence:undefined,bookingId,sourceEventId:eventId,messageId:crypto.randomUUID(),googleEventId:`synthetic-${bookingId}`});
+   }
+   expect((await listEndedFollowupsPage(f.ws,since,now,null,f.db)).meetings.map(m=>m.bookingId).sort()).toEqual(discovered.sort());
+   await f.db.update(s.bookings).set({status:"cancelled"}).where(eq(s.bookings.id,checkin!.id));
+   expect(await readClaimedMeeting(f.ws,checkin!.id,f.db)).toBeNull();
+   expect((await listEndedFollowupsPage(f.ws,since,now,null,f.db)).meetings.map(m=>m.bookingId)).toEqual([f.source.id]);
   }finally{await f.pool.end();}
  });
 });

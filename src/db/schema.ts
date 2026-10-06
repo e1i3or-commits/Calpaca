@@ -850,6 +850,19 @@ export const onboardingCheckins = pgTable("onboarding_checkins", {
   publishedAt: timestamp("published_at", { withTimezone: true }),
 }, t => [uniqueIndex("onboarding_checkin_event_type_uq").on(t.eventTypeId)]);
 
+export const onboardingOneOffs = pgTable("onboarding_one_offs", {
+  eventTypeId: uuid("event_type_id").primaryKey().references(() => eventTypes.id),
+  onboardingId: uuid("onboarding_id").notNull().references(() => franchiseOnboarding.id),
+  requestId: uuid("request_id").notNull(),
+  title: text("title").notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  attendees: jsonb("attendees").$type<{userId:string;role:"required"|"optional"}[]>().notNull(),
+  organizerUserId: uuid("organizer_user_id").notNull().references(() => users.id),
+  createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", {withTimezone:true}).notNull().defaultNow(),
+  publishedAt: timestamp("published_at", {withTimezone:true}).notNull().defaultNow(),
+}, t => [uniqueIndex("onboarding_one_off_request_uq").on(t.onboardingId,t.requestId)]);
+
 export const kickoffDeliveries = pgTable("kickoff_deliveries", {
   id: uuid("id").primaryKey().defaultRandom(),
   sequence: serial("sequence").notNull(),
@@ -1013,3 +1026,10 @@ export const meetingNotesJobs = pgTable("meeting_notes_jobs", {
   completedAt: timestamp("completed_at", {withTimezone:true}),
 }, t => [primaryKey({columns:[t.workspaceId,t.bookingId]}),
   index("meeting_notes_jobs_due_idx").on(t.workspaceId,t.nextAttemptAt,t.bookingId).where(sql`${t.completedAt} is null`)]);
+
+// Last trusted organizer version seen, including observations with no time change.
+export const bookingCalendarObservations = pgTable("booking_calendar_observations", {
+  bookingId:uuid("booking_id").primaryKey().references(()=>bookings.id),
+  providerUpdatedAt:timestamp("provider_updated_at",{withTimezone:true}).notNull(),
+  etag:text("etag").notNull(), observedAt:timestamp("observed_at",{withTimezone:true}).notNull(),
+});

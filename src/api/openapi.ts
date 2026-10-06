@@ -1,8 +1,9 @@
 import { publishOnboardingInput,enableFollowupsInput } from "../core/engagement/onboarding-publication";
 import { sesNotificationInput,sesPollInput } from "../core/invite/ses-feedback";
 import { prepareFollowupInput, reserveFollowupInput } from "./routes/followup-reservations";
-import { franchiseOnboardingInput, onboardingCadenceUpdate } from "../core/engagement/franchise-onboarding";
+import { franchiseOnboardingInput, onboardingCadenceUpdate, workspaceClientContactSync } from "../core/engagement/franchise-onboarding";
 import { kickoffReceiptInput } from "../core/invite/kickoff-delivery";
+import { oneOffMeetingInput } from "../core/engagement/one-off-meeting";
 import { followupPreviewInput, followupApplyInput } from "../core/engagement/followup-schedule";
 import { onboardingClientContactUpdate } from "../core/engagement/franchise-onboarding";
 import { Hono } from "hono";
@@ -41,6 +42,7 @@ type Operation = readonly [
  * `components.schemas` entry and the reference stays readable. */
 const requestSchemas = {
   FranchiseOnboarding: franchiseOnboardingInput,
+  WorkspaceClientContactSync: workspaceClientContactSync,
   OnboardingCadence: onboardingCadenceUpdate,
   PrepareKickoff: prepareKickoffInput,
   KickoffReceipt: kickoffReceiptInput,
@@ -48,6 +50,7 @@ const requestSchemas = {
   SesPoll: sesPollInput,
   PublishOnboarding: publishOnboardingInput,
   EnableOnboardingFollowups: enableFollowupsInput,
+  OneOffMeeting: oneOffMeetingInput,
   FollowupPreview: followupPreviewInput,
   FollowupApply: followupApplyInput,
   OnboardingClientContact: onboardingClientContactUpdate,
@@ -69,6 +72,7 @@ export type RequestSchemaName = keyof typeof requestSchemas;
 export const documentedRequestSchemas = requestSchemas;
 
 export const openApiOperations: readonly Operation[] = [
+  ["put","/api/automation/franchise-onboarding/{engagementId}/workspace-contact","Engagements","Sync an IT-confirmed primary contact mailbox for future follow-ups","personal","WorkspaceClientContactSync"],
   ["get","/api/me/engagements/{id}/onboarding-scheduling","Engagements","Read onboarding publication readiness and reviewed follow-up dates","personal"],
   ["post","/api/me/engagements/{id}/onboarding-scheduling/publish-kickoff","Engagements","Publish a prepared kickoff after deployment and calendar checks","personal","PublishOnboarding"],
   ["post","/api/me/engagements/{id}/onboarding-scheduling/publish-checkin","Engagements","Publish a prepared three-month check-in after deployment and calendar checks","personal","PublishOnboarding"],
@@ -79,6 +83,8 @@ export const openApiOperations: readonly Operation[] = [
   ["post","/api/automation/followup-reservations/{engagementId}","Engagements","Prepare a protected private follow-up conversation (workspace admin)","personal","PrepareFollowup"],
   ["post","/api/automation/followup-reservations/{engagementId}/{occurrenceId}/reserve","Engagements","Reserve one approved follow-up and queue verified invitation delivery (workspace admin)","personal","ReserveFollowup"],
   ["get","/api/me/engagements/{id}/followup-schedule/occurrences/{occurrenceId}/availability","Engagements","Find replacement times using required attendees’ shared calendar availability","personal"],
+  ["get","/api/me/engagements/{id}/one-off-meetings","Engagements","List tracked one-off meetings","personal"],
+  ["post","/api/me/engagements/{id}/one-off-meetings","Engagements","Prepare a tracked one-off meeting with custom duration and attendees","personal","OneOffMeeting"],
   ["get","/api/me/engagements/{id}/followup-schedule","Engagements","Read the planned follow-up schedule","personal"],
   ["post","/api/me/engagements/{id}/followup-schedule/preview","Engagements","Preview future follow-up changes","personal","FollowupPreview"],
   ["post","/api/me/engagements/{id}/followup-schedule/apply","Engagements","Apply reviewed follow-up dates and queue changes to issued invitations","personal","FollowupApply"],

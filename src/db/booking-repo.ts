@@ -49,6 +49,7 @@ function serializePayload(event: BookingEvent): StoredPayload {
     case "rescheduled":
       return {
         startsAt: event.payload.startsAt.toString(),
+        ...(event.payload.calendarObserved ? {calendarObserved:true} : {}),
         endsAt: event.payload.endsAt.toString(),
       };
     case "cancelled":
@@ -99,6 +100,7 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
       return {
         kind: "rescheduled",
         payload: {
+          ...(payload["calendarObserved"] === true ? {calendarObserved:true} : {}),
           startsAt: Temporal.Instant.from(payload["startsAt"] as string),
           endsAt: Temporal.Instant.from(payload["endsAt"] as string),
         },
@@ -193,8 +195,9 @@ export async function appendEvent<K extends BookingEventKind>(
           ||(kind==="invite_failed"&&!verified.recipients.some(person=>person.status==="failed"))) {
           return err({kind,reason:"kickoff_delivery_receipt_required"});
         }
+        const [latestTimeSource]=kind==="reminder_sent"?await tx.select({id:bookingEvents.id}).from(bookingEvents).where(and(eq(bookingEvents.bookingId,bookingId),inArray(bookingEvents.kind,["created","rescheduled","invitee_changed"]))).orderBy(desc(bookingEvents.createdAt)).limit(1):[];
         const [latestDeliverySource]=await tx.select({id:schema.kickoffDeliveries.sourceEventId}).from(schema.kickoffDeliveries).where(and(eq(schema.kickoffDeliveries.bookingId,bookingId),inArray(schema.kickoffDeliveries.kind,["created","rescheduled","cancelled"]))).orderBy(desc(schema.kickoffDeliveries.sequence)).limit(1);
-        if(latestDeliverySource?.id!==verified.sourceEventId)return err({kind,reason:"kickoff_delivery_superseded"});
+        if((kind==="reminder_sent"?latestTimeSource?.id:latestDeliverySource?.id)!==verified.sourceEventId)return err({kind,reason:"kickoff_delivery_superseded"});
       }
     }
     // Only an audited contact change on an issued onboarding follow-up may
@@ -338,7 +341,7 @@ export interface InviteHost {
 }
 
 export interface InviteContext {
-  readonly meetingKind?: "kickoff" | "followup" | "checkin";
+  readonly meetingKind?: "kickoff" | "followup" | "checkin" | "one_off";
   readonly managementLinksEnabled?: boolean;
   readonly workspaceId?: string;
   readonly booking: BookingRow;

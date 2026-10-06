@@ -6,8 +6,8 @@ import * as s from "./schema";
 
 /** Caller must authorize access to the Engagement before reading this report.
  * Explicit projections exclude emails, OAuth tokens and calendar identifiers. */
-export async function getKickoffReadiness(row: typeof s.franchiseOnboarding.$inferSelect, db: NodePgDatabase<typeof s>, now = new Date(), meetingKind: "kickoff"|"followup" = "kickoff") {
-  const ids = onboardingAttendance(row.input).kickoff.map(host => host.userId);
+export async function getKickoffReadiness(row: typeof s.franchiseOnboarding.$inferSelect, db: NodePgDatabase<typeof s>, now = new Date(), meetingKind: "kickoff"|"followup" = "kickoff", custom?: {attendees:{userId:string;role:"required"|"optional"}[];organizerUserId:string}) {
+  const ids = (custom?.attendees ?? onboardingAttendance(row.input).kickoff).map(host => host.userId);
   // This helper also runs inside provisioning/cadence transactions, where the
   // executor is one pg client and cannot run concurrent queries.
   const people = await db.select({ userId: s.users.id, name: s.users.name, userStatus: s.users.status, membershipStatus: s.workspaceMembers.status })
@@ -23,6 +23,6 @@ export async function getKickoffReadiness(row: typeof s.franchiseOnboarding.$inf
     const person = people.find(person => person.userId === userId);
     return { userId, name: person?.name ?? "Unavailable participant", active: person?.userStatus === "active" && person.membershipStatus === "active",
       schedules: schedules.filter(schedule => schedule.userId === userId), calendars: calendars.filter(calendar => calendar.userId === userId) };
-  }), meetingKind === "followup" ? row.input.accountLeadUserId : row.input.organizerUserId, now,
-    meetingKind === "followup" ? row.input.franchiseSuccessUserIds : undefined);
+  }), custom?.organizerUserId ?? (meetingKind === "followup" ? row.input.accountLeadUserId : row.input.organizerUserId), now,
+    custom ? custom.attendees.filter(person => person.role === "required").map(person => person.userId) : meetingKind === "followup" ? row.input.franchiseSuccessUserIds : undefined, !!custom);
 }

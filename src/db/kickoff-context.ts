@@ -27,10 +27,16 @@ export async function loadKickoffContext(eventTypeId: string, db: Db) {
     .innerJoin(s.eventTypes,eq(s.eventTypes.id,s.onboardingCheckins.eventTypeId))
     .innerJoin(s.engagements,eq(s.engagements.id,s.franchiseOnboarding.engagementId))
     .where(eq(s.onboardingCheckins.eventTypeId,eventTypeId));
-  return checkin ? {...checkin,meetingKind:"checkin" as const} : null;
+  if(checkin)return {...checkin,meetingKind:"checkin" as const};
+  const [oneOff] = await db.select({binding:s.onboardingOneOffs,onboarding:s.franchiseOnboarding,eventType:s.eventTypes,engagement:s.engagements})
+    .from(s.onboardingOneOffs).innerJoin(s.franchiseOnboarding,eq(s.franchiseOnboarding.id,s.onboardingOneOffs.onboardingId))
+    .innerJoin(s.eventTypes,eq(s.eventTypes.id,s.onboardingOneOffs.eventTypeId))
+    .innerJoin(s.engagements,eq(s.engagements.id,s.franchiseOnboarding.engagementId))
+    .where(eq(s.onboardingOneOffs.eventTypeId,eventTypeId));
+  return oneOff ? {...oneOff,meetingKind:"one_off" as const} : null;
 }
 /** The check-in books like a kickoff but is hosted by the follow-up roster, so readiness and attendance use the follow-up rules. */
-export const readinessKind = (kind: "kickoff"|"followup"|"checkin"): "kickoff"|"followup" => kind === "kickoff" ? "kickoff" : "followup";
+export const readinessKind = (kind: "kickoff"|"followup"|"checkin"|"one_off"): "kickoff"|"followup" => kind === "kickoff" ? "kickoff" : "followup";
 export type KickoffContext = NonNullable<Awaited<ReturnType<typeof loadKickoffContext>>>;
 
 export async function kickoffConfigurationIssue(ctx: KickoffContext, db: Db): Promise<KickoffBookingError | null> {
@@ -40,7 +46,7 @@ export async function kickoffConfigurationIssue(ctx: KickoffContext, db: Db): Pr
   const required = attendance.map(host => host.userId);
   if (eventType.workspaceId !== onboarding.workspaceId || engagement.workspaceId !== onboarding.workspaceId
     || eventType.engagementId !== onboarding.engagementId || eventType.ownerUserId !== protectedOrganizer(ctx)
-    || eventType.mode !== "group" || eventType.capacity !== 1 || eventType.durationMinutes !== 45
+    || eventType.mode !== "group" || eventType.capacity !== 1 || eventType.durationMinutes !== (ctx.meetingKind === "one_off" ? ctx.binding.durationMinutes : 45)
     || eventType.selectableDurations.length || eventType.publicSelectableHostIds.length || eventType.agentPolicy.enabled
     || !sameRoster(hosts.map(host => host.userId), required) || hosts.some(host => host.role !== attendance.find(person => person.userId === host.userId)?.role)) return "kickoff_configuration_changed";
   return null;
@@ -52,7 +58,7 @@ export async function kickoffPubliclyAvailable(eventTypeId: string, db: Db) {
   if (ctx.meetingKind === "followup") return false;
   if (!ctx.binding.publishedAt || ctx.eventType.playbookStatus !== "ready" || ctx.engagement.status !== "active") return false;
   if (await kickoffConfigurationIssue(ctx, db)) return false;
-  return (await getKickoffReadiness(ctx.onboarding, db, new Date(), readinessKind(ctx.meetingKind))).calendarSetupReady;
+  return (await protectedReadiness(ctx, db)).calendarSetupReady;
 }
 
 /** Transactions holding this share lock cannot race an Engagement pause or
@@ -71,8 +77,14 @@ export function kickoffHosts(ctx: KickoffContext) {
 }
 
 export function protectedAttendance(ctx: KickoffContext) {
+  if(ctx.meetingKind === "one_off")return ctx.binding.attendees;
   return onboardingAttendance(ctx.onboarding.input)[readinessKind(ctx.meetingKind)];
 }
 export function protectedOrganizer(ctx: KickoffContext) {
+  if(ctx.meetingKind === "one_off")return ctx.binding.organizerUserId;
   return ctx.meetingKind === "kickoff" ? ctx.onboarding.input.organizerUserId : ctx.onboarding.input.accountLeadUserId;
+}
+
+export function protectedReadiness(ctx: KickoffContext, db: Db, now = new Date()) {
+  return getKickoffReadiness(ctx.onboarding,db,now,readinessKind(ctx.meetingKind),ctx.meetingKind === "one_off" ? {attendees:ctx.binding.attendees,organizerUserId:ctx.binding.organizerUserId} : undefined);
 }

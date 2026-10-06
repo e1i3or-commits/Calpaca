@@ -12,6 +12,8 @@ export type GoogleEventTime = {
 
 export type GoogleEvent = {
   id: string;
+  etag?: string; updated?: string; organizer?: {email?:string};
+  extendedProperties?: {private?:Record<string,string>};
   status?: string;       // confirmed | tentative | cancelled
   transparency?: string; // "transparent" = shows as free
   eventType?: string;    // default | outOfOffice | focusTime | workingLocation | birthday
