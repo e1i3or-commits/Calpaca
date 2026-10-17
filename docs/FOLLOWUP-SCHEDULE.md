@@ -83,8 +83,11 @@ rejected. Replay still checks current access and management permission.
 | `POST .../followup-schedule/preview` | Lead/admin; `{revision, command}` returns changes, issues, canApply and previewHash |
 | `POST .../followup-schedule/apply` | Same input plus UUID requestId and previewHash; revalidates and atomically saves |
 
-Commands are `configure` with a rule, `move` with occurrenceId/date/time, or
-`pause`, `resume`, `end`, or `extend` to maintain the saved future-date count. Input is strict: no workspace, duration, participant or
+Commands are `configure` with a rule, `move` with occurrenceId/date/time,
+`skip` with occurrenceId (cancels that one future date; a booked call is
+cancelled like a removed date, and the rolling extension later adds a date at
+the end), or `pause`, `resume`, `end`, or `extend` to maintain the saved
+future-date count. Input is strict: no workspace, duration, participant or
 publication overrides. Generated OpenAPI contains the actual validators.
 Responses are no-store. An inaccessible record returns 404, an unauthorized
 mutation 403, invalid input 400, and revision/preview/request/lifecycle conflicts

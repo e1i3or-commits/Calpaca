@@ -20,6 +20,7 @@ export const followupPreviewInput = z.object({
   command: z.discriminatedUnion("action", [
     z.object({action: z.literal("configure"), rule: followupRule}).strict(),
     z.object({action: z.literal("move"), occurrenceId: z.string().uuid(), date, time}).strict(),
+    z.object({action: z.literal("skip"), occurrenceId: z.string().uuid()}).strict(),
     z.object({action: z.enum(["pause", "resume", "end"])}).strict(),
     z.object({action: z.literal("extend"), addCount: z.number().int().min(1).max(12).optional()}).strict(),
   ]),
@@ -124,6 +125,14 @@ export function previewSchedule(current: ScheduleSnapshot["schedule"], command: 
         nextRecurrenceIndex=index;
       }
     }
+  }
+  else if (command.action === "skip") {
+    // One date leaves the series; the rest keep their dates and positions.
+    // A booked call is cancelled through the same reviewed reconciliation as a
+    // removed date, and the rolling extension later tops the series back up.
+    const row = future.find(item => item.id === command.occurrenceId);
+    if (!row) issues.push("Only an existing future meeting can be skipped.");
+    else if (status === "planned" || status === "paused") changes.push(change(row, "cancel", {status: "cancelled"}));
   }
   else if (command.action === "move") {
     const row = future.find(item => item.id === command.occurrenceId);

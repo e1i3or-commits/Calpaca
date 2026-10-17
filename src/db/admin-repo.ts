@@ -338,6 +338,8 @@ export interface AdminEventType {
   readonly ownerUserId: string | null;
   readonly teamId: string | null;
   readonly folderId: string | null;
+  /** Set when the link belongs to an Engagement (onboarding kickoff, follow-ups, check-in, a conversation). */
+  readonly engagementId?: string | null;
   readonly slug: string;
   readonly title: string;
   readonly description?: string | null;
@@ -399,6 +401,7 @@ function toAdminEventType(
     ownerUserId: row.ownerUserId,
     teamId: row.teamId,
     folderId: row.folderId,
+    engagementId: row.engagementId,
     slug: row.slug,
     title: row.title,
     description: row.description,
