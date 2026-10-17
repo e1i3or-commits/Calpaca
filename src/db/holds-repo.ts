@@ -15,7 +15,7 @@ import {
   type AssignmentExplanation,
   type BookingRecord,
 } from "../core/assignment/round-robin";
-import type { BookingState, BookingStateError } from "../core/booking/state";
+import type { BookingActor, BookingState, BookingStateError } from "../core/booking/state";
 import type { RoutingAnswers } from "../core/routing/condition";
 import type { BookingAnswers } from "../core/booking/questions";
 import {
@@ -436,6 +436,7 @@ export async function confirmReschedule(
   bookingId: string,
   holdIds: readonly string[],
   executor: Db = getDb(),
+  actor?: BookingActor,
 ): Promise<Result<BookingState, ConfirmHoldError | BookingStateError>> {
   return executor.transaction(async (tx) => {
     const rows = await tx
@@ -481,7 +482,12 @@ export async function confirmReschedule(
 
     const kickoff=await guardKickoffBooking(first.eventTypeId,rows.map(row=>row.hostUserId),{start:startsAt,end:endsAt},tx,bookingId);
     if(kickoff.kind==="blocked")return err({kind:kickoff.error});
-    const rescheduled = await appendEvent(bookingId, "rescheduled", { startsAt, endsAt }, tx);
+    const rescheduled = await appendEvent(
+      bookingId,
+      "rescheduled",
+      { startsAt, endsAt, ...(actor ? { actor } : {}) },
+      tx,
+    );
     if (!rescheduled.ok) return rescheduled;
 
     const nextHostUserIds = kickoff.kind==="allowed"?kickoff.hostUserIds:[...new Set(rows.map((row) => row.hostUserId))];

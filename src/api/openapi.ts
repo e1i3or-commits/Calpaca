@@ -21,7 +21,12 @@ import {
   verifySchema as emailVerificationVerifySchema,
 } from "./routes/booking-email-verification";
 import { bodySchema as suggestionBodySchema } from "./routes/suggestions";
-import { eventTypeBodySchema, scheduleBodySchema } from "./routes/admin";
+import {
+  eventTypeBodySchema,
+  organizerCancelBodySchema,
+  organizerRescheduleBodySchema,
+  scheduleBodySchema,
+} from "./routes/admin";
 import { prepareKickoffInput } from "./routes/franchise-onboarding";
 
 type Method = "get" | "post" | "put" | "patch" | "delete";
@@ -60,6 +65,8 @@ const requestSchemas = {
   Booking: bookingBodySchema,
   Reschedule: rescheduleBodySchema,
   Cancel: cancelBodySchema,
+  OrganizerReschedule: organizerRescheduleBodySchema,
+  OrganizerCancel: organizerCancelBodySchema,
   EmailVerificationStart: emailVerificationRequestSchema,
   EmailVerificationConfirm: emailVerificationVerifySchema,
   TimeSuggestion: suggestionBodySchema,
@@ -193,6 +200,8 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/api/me/bookings/{id}", "Organizer", "Get booking detail and timeline", "session"],
   ["get", "/api/me/bookings/{id}/assignment", "Organizer", "Explain round-robin assignment", "session"],
   ["post", "/api/me/bookings/{id}/no-show", "Organizer", "Mark a booking as no-show", "session"],
+  ["post", "/api/me/bookings/{id}/cancel", "Organizer", "Cancel a booking as its host or a workspace admin", "session", "OrganizerCancel"],
+  ["post", "/api/me/bookings/{id}/reschedule", "Organizer", "Move a booking to an available time as its host or a workspace admin", "session", "OrganizerReschedule"],
   ["get", "/api/me/schedules", "Schedules", "List availability schedules", "session"],
   ["post", "/api/me/schedules", "Schedules", "Create an availability schedule", "session", "Schedule"],
   ["put", "/api/me/schedules/{id}", "Schedules", "Replace an availability schedule", "session", "Schedule"],

@@ -8,12 +8,14 @@ import { kickoffHosts, loadKickoffContext, protectedAttendance, protectedOrganiz
 import { sameRoster } from "../core/engagement/kickoff-booking";
 import { queueKickoffDelivery } from "./kickoff-delivery-repo";
 import { getDb } from "./client";
+import { isAppAdmin } from "./admin-repo";
 import { bookingEvents, bookings, eventTypes, teamMembers, users } from "./schema";
 import * as schema from "./schema";
 import { ok, err, type Result } from "../lib/result";
 import {
   applyEvent,
   projectState,
+  type BookingActor,
   type BookingEvent,
   type BookingEventKind,
   type BookingEventPayload,
@@ -51,9 +53,13 @@ function serializePayload(event: BookingEvent): StoredPayload {
         startsAt: event.payload.startsAt.toString(),
         ...(event.payload.calendarObserved ? {calendarObserved:true} : {}),
         endsAt: event.payload.endsAt.toString(),
+        ...(event.payload.actor ? { actor: { ...event.payload.actor } } : {}),
       };
     case "cancelled":
-      return { reason: event.payload.reason };
+      return {
+        reason: event.payload.reason,
+        ...(event.payload.actor ? { actor: { ...event.payload.actor } } : {}),
+      };
     case "reassigned":
       return {
         hostUserIds: event.payload.hostUserIds,
@@ -69,6 +75,12 @@ function serializePayload(event: BookingEvent): StoredPayload {
     case "invitee_changed":
       return { email: event.payload.email, name: event.payload.name, previousEmail: event.payload.previousEmail };
   }
+}
+
+function isBookingActor(value: unknown): value is BookingActor {
+  if (typeof value !== "object" || value === null) return false;
+  const actor = value as Record<string, unknown>;
+  return actor["kind"] === "organizer" && typeof actor["userId"] === "string";
 }
 
 function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): BookingEvent {
@@ -103,10 +115,17 @@ function deserializeEvent(row: { kind: BookingEventKind; payload: unknown }): Bo
           ...(payload["calendarObserved"] === true ? {calendarObserved:true} : {}),
           startsAt: Temporal.Instant.from(payload["startsAt"] as string),
           endsAt: Temporal.Instant.from(payload["endsAt"] as string),
+          ...(isBookingActor(payload["actor"]) ? { actor: payload["actor"] } : {}),
         },
       };
     case "cancelled":
-      return { kind: "cancelled", payload: { reason: payload["reason"] as string | undefined } };
+      return {
+        kind: "cancelled",
+        payload: {
+          reason: payload["reason"] as string | undefined,
+          ...(isBookingActor(payload["actor"]) ? { actor: payload["actor"] } : {}),
+        },
+      };
     case "reassigned": {
       const assignment = payload["assignment"] as AssignmentExplanation | undefined;
       return {
@@ -746,4 +765,40 @@ export async function markBookingNoShowForUser(
     if (!visible) return null;
     return appendEvent(bookingId, "no_show", {}, tx);
   });
+}
+
+/** How the signed-in organizer relates to a booking for write actions. A
+ * "viewer" can see it (event type owner or team member) but is neither one of
+ * its hosts nor a workspace admin, so may not cancel or move it. */
+export type OrganizerBookingAccess = "host" | "workspace_admin" | "viewer";
+
+/** Null when the booking does not exist in the workspace or the user cannot
+ * see it at all, matching the 404 every other /api/me/bookings route returns. */
+export async function getOrganizerBookingAccess(
+  bookingId: string,
+  userId: string,
+  executor: Db = getDb(),
+  workspaceId?: string,
+): Promise<OrganizerBookingAccess | null> {
+  const [row] = await executor
+    .select({ hostUserIds: bookings.hostUserIds })
+    .from(bookings)
+    .where(and(
+      eq(bookings.id, bookingId),
+      ...(workspaceId ? [eq(bookings.workspaceId, workspaceId)] : []),
+    ));
+  if (!row) return null;
+  if (row.hostUserIds.includes(userId)) return "host";
+  if (await isAppAdmin(userId, executor, workspaceId)) return "workspace_admin";
+
+  const [visible] = await executor
+    .select({ id: bookings.id })
+    .from(bookings)
+    .innerJoin(eventTypes, eq(eventTypes.id, bookings.eventTypeId))
+    .leftJoin(
+      teamMembers,
+      and(eq(teamMembers.teamId, eventTypes.teamId), eq(teamMembers.userId, userId)),
+    )
+    .where(and(eq(bookings.id, bookingId), adminScope(userId)));
+  return visible ? "viewer" : null;
 }

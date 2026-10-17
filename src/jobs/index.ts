@@ -7,6 +7,7 @@ import { listEvents, watchEvents } from "../sync/google";
 import { REMINDER_LEAD, sendInvite, sendReminder } from "./invite-email";
 import { runKickoffDeliveryBatch } from "./kickoff-delivery";
 import type { InviteKind } from "../core/invite/email";
+import type { BookingActor } from "../core/booking/state";
 import { listBookingsNeedingReminder } from "../db/booking-repo";
 import {
   listDuePollReminderJobs,
@@ -118,10 +119,15 @@ export async function enqueueInviteEmail(bookingId: string, kind: InviteKind): P
 export async function emitBookingWebhook(
   bookingId: string,
   kind: BookingWebhookKind,
-  opts?: { reason?: string },
+  opts?: { reason?: string; actor?: BookingActor },
 ): Promise<void> {
   try {
-    await getBoss().send(WEBHOOK_FANOUT_QUEUE, { bookingId, kind, reason: opts?.reason }, {
+    await getBoss().send(WEBHOOK_FANOUT_QUEUE, {
+      bookingId,
+      kind,
+      reason: opts?.reason,
+      ...(opts?.actor ? { actor: opts.actor } : {}),
+    }, {
       retryLimit: 3,
       retryDelay: 30,
     });
@@ -329,7 +335,7 @@ export async function startJobs(): Promise<void> {
   await b.createQueue(WEBHOOK_DELIVERY_QUEUE);
 
   await b.work<
-    | { bookingId: string; kind: BookingWebhookKind; reason?: string }
+    | { bookingId: string; kind: BookingWebhookKind; reason?: string; actor?: BookingActor }
     | { suggestionId: string }
     | { pollId: string }
   >(
@@ -342,6 +348,7 @@ export async function startJobs(): Promise<void> {
           ? await fanOutPollWebhooks(job.data.pollId)
           : await fanOutBookingWebhooks(job.data.bookingId, job.data.kind, {
               reason: job.data.reason,
+              ...(job.data.actor ? { actor: job.data.actor } : {}),
             });
       for (const delivery of deliveries) {
         await b.send(WEBHOOK_DELIVERY_QUEUE, delivery, {

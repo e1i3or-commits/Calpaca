@@ -43,7 +43,7 @@ import {
 import { subtract, type Interval } from "../../core/availability/intervals";
 import { generateSlots } from "../../core/availability/slots";
 import type { AssignmentCandidate, BookingRecord } from "../../core/assignment/round-robin";
-import type { BookingState, BookingStateError } from "../../core/booking/state";
+import type { BookingActor, BookingState, BookingStateError } from "../../core/booking/state";
 import {
   validateBookingAnswers,
   type BookingAnswers,
@@ -122,13 +122,17 @@ export interface BookingDeps {
     email: string,
     receipt: string,
   ) => Promise<boolean>;
+  /** `actor` is set only when an organizer (not the invitee's token link)
+   * made the change; it is recorded on the booking event. */
   readonly confirmReschedule: (
     bookingId: string,
     holdIds: readonly string[],
+    actor?: BookingActor,
   ) => Promise<Result<BookingState, ConfirmHoldError | BookingStateError>>;
   readonly cancelBooking: (
     bookingId: string,
     reason: string | undefined,
+    actor?: BookingActor,
   ) => Promise<Result<BookingState, BookingStateError>>;
   readonly getBookingById: (id: string) => Promise<BookingRow | null>;
   readonly getBookingHistoryForHosts: (hostUserIds: readonly string[]) => Promise<readonly BookingRecord[]>;
@@ -150,7 +154,7 @@ export interface BookingDeps {
   readonly emitBookingWebhook?: (
     bookingId: string,
     kind: "created" | "rescheduled" | "cancelled",
-    opts?: { reason?: string },
+    opts?: { reason?: string; actor?: BookingActor },
   ) => Promise<void>;
 }
 
@@ -184,9 +188,10 @@ const defaultDeps: BookingDeps = {
   getPublicProposal: (publicId) => dbGetPublicProposal(publicId),
   validateEmailVerification: (eventTypeId, email, receipt) =>
     validateBookingEmailReceipt(eventTypeId, email, receipt),
-  confirmReschedule: (bookingId, holdIds) => dbConfirmReschedule(bookingId, holdIds),
-  cancelBooking: async (bookingId, reason) => {
-    const result = await appendEvent(bookingId, "cancelled", { reason });
+  confirmReschedule: (bookingId, holdIds, actor) =>
+    dbConfirmReschedule(bookingId, holdIds, undefined, actor),
+  cancelBooking: async (bookingId, reason, actor) => {
+    const result = await appendEvent(bookingId, "cancelled", { reason, ...(actor ? { actor } : {}) });
     return result.ok ? ok(result.value) : result;
   },
   getBookingById: (id) => dbGetBookingById(id),
@@ -442,6 +447,128 @@ function renderBookingConfirmation(booking: BookingRow) {
 function confirmHoldErrorStatus(kind: ConfirmHoldError["kind"]): 404 | 409 {
   return kind === "not_found" ? 404 : 409;
 }
+
+/** A refused booking change, already mapped to the HTTP status and body the
+ * invitee routes have always returned. */
+export interface BookingChangeRefusal {
+  readonly ok: false;
+  readonly status: 400 | 404 | 409;
+  readonly body: Record<string, unknown>;
+}
+
+export function parseRescheduleSlot(start: string, end: string): Interval | null {
+  return parseSlot(start, end);
+}
+
+/**
+ * Moves an already-authorized booking to `slot`. Shared by the invitee's
+ * token route and the organizer route so both recompute availability, hold
+ * the new time, append the event, email the invitee (which also updates the
+ * calendar invitation) and fan out webhooks identically.
+ */
+export async function rescheduleAuthorizedBooking(
+  deps: BookingDeps,
+  booking: BookingRow,
+  slot: Interval,
+  actor?: BookingActor,
+): Promise<{ readonly ok: true; readonly state: BookingState } | BookingChangeRefusal> {
+  const eventType = await deps.getEventTypeForBookingById(booking.eventTypeId);
+  if (!eventType) return { ok: false, status: 404, body: { error: "event_type_not_found" } };
+
+  const durationMinutes = slot.start.until(slot.end).total({ unit: "minutes" });
+  const originalDuration = booking.startsAt.until(booking.endsAt).total({ unit: "minutes" });
+  if (durationMinutes !== originalDuration) {
+    return { ok: false, status: 400, body: { error: "duration_mismatch" } };
+  }
+
+  const now = deps.now();
+  const window = paddedWindow(slot, eventType.bufferBeforeMin, eventType.bufferAfterMin);
+  const scheduleRows = await deps.getSchedulesForUsers(booking.hostUserIds);
+  const capacity = eventType.capacity ?? 1;
+  const busyRows = capacity > 1 && deps.getCapacityAwareBusyForUsers
+    ? await deps.getCapacityAwareBusyForUsers(
+        scheduleRows.map((schedule) => schedule.userId),
+        window,
+        eventType.id,
+        capacity,
+      )
+    : await deps.getBusyForUsers(
+        scheduleRows.map((schedule) => schedule.userId),
+        window,
+      );
+  const schedulesByUser = new Map(scheduleRows.map((s) => [s.userId, s]));
+  const busyByUser = new Map(busyRows.map((b) => [b.userId, b.intervals]));
+
+  const resolvedHostIds = booking.hostUserIds.map((hostId) =>
+    resolveFreeHost(
+      hostId,
+      schedulesByUser,
+      busyByUser,
+      slot,
+      eventType.bufferBeforeMin,
+      eventType.bufferAfterMin,
+      eventType.minimumNoticeMin,
+      eventType.rollingWindowDays ?? 14,
+      eventType.maxPerDay ?? undefined,
+      false,
+      now,
+    ),
+  );
+  if (
+    resolvedHostIds.some((hostId) => hostId === null) ||
+    new Set(resolvedHostIds).size !== resolvedHostIds.length
+  ) {
+    return { ok: false, status: 409, body: { error: "slot_not_available" } };
+  }
+
+  const ttl = Temporal.Duration.from({ minutes: HOLD_TTL_MINUTES });
+  const created = await deps.createHold(
+    eventType.id,
+    resolvedHostIds as string[],
+    slot,
+    ttl,
+  );
+  if (!created.ok) return { ok: false, status: 409, body: { error: created.error.kind } };
+
+  const holdIds = created.value.map((h) => h.id);
+  const rescheduled = actor
+    ? await deps.confirmReschedule(booking.id, holdIds, actor)
+    : await deps.confirmReschedule(booking.id, holdIds);
+  if (!rescheduled.ok) {
+    const error = rescheduled.error;
+    if ("reason" in error) {
+      return { ok: false, status: 409, body: { error: "illegal_transition", reason: error.reason } };
+    }
+    return { ok: false, status: confirmHoldErrorStatus(error.kind), body: { error: error.kind } };
+  }
+
+  await deps.enqueueInviteEmail?.(booking.id, "rescheduled");
+  if (actor) await deps.emitBookingWebhook?.(booking.id, "rescheduled", { actor });
+  else await deps.emitBookingWebhook?.(booking.id, "rescheduled");
+  return { ok: true, state: rescheduled.value };
+}
+
+/** Cancels an already-authorized booking; the invitee and organizer routes
+ * share it so notifications, calendar cancellation and webhooks match. */
+export async function cancelAuthorizedBooking(
+  deps: BookingDeps,
+  booking: BookingRow,
+  reason: string | undefined,
+  actor?: BookingActor,
+): Promise<{ readonly ok: true; readonly state: BookingState } | BookingChangeRefusal> {
+  const cancelled = actor
+    ? await deps.cancelBooking(booking.id, reason, actor)
+    : await deps.cancelBooking(booking.id, reason);
+  if (!cancelled.ok) {
+    return { ok: false, status: 409, body: { error: "illegal_transition", reason: cancelled.error.reason } };
+  }
+
+  await deps.enqueueInviteEmail?.(booking.id, "cancelled");
+  await deps.emitBookingWebhook?.(booking.id, "cancelled", { reason, ...(actor ? { actor } : {}) });
+  return { ok: true, state: cancelled.value };
+}
+
+export const defaultBookingDeps = defaultDeps;
 
 export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
   const router = new Hono();
@@ -831,76 +958,8 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     const slot = parseSlot(start, end);
     if (!slot) return c.json({ error: "invalid_window" }, 400);
 
-    const eventType = await deps.getEventTypeForBookingById(booking.eventTypeId);
-    if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
-
-    const durationMinutes = slot.start.until(slot.end).total({ unit: "minutes" });
-    const originalDuration = booking.startsAt.until(booking.endsAt).total({ unit: "minutes" });
-    if (durationMinutes !== originalDuration) {
-      return c.json({ error: "duration_mismatch" }, 400);
-    }
-
-    const now = deps.now();
-    const window = paddedWindow(slot, eventType.bufferBeforeMin, eventType.bufferAfterMin);
-    const scheduleRows = await deps.getSchedulesForUsers(booking.hostUserIds);
-    const capacity = eventType.capacity ?? 1;
-    const busyRows = capacity > 1 && deps.getCapacityAwareBusyForUsers
-      ? await deps.getCapacityAwareBusyForUsers(
-          scheduleRows.map((schedule) => schedule.userId),
-          window,
-          eventType.id,
-          capacity,
-        )
-      : await deps.getBusyForUsers(
-          scheduleRows.map((schedule) => schedule.userId),
-          window,
-        );
-    const schedulesByUser = new Map(scheduleRows.map((s) => [s.userId, s]));
-    const busyByUser = new Map(busyRows.map((b) => [b.userId, b.intervals]));
-
-    const resolvedHostIds = booking.hostUserIds.map((hostId) =>
-      resolveFreeHost(
-        hostId,
-        schedulesByUser,
-        busyByUser,
-        slot,
-        eventType.bufferBeforeMin,
-        eventType.bufferAfterMin,
-        eventType.minimumNoticeMin,
-        eventType.rollingWindowDays ?? 14,
-        eventType.maxPerDay ?? undefined,
-        false,
-        now,
-      ),
-    );
-    if (
-      resolvedHostIds.some((hostId) => hostId === null) ||
-      new Set(resolvedHostIds).size !== resolvedHostIds.length
-    ) {
-      return c.json({ error: "slot_not_available" }, 409);
-    }
-
-    const ttl = Temporal.Duration.from({ minutes: HOLD_TTL_MINUTES });
-    const created = await deps.createHold(
-      eventType.id,
-      resolvedHostIds as string[],
-      slot,
-      ttl,
-    );
-    if (!created.ok) return c.json({ error: created.error.kind }, 409);
-
-    const rescheduled = await deps.confirmReschedule(
-      booking.id,
-      created.value.map((h) => h.id),
-    );
-    if (!rescheduled.ok) {
-      const error = rescheduled.error;
-      if ("reason" in error) return c.json({ error: "illegal_transition", reason: error.reason }, 409);
-      return c.json({ error: error.kind }, confirmHoldErrorStatus(error.kind));
-    }
-
-    await deps.enqueueInviteEmail?.(booking.id, "rescheduled");
-    await deps.emitBookingWebhook?.(booking.id, "rescheduled");
+    const outcome = await rescheduleAuthorizedBooking(deps, booking, slot);
+    if (!outcome.ok) return c.json(outcome.body, outcome.status);
 
     return c.json({
       bookingId: booking.id,
@@ -922,15 +981,10 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       return c.json({ error: "invalid_token" }, 403);
     }
 
-    const cancelled = await deps.cancelBooking(booking.id, reason);
-    if (!cancelled.ok) {
-      return c.json({ error: "illegal_transition", reason: cancelled.error.reason }, 409);
-    }
+    const outcome = await cancelAuthorizedBooking(deps, booking, reason);
+    if (!outcome.ok) return c.json(outcome.body, outcome.status);
 
-    await deps.enqueueInviteEmail?.(booking.id, "cancelled");
-    await deps.emitBookingWebhook?.(booking.id, "cancelled", { reason });
-
-    return c.json({ bookingId: booking.id, status: cancelled.value.status });
+    return c.json({ bookingId: booking.id, status: outcome.state.status });
   });
 
   return router;
