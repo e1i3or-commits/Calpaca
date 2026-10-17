@@ -7,6 +7,15 @@ tracked with annotated Git tags named `v<version>`.
 
 ### User-facing improvements
 
+- Organizers can cancel and reschedule bookings through the API:
+  `POST /api/me/bookings/{id}/cancel` (optional `reason`) and
+  `POST /api/me/bookings/{id}/reschedule` (`start`, optional `end`). Hosts of
+  the booking and workspace admins may act; teammates who can only see the
+  booking get 403. Both reuse the invitee paths, so availability checks,
+  invitee email and calendar updates, and webhooks behave the same. The
+  booking event and the webhook payload carry
+  `actor: { kind: "organizer", userId }`.
+
 - Gemini notes from onboarding kickoff calls and three-month check-ins now join the same Tyger review queue as recurring follow-ups and Engagement one-offs, with the same 20-minute delay and human approval.
 
 - Future onboarding follow-ups switch to the primary contact’s branded mailbox after IT confirms setup and Google verifies the account. Existing meeting times and Meet links are retained; a different contact selected by the team is preserved.

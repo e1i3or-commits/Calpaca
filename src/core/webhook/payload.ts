@@ -109,6 +109,8 @@ export interface WebhookBookingInput {
   readonly invitee: { readonly email: string; readonly name: string; readonly timezone: string };
   readonly hosts: readonly { readonly id: string; readonly name: string; readonly email: string }[];
   readonly reason?: string;
+  /** Present when an organizer (not the invitee) cancelled or rescheduled. */
+  readonly actor?: { readonly kind: "organizer"; readonly userId: string };
   readonly answers?: Readonly<Record<string, string | readonly string[] | boolean>>;
   readonly location?: Readonly<{
     id: string;
@@ -161,6 +163,7 @@ export function buildWebhookBody(input: WebhookPayloadInput): string {
         ...(input.booking.answers ? { answers: input.booking.answers } : {}),
         ...(input.booking.location ? { location: input.booking.location } : {}),
         ...(input.booking.reason !== undefined && { reason: input.booking.reason }),
+        ...(input.booking.actor ? { actor: input.booking.actor } : {}),
       },
     },
   });

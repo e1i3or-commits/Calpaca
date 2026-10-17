@@ -54,9 +54,18 @@ import {
   getAssignmentExplanationForUser,
   listBookingsForUser,
   markBookingNoShowForUser,
+  getOrganizerBookingAccess,
   type AdminBookingDetail,
   type AdminBookingPage,
+  type OrganizerBookingAccess,
 } from "../../db/booking-repo";
+import {
+  cancelAuthorizedBooking,
+  defaultBookingDeps,
+  parseRescheduleSlot,
+  rescheduleAuthorizedBooking,
+  type BookingDeps,
+} from "./bookings";
 import type { AssignmentExplanation } from "../../core/assignment/round-robin";
 import type { BookingState, BookingStateError } from "../../core/booking/state";
 import type { Result } from "../../lib/result";
@@ -175,6 +184,14 @@ export interface AdminDeps {
     workspaceId?: string,
   ) => Promise<Result<BookingState, BookingStateError> | null>;
   readonly emitBookingWebhook?: (bookingId: string, kind: "no_show") => Promise<void>;
+  /** Organizer cancel/reschedule: who may act, and the same booking-change
+   * dependencies the invitee token routes use. */
+  readonly getOrganizerBookingAccess?: (
+    bookingId: string,
+    userId: string,
+    workspaceId?: string,
+  ) => Promise<OrganizerBookingAccess | null>;
+  readonly bookingChanges?: BookingDeps;
   readonly now?: () => Temporal.Instant;
 }
 
@@ -224,11 +241,27 @@ const defaultDeps: AdminDeps = {
   markBookingNoShowForUser: (bookingId, userId, workspaceId) =>
     markBookingNoShowForUser(bookingId, userId, undefined, workspaceId),
   emitBookingWebhook: (bookingId, kind) => jobsEmitBookingWebhook(bookingId, kind),
+  getOrganizerBookingAccess: (bookingId, userId, workspaceId) =>
+    getOrganizerBookingAccess(bookingId, userId, undefined, workspaceId),
+  bookingChanges: defaultBookingDeps,
   now: () => Temporal.Now.instant(),
 };
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export const organizerCancelBodySchema = z.object({
+  reason: z.string().trim().max(1000).optional()
+    .transform((value) => (value ? value : undefined)),
+});
+
+export const organizerRescheduleBodySchema = z.object({
+  /** ISO-8601 instant with offset, e.g. 2027-01-04T10:00:00Z. */
+  start: z.string().min(1),
+  /** Optional; defaults to start plus the booking's current duration, which
+   * is the only duration a reschedule accepts. */
+  end: z.string().min(1).optional(),
+});
 
 const bookingListQuerySchema = z.object({
   filter: z.enum(["upcoming", "past"]).default("upcoming"),
@@ -584,6 +617,83 @@ export function createAdminRoutes(deps: AdminDeps = defaultDeps): Hono<AuthEnv> 
     if (!result.ok) return c.json({ error: result.error.reason }, 409);
     await deps.emitBookingWebhook?.(bookingId, "no_show");
     return c.json({ bookingId, status: result.value.status });
+  });
+
+  // ---- organizer cancel / reschedule ----
+
+  /** Resolves who may change the booking: hosts and workspace admins. Someone
+   * who can see it but is neither gets 403; anyone else gets the same 404 as
+   * the read routes. */
+  async function authorizeBookingChange(bookingId: string, user: { id: string; workspaceId?: string }) {
+    if (!z.string().uuid().safeParse(bookingId).success) {
+      return { ok: false as const, status: 404 as const, body: { error: "booking_not_found" } };
+    }
+    const access = await deps.getOrganizerBookingAccess?.(bookingId, user.id, user.workspaceId);
+    if (!access) return { ok: false as const, status: 404 as const, body: { error: "booking_not_found" } };
+    if (access === "viewer") {
+      return { ok: false as const, status: 403 as const, body: { error: "not_booking_host" } };
+    }
+    const booking = await deps.bookingChanges?.getBookingById(bookingId);
+    if (!booking || !deps.bookingChanges) {
+      return { ok: false as const, status: 404 as const, body: { error: "booking_not_found" } };
+    }
+    return { ok: true as const, booking, bookingDeps: deps.bookingChanges };
+  }
+
+  router.post("/api/me/bookings/:id/cancel", async (c) => {
+    const parsed = organizerCancelBodySchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+    const user = c.get("user");
+    const authorized = await authorizeBookingChange(c.req.param("id"), user);
+    if (!authorized.ok) return c.json(authorized.body, authorized.status);
+
+    const outcome = await cancelAuthorizedBooking(
+      authorized.bookingDeps,
+      authorized.booking,
+      parsed.data.reason,
+      { kind: "organizer", userId: user.id },
+    );
+    if (!outcome.ok) return c.json(outcome.body, outcome.status);
+    return c.json({ bookingId: authorized.booking.id, status: outcome.state.status });
+  });
+
+  router.post("/api/me/bookings/:id/reschedule", async (c) => {
+    const timezone = c.req.query("timezone") ?? "UTC";
+    if (!isIanaZone(timezone)) return c.json({ error: "invalid_timezone" }, 400);
+    const parsed = organizerRescheduleBodySchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+    const user = c.get("user");
+    const authorized = await authorizeBookingChange(c.req.param("id"), user);
+    if (!authorized.ok) return c.json(authorized.body, authorized.status);
+
+    const { booking } = authorized;
+    let end = parsed.data.end;
+    if (end === undefined) {
+      try {
+        end = Temporal.Instant.from(parsed.data.start)
+          .add(booking.startsAt.until(booking.endsAt))
+          .toString();
+      } catch {
+        return c.json({ error: "invalid_window" }, 400);
+      }
+    }
+    const slot = parseRescheduleSlot(parsed.data.start, end);
+    if (!slot) return c.json({ error: "invalid_window" }, 400);
+
+    const outcome = await rescheduleAuthorizedBooking(
+      authorized.bookingDeps,
+      booking,
+      slot,
+      { kind: "organizer", userId: user.id },
+    );
+    if (!outcome.ok) return c.json(outcome.body, outcome.status);
+    return c.json({
+      bookingId: booking.id,
+      status: outcome.state.status,
+      hostUserIds: outcome.state.hostUserIds,
+      start: renderAdminInstant(slot.start, timezone),
+      end: renderAdminInstant(slot.end, timezone),
+    });
   });
 
   // ---- schedules ----

@@ -1,5 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { getInviteContext } from "../db/booking-repo";
+import type { BookingActor } from "../core/booking/state";
 import { getTimeSuggestionContext } from "../db/suggestion-repo";
 import { getMeetingPollWorkspaceId, getPollFinalizationContext } from "../db/poll-repo";
 import {
@@ -148,7 +149,7 @@ const defaultFanOutDeps: FanOutDeps = {
 export async function fanOutBookingWebhooks(
   bookingId: string,
   kind: BookingWebhookKind,
-  opts?: { reason?: string },
+  opts?: { reason?: string; actor?: BookingActor },
   deps: FanOutDeps = defaultFanOutDeps,
 ): Promise<DeliveryJob[]> {
   const event = EVENT_NAME[kind];
@@ -194,6 +195,7 @@ export async function fanOutBookingWebhooks(
             : {}),
           ...(ctx.booking.bookingLocation ? { location: ctx.booking.bookingLocation } : {}),
           ...(opts?.reason !== undefined && { reason: opts.reason }),
+          ...(opts?.actor ? { actor: opts.actor } : {}),
         },
       }),
     };

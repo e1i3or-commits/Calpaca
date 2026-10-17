@@ -34,14 +34,24 @@ export interface CreatedPayload {
   readonly guestEmails?: readonly string[];
 }
 
+/** Who changed a booking when it was not the invitee's own token link.
+ * Absent means the invitee acted (or, for calendarObserved reschedules, the
+ * host's calendar did). */
+export interface BookingActor {
+  readonly kind: "organizer";
+  readonly userId: string;
+}
+
 export interface RescheduledPayload {
   readonly calendarObserved?: boolean;
   readonly startsAt: Temporal.Instant;
   readonly endsAt: Temporal.Instant;
+  readonly actor?: BookingActor;
 }
 
 export interface CancelledPayload {
   readonly reason?: string;
+  readonly actor?: BookingActor;
 }
 
 export interface ReassignedPayload {
