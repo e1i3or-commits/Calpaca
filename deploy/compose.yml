@@ -1,6 +1,8 @@
-# Production stack on the Hetzner box. Postgres is the only infrastructure
-# dependency (hard budget rule); NPM reaches the app by container name over
-# a shared external proxy network, so no host ports are published.
+# Production-style stack for running Calpaca behind an existing reverse proxy.
+# Postgres is the only infrastructure dependency; the proxy reaches the app by
+# container name over a shared external network, so no host ports are
+# published. For a simpler standalone setup with a published port, start from
+# compose.example.yml instead.
 #
 # Run from the repo root:
 #   docker compose -f deploy/compose.yml --env-file .env up -d --build
@@ -11,10 +13,10 @@
 # CALPACA_DEPLOYMENT_MODE=hosted flips hosted-only branches). Point
 # SCHEDULER_ENV_FILE at an absolute path outside the repo and pass the same path
 # to --env-file so compose interpolation resolves it:
-#   docker compose -f deploy/compose.yml --env-file /opt/scheduler-env/.env up -d --build
-# with SCHEDULER_ENV_FILE=/opt/scheduler-env/.env set inside that file.
+#   docker compose -f deploy/compose.yml --env-file /srv/calpaca-env/.env up -d --build
+# with SCHEDULER_ENV_FILE=/srv/calpaca-env/.env set inside that file.
 #
-# The env file (chmod 600, mirrored from Infisical /tier5/scheduler) must define:
+# The env file (chmod 600, populated from your secret manager) must define:
 #   SCHEDULER_DB_PASSWORD, DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL,
 #   PUBLIC_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SMTP_URL, EMAIL_FROM,
 #   EMAIL_DELIVERY_WEBHOOK_SECRET. Hosted custom-domain automation additionally

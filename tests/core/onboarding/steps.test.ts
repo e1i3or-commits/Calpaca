@@ -26,7 +26,7 @@ function freshHost(overrides: Partial<OnboardingFacts> = {}): OnboardingFacts {
 function readyHost(overrides: Partial<OnboardingFacts> = {}): OnboardingFacts {
   return freshHost({
     furthestStep: "publish",
-    workspace: { slug: "tourscale" },
+    workspace: { slug: "acme" },
     calendars: { connectedCount: 1, blockingCount: 1, hasWriteDestination: true },
     scheduleCount: 1,
     eventTypeCount: 1,
@@ -73,7 +73,7 @@ describe("onboardingSteps", () => {
   test("the link step is complete exactly when the placeholder slug is gone", () => {
     expect(onboardingSteps(freshHost()).find((s) => s.id === "link")?.complete).toBe(false);
     expect(
-      onboardingSteps(freshHost({ workspace: { slug: "tourscale" } }))
+      onboardingSteps(freshHost({ workspace: { slug: "acme" } }))
         .find((s) => s.id === "link")?.complete,
     ).toBe(true);
   });

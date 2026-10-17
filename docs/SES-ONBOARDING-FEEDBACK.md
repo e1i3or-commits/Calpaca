@@ -5,7 +5,7 @@ Protected kickoff and follow-up emails carry `X-SES-CONFIGURATION-SET` and
 of the saved RFC message ID). SES replaces message IDs; neither its generated
 ID nor `commonHeaders.messageId` identifies our operation independently.
 
-Configure these values through Infisical:
+Configure these values in the server environment (from your secret manager):
 
 - `ONBOARDING_SES_CONFIGURATION_SET`
 - `ONBOARDING_SES_TOPIC_ARN`

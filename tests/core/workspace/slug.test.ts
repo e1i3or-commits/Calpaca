@@ -10,7 +10,7 @@ import {
 
 describe("normalizeWorkspaceSlug", () => {
   test("lowercases and collapses separators into single hyphens", () => {
-    expect(normalizeWorkspaceSlug("  TourScale   Leadership  ")).toBe("tourscale-leadership");
+    expect(normalizeWorkspaceSlug("  Acme   Leadership  ")).toBe("acme-leadership");
     expect(normalizeWorkspaceSlug("Kai's Calendar!!")).toBe("kai-s-calendar");
     expect(normalizeWorkspaceSlug("a__b--c")).toBe("a-b-c");
   });
@@ -28,8 +28,8 @@ describe("normalizeWorkspaceSlug", () => {
 
 describe("validateWorkspaceSlug", () => {
   test("accepts a normalized slug and returns the normalized form", () => {
-    const result = validateWorkspaceSlug("  TourScale Leadership ");
-    expect(result).toEqual({ ok: true, value: "tourscale-leadership" });
+    const result = validateWorkspaceSlug("  Acme Leadership ");
+    expect(result).toEqual({ ok: true, value: "acme-leadership" });
   });
 
   test("distinguishes empty input from input with no usable characters", () => {
@@ -87,17 +87,17 @@ describe("isGeneratedWorkspaceSlug", () => {
   });
 
   test("treats a host-chosen slug as claimed even when it starts with workspace", () => {
-    expect(isGeneratedWorkspaceSlug("workspace-tourscale")).toBe(false);
-    expect(isGeneratedWorkspaceSlug("tourscale")).toBe(false);
+    expect(isGeneratedWorkspaceSlug("workspace-acme")).toBe(false);
+    expect(isGeneratedWorkspaceSlug("acme")).toBe(false);
     expect(isGeneratedWorkspaceSlug("workspace-0a1b2c3d4e5")).toBe(false);
   });
 });
 
 describe("suggestWorkspaceSlug", () => {
   test("prefers the name, falling back to the email local part", () => {
-    expect(suggestWorkspaceSlug({ name: "TourScale", email: "kai@tourscale.com" })).toBe("tourscale");
-    expect(suggestWorkspaceSlug({ name: "!!", email: "kai.kaapro@tourscale.com" }))
-      .toBe("kai-kaapro");
+    expect(suggestWorkspaceSlug({ name: "Acme Tours", email: "ops@acme.example" })).toBe("acme-tours");
+    expect(suggestWorkspaceSlug({ name: "!!", email: "riley.morgan@acme.example" }))
+      .toBe("riley-morgan");
   });
 
   test("returns null rather than prefilling something illegal", () => {

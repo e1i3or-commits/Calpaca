@@ -21,7 +21,7 @@ only an external correlation value. See the generated OpenAPI document for
 input fields and constraints.
 
 Provisioning requires four distinct Franchise Success user IDs and separate
-Kai/Andrew IDs. All six must be active workspace members. Kickoff requires all
+leader IDs (`kaiUserId`, `andrewUserId`). All six must be active workspace members. Kickoff requires all
 six. Follow-ups require the four Franchise Success members and include the two
 leaders as optional. Both durations default to 45 minutes. The account lead
 must be in Franchise Success; the organizer must be a kickoff participant.

@@ -43,7 +43,7 @@ Calendar setup and the actual slot are rechecked by the booking/reservation path
 
 The Engagement includes setup, readiness refresh, kickoff publication/link and
 cadence-start controls. Staff see the confirmed kickoff, exact dates and timezone
-before starting follow-ups. Kai/Andrew remain optional on follow-ups. Status copy
+before starting follow-ups. The two leaders remain optional on follow-ups. Status copy
 separates enabled cadence, saved reservations and queued/delivered invitations.
 The worker also now rejects inactive workspace memberships even when the stored
 role still says administrator.

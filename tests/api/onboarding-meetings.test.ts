@@ -5,7 +5,7 @@ import {createOnboardingMeetingRoutes,type OnboardingMeetingsDeps} from "../../s
 import {findGeminiNotes,MeetingNotesLookupError} from "../../src/sync/meeting-notes-google";
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
 const now=new Date("2026-09-30T18:30:00Z");
-const meeting=(n:number,organizer=id(7))=>({bookingId:id(n),sourceProjectKey:"cruisin-tikis-jacksonville-new-launch",sourceWorkspaceId:id(8),startsAt:"2026-09-30T17:00:00.000Z",endsAt:"2026-09-30T17:45:00.000Z",calendar:{organizerUserId:organizer,calendarId:"primary",eventId:`c${n}`}});
+const meeting=(n:number,organizer=id(7))=>({bookingId:id(n),sourceProjectKey:"acme-riverside-new-launch",sourceWorkspaceId:id(8),startsAt:"2026-09-30T17:00:00.000Z",endsAt:"2026-09-30T17:45:00.000Z",calendar:{organizerUserId:organizer,calendarId:"primary",eventId:`c${n}`}});
 function deps(role:"admin"|"member"|"anonymous"="admin"):OnboardingMeetingsDeps {
  const requireAuth:MiddlewareHandler<AuthEnv>=async(c,next)=>{if(role==="anonymous")return c.json({error:"unauthorized"},401);c.set("user",{id:id(1),name:"Operator",email:"operator@example.invalid",workspaceId:id(2),workspaceRole:role});await next();};
  return {requireAuth,now:()=>now,list:async()=>({meetings:[],nextCursor:null}),accessToken:async()=>"synthetic",notes:async()=>null};
