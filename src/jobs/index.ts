@@ -7,7 +7,7 @@ import { listEvents, watchEvents } from "../sync/google";
 import { REMINDER_LEAD, sendInvite, sendReminder } from "./invite-email";
 import { runKickoffDeliveryBatch } from "./kickoff-delivery";
 import type { InviteKind } from "../core/invite/email";
-import type { BookingActor } from "../core/booking/state";
+import type { BookingActor } from "@calpaca/core";
 import { listBookingsNeedingReminder } from "../db/booking-repo";
 import {
   listDuePollReminderJobs,

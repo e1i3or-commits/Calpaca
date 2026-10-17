@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createCalendarRoutes, type CalendarRouteDeps } from "../../src/api/routes/me";
 import type { ConnectionRow } from "../../src/db/sync-repo";
 import type { GoogleCalendar } from "../../src/sync/google";
-import { err, ok } from "../../src/lib/result";
+import { err, ok } from "@calpaca/core";
 
 const HOST_ID = "11111111-1111-1111-1111-111111111111";
 const CONN_ID = "22222222-2222-2222-2222-222222222222";

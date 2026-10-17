@@ -15,7 +15,7 @@ import {
 } from "../../db/sync-repo";
 import { listCalendars, stopChannel, type GoogleApiError, type GoogleCalendar } from "../../sync/google";
 import { enqueueSync } from "../../jobs/index";
-import type { Result } from "../../lib/result";
+import type { Result } from "@calpaca/core";
 
 /** The signed-in host's calendar settings surface. Same injection convention
  * as webhook-admin so tests stub Google and the repo. */

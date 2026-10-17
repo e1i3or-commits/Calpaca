@@ -3,7 +3,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { createBookingRoutes, type BookingDeps } from "../../src/api/routes/bookings";
 import type { BookingEventTypeConfig } from "../../src/db/availability-repo";
 import type { BookingRow } from "../../src/db/booking-repo";
-import { ok, err } from "../../src/lib/result";
+import { ok, err } from "@calpaca/core";
 
 /** The emitBookingWebhook hook on the cancel route — same injected-deps
  * convention as reschedule-context.test.ts. */

@@ -14,7 +14,8 @@
     "isolatedModules": true,
     "noEmit": true,
     "allowJs": false,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "paths": { "@calpaca/core": ["./packages/core/src/index.ts"] }
   },
   "include": ["src", "tests"]
 }

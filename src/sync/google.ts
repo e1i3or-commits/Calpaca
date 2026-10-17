@@ -1,5 +1,4 @@
-import { err, ok, type Result } from "../lib/result";
-import type { GoogleEvent } from "./busy-mapping";
+import { err, ok, type Result, type GoogleEvent } from "@calpaca/core";
 
 // Thin fetch wrapper over Google Calendar REST. No googleapis dependency:
 // the three endpoints v1 needs (calendarList, freeBusy, events) do not

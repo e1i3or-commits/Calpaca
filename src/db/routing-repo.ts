@@ -1,7 +1,6 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { Condition } from "../core/routing/condition";
-import type { RoutingField } from "../core/routing/form";
+import type { Condition, RoutingField } from "@calpaca/core";
 import { getDb } from "./client";
 import * as schema from "./schema";
 import { eventTypes, routingForms, routingRules, teamMembers } from "./schema";

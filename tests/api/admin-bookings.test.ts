@@ -13,7 +13,7 @@ import {
   type AdminBookingPage,
 } from "../../src/db/booking-repo";
 import { appendEvent } from "../../src/db/booking-repo";
-import { err, ok } from "../../src/lib/result";
+import { err, ok } from "@calpaca/core";
 import * as schema from "../../src/db/schema";
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";

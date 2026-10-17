@@ -131,7 +131,7 @@ import { slugify } from "@/lib/format";
 // Pure core module, no server or Temporal dependency — same boundary as
 // @/lib/appearance, which also reads straight from src/core.
 import { composeOfferSnippet } from "../../../src/core/invite/offer-snippet";
-import { allowedDurations } from "../../../src/core/booking/durations";
+import { allowedDurations } from "@calpaca/core";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

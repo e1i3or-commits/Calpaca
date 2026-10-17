@@ -1,6 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { getAuth } from "../auth/index";
-import { guestsToInvite } from "../core/booking/guests";
+import { guestsToInvite } from "@calpaca/core";
 import { buildIcs } from "../core/invite/ics";
 import { composeInviteEmail, type InviteKind } from "../core/invite/email";
 import {
@@ -32,7 +32,7 @@ async function emitRecordedEvent(
  * attaching the ICS only when no Google event exists so non-Google hosts and
  * outage windows keep a calendar artifact. Invitee in To, every host in Cc.
  *
- * Event-log semantics (src/core/booking/state.ts): invite_sent records the
+ * Event-log semantics (packages/core/src/booking/state.ts): invite_sent records the
  * SMTP handoff for created/rescheduled invites; cancellation notices append
  * nothing (invite events are illegal on a cancelled booking, by design).
  * invite_failed models a post-send bounce, so a send that throws here simply

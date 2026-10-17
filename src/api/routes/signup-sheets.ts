@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { Temporal } from "@js-temporal/polyfill";
 import { requireSession, type AuthEnv } from "../../auth/session";
-import { isIanaZone } from "../../lib/timezone";
+import { isIanaZone } from "@calpaca/core";
 import {
   cancelSignupRegistrationByOrganizer,
   cancelSignupRegistrations,

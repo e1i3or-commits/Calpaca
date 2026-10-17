@@ -8,7 +8,7 @@ import {
   revokeApiToken,
   updateProfile,
 } from "../../db/profile-repo";
-import { isIanaZone } from "../../lib/timezone";
+import { isIanaZone } from "@calpaca/core";
 import type { MiddlewareHandler } from "hono";
 
 const DATA_IMAGE_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;

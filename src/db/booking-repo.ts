@@ -11,21 +11,23 @@ import { getDb } from "./client";
 import { isAppAdmin } from "./admin-repo";
 import { bookingEvents, bookings, eventTypes, teamMembers, users } from "./schema";
 import * as schema from "./schema";
-import { ok, err, type Result } from "../lib/result";
 import {
+  ok,
+  err,
   applyEvent,
   projectState,
+  type Result,
   type BookingActor,
   type BookingEvent,
   type BookingEventKind,
   type BookingEventPayload,
   type BookingState,
-  type BookingStateError,
-} from "../core/booking/state";
-import type { BookingRecord } from "../core/assignment/round-robin";
-import type { AssignmentExplanation } from "../core/assignment/round-robin";
-import type { BookingAnswers } from "../core/booking/questions";
-import type { BookingLocation } from "../core/booking/locations";
+  type BookingRecord,
+  type AssignmentExplanation,
+  type BookingAnswers,
+  type BookingLocation,
+} from "@calpaca/core";
+import type { AppBookingStateError as BookingStateError } from "../core/engagement/kickoff-booking";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -368,7 +370,7 @@ export interface InviteContext {
   readonly eventTypeSlug: string;
   readonly eventTypeTheme?: string;
   readonly eventTypeLogoUrl?: string | null;
-  readonly bookingQuestions?: readonly import("../core/booking/questions").BookingQuestion[];
+  readonly bookingQuestions?: readonly import("@calpaca/core").BookingQuestion[];
   readonly hosts: readonly InviteHost[];
   /** Number of reschedules so far — the ICS SEQUENCE for iTIP updates. */
   readonly rescheduleCount: number;
@@ -441,7 +443,7 @@ export async function getInviteContext(
  * confirmation email and gets no extra nudge — and where no reminder has been
  * sent since the last reschedule, so moving a meeting re-arms its reminder.
  * Dedup lives here, in the log, not in a projection flag (see the
- * reminder_sent case in src/core/booking/state.ts).
+ * reminder_sent case in packages/core/src/booking/state.ts).
  */
 export async function listBookingsNeedingReminder(
   now: Temporal.Instant,
@@ -565,7 +567,7 @@ export interface AdminBookingDetail extends AdminBookingRow {
   readonly inviteePhone?: string | null;
   readonly routingAnswers: Record<string, string | string[]> | null;
   readonly bookingAnswers?: BookingAnswers;
-  readonly bookingQuestions?: readonly import("../core/booking/questions").BookingQuestion[];
+  readonly bookingQuestions?: readonly import("@calpaca/core").BookingQuestion[];
   readonly bookingLocation?: BookingLocation | null;
   readonly hasGoogleEvent: boolean;
   readonly events: readonly {

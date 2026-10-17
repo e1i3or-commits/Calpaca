@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { GoogleEvent } from "../sync/busy-mapping";
+import type { GoogleEvent } from "@calpaca/core";
 import { kickoffHosts, loadKickoffContext } from "./kickoff-context";
 import * as s from "./schema";
 type Db = NodePgDatabase<typeof s>;

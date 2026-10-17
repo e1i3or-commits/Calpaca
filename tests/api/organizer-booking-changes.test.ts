@@ -15,8 +15,14 @@ import {
   type BookingRow,
   type OrganizerBookingAccess,
 } from "../../src/db/booking-repo";
-import type { BookingActor, BookingState, BookingStateError } from "../../src/core/booking/state";
-import { err, ok, type Result } from "../../src/lib/result";
+import {
+  err,
+  ok,
+  type BookingActor,
+  type BookingState,
+  type BookingStateError,
+  type Result,
+} from "@calpaca/core";
 import * as schema from "../../src/db/schema";
 
 /**

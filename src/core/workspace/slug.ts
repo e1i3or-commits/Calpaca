@@ -1,4 +1,4 @@
-import { err, ok, type Result } from "../../lib/result";
+import { err, ok, type Result } from "@calpaca/core";
 
 /** Hosted public links put the workspace slug in the path
  * (`/book/<workspace>/<event-type>`, `/booking/<workspace>`), so a slug that

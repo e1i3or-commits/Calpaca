@@ -8,7 +8,7 @@ import { createAdminRoutes, type AdminDeps } from "../../src/api/routes/admin";
 import {
   buildAssignmentExplanation,
   type AssignmentExplanation,
-} from "../../src/core/assignment/round-robin";
+} from "@calpaca/core";
 import { confirmHold, createHold } from "../../src/db/holds-repo";
 import { getAssignmentExplanationForUser } from "../../src/db/booking-repo";
 import * as schema from "../../src/db/schema";

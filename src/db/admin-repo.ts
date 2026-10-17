@@ -12,9 +12,7 @@ import {
   teams,
   users,
 } from "./schema";
-import type { ScheduleOverride } from "../core/availability/overrides";
-import type { BookingQuestion } from "../core/booking/questions";
-import type { EventLocation } from "../core/booking/locations";
+import type { ScheduleOverride, BookingQuestion, EventLocation } from "@calpaca/core";
 
 type Db = NodePgDatabase<typeof schema>;
 

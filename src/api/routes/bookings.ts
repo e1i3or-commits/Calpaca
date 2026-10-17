@@ -39,20 +39,23 @@ import {
 import {
   effectiveOpenIntervals,
   forwardingIntervals,
-} from "../../core/availability/overrides";
-import { subtract, type Interval } from "../../core/availability/intervals";
-import { generateSlots } from "../../core/availability/slots";
-import type { AssignmentCandidate, BookingRecord } from "../../core/assignment/round-robin";
-import type { BookingActor, BookingState, BookingStateError } from "../../core/booking/state";
-import {
+  subtract,
+  generateSlots,
   validateBookingAnswers,
+  legacyLocations,
+  isAllowedDuration,
+  parseGuestEmails,
+  ok,
+  type Interval,
+  type AssignmentCandidate,
+  type BookingRecord,
+  type BookingActor,
+  type BookingState,
   type BookingAnswers,
-} from "../../core/booking/questions";
-import { legacyLocations } from "../../core/booking/locations";
-import { isAllowedDuration } from "../../core/booking/durations";
-import { parseGuestEmails } from "../../core/booking/guests";
-import type { RoutingAnswers } from "../../core/routing/condition";
-import { ok, type Result } from "../../lib/result";
+  type RoutingAnswers,
+  type Result,
+} from "@calpaca/core";
+import type { AppBookingStateError as BookingStateError } from "../../core/engagement/kickoff-booking";
 import { suggestEmailDomain } from "../../lib/email-typo";
 import { resolveTheme } from "../../core/theming/themes";
 import { privateThemeNames } from "../private-themes";
@@ -293,7 +296,7 @@ function paddedWindow(slot: Interval, bufferBeforeMin: number, bufferAfterMin: n
  * Recomputes whether one host is actually free for `slot` (open minus busy,
  * buffers, minimum notice) - the "do not trust the client" check task 14
  * calls for at hold time. Deliberately independent of generateSlots'
- * grid-discretization (src/core/availability/slots.ts): a hold request names
+ * grid-discretization (packages/core/src/availability/slots.ts): a hold request names
  * an exact start/end, not a grid position, so this checks containment
  * directly rather than requiring the requested slot to land on a increment
  * boundary.

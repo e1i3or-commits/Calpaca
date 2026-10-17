@@ -20,7 +20,7 @@ import {
   type PollRecord,
 } from "../../db/poll-repo";
 import { getInviteeCalendarSession } from "../../db/invitee-calendar-repo";
-import { isIanaZone } from "../../lib/timezone";
+import { isIanaZone, suggestOpenSlots, suggestionWindow, type Interval } from "@calpaca/core";
 import { createRateLimitMiddleware } from "../rate-limit";
 import { bucketStart, decide } from "../../core/ratelimit/window";
 import { incrementRateLimit } from "../../db/rate-limit-repo";
@@ -30,8 +30,6 @@ import {
   type HostBusy,
   type HostSchedule,
 } from "../../db/availability-repo";
-import { suggestOpenSlots, suggestionWindow } from "../../core/availability/suggest";
-import { type Interval } from "../../core/availability/intervals";
 import {
   emitPollFinalizedWebhook,
   enqueuePollInvitations,

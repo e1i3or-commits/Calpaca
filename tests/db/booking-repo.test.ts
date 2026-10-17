@@ -10,7 +10,7 @@ import { generateToken } from "../../src/lib/id";
 
 /**
  * Integration coverage for appendEvent/rebuildProjection against a real
- * Postgres instance. The pure state machine (tests/core/booking/state.test.ts)
+ * Postgres instance. The pure state machine (packages/core/test/booking/state.test.ts)
  * carries the transition-legality coverage for this task; these tests only
  * exercise the transaction + projection glue, so they need a real database
  * and SKIP cleanly without one (same convention task 12's holds-repo will use).

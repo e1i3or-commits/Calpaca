@@ -10,7 +10,7 @@ import {
   meetingPollVotes,
   meetingPolls,
 } from "./schema";
-import { rankPollOptions, type PollChoice } from "../core/polls/ranking";
+import { rankPollOptions, type PollChoice } from "@calpaca/core";
 
 type Db = NodePgDatabase<typeof schema>;
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");

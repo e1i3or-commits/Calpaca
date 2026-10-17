@@ -20,7 +20,7 @@ import {
   listWebhookDeliveries,
   recordWebhookDeliveryAttempt,
 } from "../../src/db/webhook-repo";
-import { ok } from "../../src/lib/result";
+import { ok } from "@calpaca/core";
 import * as schema from "../../src/db/schema";
 
 const BOOKING_ID = "11111111-1111-4111-8111-111111111111";

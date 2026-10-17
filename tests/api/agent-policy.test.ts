@@ -11,7 +11,7 @@ import type {
   HostSchedule,
 } from "../../src/db/availability-repo";
 import type { BookingRow } from "../../src/db/booking-repo";
-import { ok } from "../../src/lib/result";
+import { ok } from "@calpaca/core";
 
 const NOW = Temporal.Instant.from("2027-01-04T08:00:00Z");
 const SLOT = {

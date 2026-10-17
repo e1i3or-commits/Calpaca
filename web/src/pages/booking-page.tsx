@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowLeft, CalendarCheck, Check, Clock, Globe, Plus, Phone, Trash2, UserPlus, Video, X } from "lucide-react";
 // Pure core module: shares the ?slot= contract with the code that writes it.
 import { findSlotByInstant } from "../../../src/core/invite/offer-snippet";
-import { MAX_GUESTS } from "../../../src/core/booking/guests";
+import { MAX_GUESTS } from "@calpaca/core";
 import {
   ApiError,
   confirmBooking,

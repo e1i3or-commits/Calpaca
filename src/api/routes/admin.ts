@@ -48,7 +48,13 @@ import {
   type TeamMemberRecord,
   type TeamRecord,
 } from "../../db/admin-repo";
-import type { ScheduleOverride } from "../../core/availability/overrides";
+import {
+  isIanaZone,
+  type ScheduleOverride,
+  type AssignmentExplanation,
+  type BookingState,
+  type Result,
+} from "@calpaca/core";
 import {
   getBookingDetailForUser,
   getAssignmentExplanationForUser,
@@ -66,10 +72,7 @@ import {
   rescheduleAuthorizedBooking,
   type BookingDeps,
 } from "./bookings";
-import type { AssignmentExplanation } from "../../core/assignment/round-robin";
-import type { BookingState, BookingStateError } from "../../core/booking/state";
-import type { Result } from "../../lib/result";
-import { isIanaZone } from "../../lib/timezone";
+import type { AppBookingStateError as BookingStateError } from "../../core/engagement/kickoff-booking";
 import { emitBookingWebhook as jobsEmitBookingWebhook } from "../../jobs/index";
 
 /** The dashboard settings surface: event types, schedules, teams, and the

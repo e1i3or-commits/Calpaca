@@ -2,9 +2,13 @@ import {
   pgTable, uuid, text, integer, boolean, timestamp, date, jsonb,
   pgEnum, uniqueIndex, index, primaryKey, serial,
 } from "drizzle-orm/pg-core";
-import type { BookingAnswers, BookingQuestion } from "../core/booking/questions";
-import type { BookingLocation, EventLocation } from "../core/booking/locations";
-import type { RecommendationProvenance } from "../core/availability/provenance";
+import type {
+  BookingAnswers,
+  BookingQuestion,
+  BookingLocation,
+  EventLocation,
+  RecommendationProvenance,
+} from "@calpaca/core";
 import { sql } from "drizzle-orm";
 
 export const bookingEventKind = pgEnum("booking_event_kind", [
@@ -489,7 +493,7 @@ export const bookings = pgTable("bookings", {
   routingAnswers: jsonb("routing_answers"),
   bookingAnswers: jsonb("booking_answers").$type<BookingAnswers>().notNull().default({}),
   // Invitee-added guests. Real attendees: they go on the Google event, the ICS,
-  // and the email Cc. Bounded by MAX_GUESTS in src/core/booking/guests.ts.
+  // and the email Cc. Bounded by MAX_GUESTS in packages/core/src/booking/guests.ts.
   guestEmails: jsonb("guest_emails").$type<string[]>().notNull().default([]),
   bookingLocation: jsonb("booking_location").$type<BookingLocation>(),
   // set once the booking is written to the organizer host's Google calendar;

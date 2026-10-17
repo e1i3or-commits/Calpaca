@@ -2,9 +2,7 @@ import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { requireSession, type AuthEnv } from "../../auth/session";
-import type { Condition } from "../../core/routing/condition";
-import { evaluateRouting } from "../../core/routing/evaluate";
-import { validateAnswers } from "../../core/routing/form";
+import { evaluateRouting, validateAnswers, type Condition } from "@calpaca/core";
 import { defaultTheme, resolveTheme } from "../../core/theming/themes";
 import { privateThemeNames, themeNameSchema } from "../private-themes";
 import {
@@ -21,7 +19,7 @@ import { isTeamMember } from "../../db/admin-repo";
 import { publicWorkspaceId } from "../public-workspace";
 
 /** Routing forms: a public form whose answers pick the event type (and
- * optionally the host) via the rules AST in src/core/routing. Public surface
+ * optionally the host) via the rules AST in packages/core/src/routing. Public surface
  * exposes fields only — rules stay private to the form's owners. */
 export interface RoutingDeps {
   readonly requireAuth: MiddlewareHandler<AuthEnv>;

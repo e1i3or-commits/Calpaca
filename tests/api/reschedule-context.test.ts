@@ -3,7 +3,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { createBookingRoutes, type BookingDeps } from "../../src/api/routes/bookings";
 import type { BookingEventTypeConfig } from "../../src/db/availability-repo";
 import type { BookingRow } from "../../src/db/booking-repo";
-import { ok } from "../../src/lib/result";
+import { ok } from "@calpaca/core";
 
 /** GET /bookings/:id/reschedule-context (invite-email link target) plus the
  * enqueueInviteEmail hook — same injected-deps convention as bookings.test.ts. */
@@ -91,14 +91,14 @@ describe("GET /bookings/:id/reschedule-context", () => {
     const router = createBookingRoutes(
       makeDeps({
         getEventTypeForBookingById: async (id) =>
-          id === "et-solo" ? { ...eventType, workspaceSlug: "tourscale" } : null,
+          id === "et-solo" ? { ...eventType, workspaceSlug: "acme" } : null,
       }),
     );
     const res = await router.request(
       "/bookings/booking-1/reschedule-context?token=reschedule-token-123",
     );
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { workspaceSlug?: string }).workspaceSlug).toBe("tourscale");
+    expect(((await res.json()) as { workspaceSlug?: string }).workspaceSlug).toBe("acme");
   });
 
   test("403 on a wrong token, 400 without one, 404 for unknown booking", async () => {

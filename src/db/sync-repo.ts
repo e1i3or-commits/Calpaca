@@ -4,7 +4,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
 import * as schema from "./schema";
 import { calendarBusyCache, calendarConnections } from "./schema";
-import type { BusyChange } from "../sync/busy-mapping";
+import type { BusyChange } from "@calpaca/core";
 import type { SyncRepo } from "../sync/engine";
 
 type Db = NodePgDatabase<typeof schema>;

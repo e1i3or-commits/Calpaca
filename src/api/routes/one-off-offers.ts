@@ -9,10 +9,8 @@ import {
   revokeOneOffOffer,
 } from "../../db/one-off-offer-repo";
 import { getEventTypeForHost, isAppAdmin } from "../../db/admin-repo";
-import { isAllowedDuration } from "../../core/booking/durations";
+import { isAllowedDuration, suggestOpenSlots, suggestionWindow, isIanaZone } from "@calpaca/core";
 import { getBusyForUsers, getSchedulesForUsers } from "../../db/availability-repo";
-import { suggestOpenSlots, suggestionWindow } from "../../core/availability/suggest";
-import { isIanaZone } from "../../lib/timezone";
 
 const bodySchema = z.object({
   eventTypeId: z.string().uuid(),
