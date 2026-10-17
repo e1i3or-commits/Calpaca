@@ -318,3 +318,74 @@ export async function updateEngagementStatus(
   return { kind: "updated" as const, engagement };
   });
 }
+
+/**
+ * Add someone to an Engagement's team, or change their role on it. The team
+ * decides who can see a restricted Engagement and who it lists; it does not
+ * change who is invited to its meetings. Onboarding meeting rosters are
+ * protected by the onboarding plan and cannot be edited here.
+ */
+export async function setEngagementPerson(
+  workspaceId: string,
+  actor: EngagementActor,
+  engagementId: string,
+  person: { userId: string; role: string },
+  executor: Db = getDb(),
+) {
+  return executor.transaction(async (tx) => {
+    await tx.select({ id: schema.engagements.id }).from(schema.engagements)
+      .where(and(eq(schema.engagements.id, engagementId), eq(schema.engagements.workspaceId, workspaceId))).for("update");
+    const current = await getEngagement(workspaceId, actor, engagementId, tx);
+    if (!current) return { kind: "not_found" as const };
+    if (!current.canManage) return { kind: "forbidden" as const };
+    if (person.userId === current.accountLeadUserId) return { kind: "account_lead" as const };
+    const [member] = await tx.select({ userId: schema.workspaceMembers.userId }).from(schema.workspaceMembers)
+      .innerJoin(schema.users, eq(schema.users.id, schema.workspaceMembers.userId))
+      .where(and(
+        eq(schema.workspaceMembers.workspaceId, workspaceId),
+        eq(schema.workspaceMembers.status, "active"),
+        eq(schema.users.status, "active"),
+        eq(schema.workspaceMembers.userId, person.userId),
+      ));
+    if (!member) return { kind: "invalid_engagement_person" as const };
+    await tx.insert(schema.engagementPeople).values({ engagementId, userId: person.userId, role: person.role })
+      .onConflictDoUpdate({
+        target: [schema.engagementPeople.engagementId, schema.engagementPeople.userId],
+        set: { role: person.role },
+      });
+    await tx.update(schema.engagements).set({ updatedAt: new Date() }).where(eq(schema.engagements.id, engagementId));
+    return { kind: "updated" as const, people: (await getEngagement(workspaceId, actor, engagementId, tx))!.people };
+  });
+}
+
+/**
+ * Take someone off an Engagement's team. The account lead stays (change the
+ * lead first), and so does anyone on the onboarding meeting roster: removing
+ * them here would hide the Engagement from a person still invited to it.
+ */
+export async function removeEngagementPerson(
+  workspaceId: string,
+  actor: EngagementActor,
+  engagementId: string,
+  userId: string,
+  executor: Db = getDb(),
+) {
+  return executor.transaction(async (tx) => {
+    await tx.select({ id: schema.engagements.id }).from(schema.engagements)
+      .where(and(eq(schema.engagements.id, engagementId), eq(schema.engagements.workspaceId, workspaceId))).for("update");
+    const current = await getEngagement(workspaceId, actor, engagementId, tx);
+    if (!current) return { kind: "not_found" as const };
+    if (!current.canManage) return { kind: "forbidden" as const };
+    if (userId === current.accountLeadUserId) return { kind: "account_lead" as const };
+    const [onboarding] = await tx.select({ attendance: schema.franchiseOnboarding.attendance }).from(schema.franchiseOnboarding)
+      .where(and(eq(schema.franchiseOnboarding.workspaceId, workspaceId), eq(schema.franchiseOnboarding.engagementId, engagementId)));
+    const roster = [...(onboarding?.attendance.kickoff ?? []), ...(onboarding?.attendance.followup ?? [])];
+    if (roster.some((host) => host.userId === userId)) return { kind: "meeting_attendee" as const };
+    const removed = await tx.delete(schema.engagementPeople)
+      .where(and(eq(schema.engagementPeople.engagementId, engagementId), eq(schema.engagementPeople.userId, userId)))
+      .returning({ userId: schema.engagementPeople.userId });
+    if (!removed.length) return { kind: "person_not_found" as const };
+    await tx.update(schema.engagements).set({ updatedAt: new Date() }).where(eq(schema.engagements.id, engagementId));
+    return { kind: "removed" as const, people: (await getEngagement(workspaceId, actor, engagementId, tx))!.people };
+  });
+}

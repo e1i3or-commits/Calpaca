@@ -24,6 +24,7 @@ import {buildMail} from "../../src/jobs/invite-email";
 import {updateOnboardingClientContact,syncWorkspaceClientContact} from "../../src/db/onboarding-contact-repo";
 import {resolveClientContact} from "../../src/db/onboarding-contact-state";
 import {listEndedFollowups,listEndedFollowupsPage} from "../../src/db/onboarding-meetings-repo";
+import {getEngagementSeries,listEngagementSeries} from "../../src/db/engagement-series-repo";
 async function fixture() {
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL}),db=drizzle(pool,{schema:s});
  await migrate(db,{migrationsFolder:"drizzle"});await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);await db.delete(s.kickoffDeliveryWorker);
@@ -632,6 +633,41 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("kickoff and check-in meeting no
    await f.db.update(s.bookings).set({status:"cancelled"}).where(eq(s.bookings.id,checkin!.id));
    expect(await readClaimedMeeting(f.ws,checkin!.id,f.db)).toBeNull();
    expect((await listEndedFollowupsPage(f.ws,since,now,null,f.db)).meetings.map(m=>m.bookingId)).toEqual([f.source.id]);
+  }finally{await f.pool.end();}
+ });
+});
+describe.skipIf(!process.env.TEST_DATABASE_URL)("skipping one follow-up and reading the series",()=>{
+ test("skip cancels one booked call through the reviewed change; the series reads it back with the kickoff",async()=>{
+  const f=await fixture();try {
+   const reserved=await f.reserve();if(reserved.kind!=="reserved")throw new Error("booking missing");
+   const before=await getFollowupSchedule(f.ws,f.actor,f.id,f.db);if(before.kind!=="found"||!before.schedule)throw new Error("schedule missing");
+   const others=before.schedule.occurrences.slice(1);
+   expect((await applyFollowupSchedule(f.ws,f.actor,f.id,await reviewed(f,{action:"skip",occurrenceId:f.occurrence.id}),f.db)).kind).toBe("applied");
+   expect((await f.db.select().from(s.bookings).where(eq(s.bookings.id,reserved.bookingId)))[0]?.status).toBe("cancelled");
+   expect((await f.db.select().from(s.kickoffDeliveries).where(eq(s.kickoffDeliveries.bookingId,reserved.bookingId))).map(row=>row.kind).sort()).toEqual(["cancelled","created"]);
+   const after=await getFollowupSchedule(f.ws,f.actor,f.id,f.db);if(after.kind!=="found"||!after.schedule)throw new Error("schedule missing");
+   expect(after.schedule.occurrences[0]).toMatchObject({id:f.occurrence.id,status:"cancelled"});
+   expect(after.schedule.occurrences.slice(1)).toEqual(others);
+   expect(after.schedule.status).toBe("planned");
+   expect((await previewFollowupSchedule(f.ws,f.actor,f.id,{revision:after.revision,command:{action:"skip",occurrenceId:f.occurrence.id}},f.db))).toMatchObject({kind:"previewed",preview:{canApply:false}});
+
+   const series=await getEngagementSeries(f.ws,f.actor,f.id,f.db);if(!series)throw new Error("series missing");
+   expect(series.meetings.map(m=>[m.kind,m.state])).toEqual([["kickoff","held"],["followup","cancelled"],["followup","planned"],["followup","planned"]]);
+   expect(series.meetings[1]).toMatchObject({occurrenceId:f.occurrence.id,bookingId:reserved.bookingId});
+   expect(series.progress).toMatchObject({held:1,total:3,noShows:0,next:{occurrenceId:others[0]!.id}});
+   expect(series.onboarding).toMatchObject({sourceProjectKey:"reserve",locationName:"Sample City",stage:"followups"});
+   expect(series.schedule).toMatchObject({status:"planned",revision:after.revision,rule:{cadence:"biweekly"}});
+   expect(series.eventTypes.map(t=>[t.kind,t.published])).toEqual([["kickoff",false],["followup",false]]);
+   expect(series.people.find(p=>p.userId===f.ids[2])).toMatchObject({attendance:"required"});
+   expect(series.people.find(p=>p.userId===f.ids[0])).toMatchObject({attendance:"optional"});
+   const [listed]=await listEngagementSeries(f.ws,f.actor,{},f.db);
+   expect(listed).toMatchObject({id:f.id,progress:{held:1,total:3}});
+   expect(listed && "meetings" in listed).toBe(false);
+   // A window adds booked meetings only: the kickoff and the cancelled call, never the planned dates.
+   const [windowed]=await listEngagementSeries(f.ws,f.actor,{meetings:{from:new Date(Date.now()-86400_000),to:new Date(Date.now()+90*86400_000)}},f.db);
+   expect(windowed?.meetings?.map(m=>[m.kind,m.state])).toEqual([["kickoff","held"],["followup","cancelled"]]);
+   expect(windowed?.meetings?.[1]?.hostUserIds.length).toBeGreaterThan(0);
+   expect(await getEngagementSeries(crypto.randomUUID(),f.actor,f.id,f.db)).toBeNull();
   }finally{await f.pool.end();}
  });
 });

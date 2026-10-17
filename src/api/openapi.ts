@@ -28,6 +28,7 @@ import {
   scheduleBodySchema,
 } from "./routes/admin";
 import { prepareKickoffInput } from "./routes/franchise-onboarding";
+import { engagementPersonInput } from "./routes/engagement-series";
 
 type Method = "get" | "post" | "put" | "patch" | "delete";
 type Operation = readonly [
@@ -58,6 +59,7 @@ const requestSchemas = {
   OneOffMeeting: oneOffMeetingInput,
   FollowupPreview: followupPreviewInput,
   FollowupApply: followupApplyInput,
+  EngagementPerson: engagementPersonInput,
   OnboardingClientContact: onboardingClientContactUpdate,
   PrepareFollowup: prepareFollowupInput,
   ReserveFollowup: reserveFollowupInput,
@@ -172,6 +174,10 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/api/me/engagements/clients/similar", "Engagements", "Find possible duplicate clients", "session"],
   ["get", "/api/me/engagements/{id}", "Engagements", "Get an engagement overview", "session"],
   ["patch", "/api/me/engagements/{id}/status", "Engagements", "Change an engagement lifecycle status", "session"],
+  ["get", "/api/me/engagement-series", "Engagements", "List visible engagements as meeting series with progress, next meeting, team and owned event types", "session"],
+  ["get", "/api/me/engagement-series/{id}", "Engagements", "Get an engagement's meeting series: past and upcoming meetings, team and owned event types", "session"],
+  ["put", "/api/me/engagements/{id}/people/{userId}", "Engagements", "Add a workspace member to an engagement team or change their role", "session", "EngagementPerson"],
+  ["delete", "/api/me/engagements/{id}/people/{userId}", "Engagements", "Remove a person from an engagement team (not the account lead or a meeting attendee)", "session"],
   ["get", "/api/me/engagements/{engagementId}/conversations", "Conversations", "List an engagement's conversation playbooks", "session"],
   ["post", "/api/me/engagements/{engagementId}/conversations", "Conversations", "Create an engagement conversation playbook", "session"],
   ["get", "/api/me/engagements/{engagementId}/conversations/templates", "Conversations", "List reusable workspace playbooks", "session"],

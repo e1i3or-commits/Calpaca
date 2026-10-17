@@ -7,6 +7,25 @@ tracked with annotated Git tags named `v<version>`.
 
 ### User-facing improvements
 
+- Engagements read as meeting series over the API, for Tyger and other
+  dashboards: `GET /api/me/engagement-series` lists each visible Engagement
+  with its cadence, schedule status, held and planned meeting counts, next
+  meeting, team (with follow-up attendance) and the booking links it owns;
+  `GET /api/me/engagement-series/{id}` adds every meeting, past and upcoming,
+  with one state (planned, paused, booked, held, no-show, cancelled,
+  unbooked). `meetingsFrom`/`meetingsTo` add each Engagement's booked
+  meetings in a window. `GET /api/me/event-types` now carries each link's
+  `engagementId`.
+- A single follow-up date can be skipped: the follow-up schedule accepts
+  `{ "action": "skip", "occurrenceId": "..." }` through the same reviewed
+  preview and apply as a move, so a booked call is cancelled and the
+  franchisee told exactly as when a date is removed. The Engagement page has
+  a **Skip this meeting** button beside **Move this meeting**.
+- Engagement teams can be changed over the API:
+  `PUT /api/me/engagements/{id}/people/{userId}` with `{ "role" }` and
+  `DELETE` for the same path. Account leads and workspace admins only; the
+  account lead and anyone on the onboarding meeting roster stay.
+
 - Organizers can cancel and reschedule bookings through the API:
   `POST /api/me/bookings/{id}/cancel` (optional `reason`) and
   `POST /api/me/bookings/{id}/reschedule` (`start`, optional `end`). Hosts of
