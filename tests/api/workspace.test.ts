@@ -157,10 +157,10 @@ describe("workspace routes", () => {
 
   test("reports a free slug as available, normalized", async () => {
     const response = await createWorkspaceRoutes(deps())
-      .request("/api/me/workspace/slug-available?slug=TourScale%20Leadership");
+      .request("/api/me/workspace/slug-available?slug=Acme%20Leadership");
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      slug: "tourscale-leadership",
+      slug: "acme-leadership",
       available: true,
       reason: null,
     });
@@ -195,10 +195,10 @@ describe("workspace routes", () => {
     })).request("/api/me/workspace", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ slug: "  TourScale  " }),
+      body: JSON.stringify({ slug: "  Acme  " }),
     });
     expect(response.status).toBe(200);
-    expect(claimed).toEqual(["tourscale"]);
+    expect(claimed).toEqual(["acme"]);
   });
 
   test("rejects a reserved slug before it reaches the database", async () => {
@@ -224,7 +224,7 @@ describe("workspace routes", () => {
     })).request("/api/me/workspace", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ slug: "tourscale" }),
+      body: JSON.stringify({ slug: "acme" }),
     });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "slug_taken" });

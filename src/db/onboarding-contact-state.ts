@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { BookingEvent } from "../core/booking/state";
+import type { BookingEvent } from "@calpaca/core";
 import type { OnboardingClientContact } from "../core/engagement/franchise-onboarding";
 import type { KickoffContext } from "./kickoff-context";
 import * as s from "./schema";

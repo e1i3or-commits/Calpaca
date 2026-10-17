@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { Result } from "../../lib/result";
-import type { BookingStateError } from "../../core/booking/state";
+import type { Result } from "@calpaca/core";
+import type { AppBookingStateError as BookingStateError } from "../../core/engagement/kickoff-booking";
 import { getConnectionByChannelId } from "../../db/sync-repo";
 import { appendEvent } from "../../db/booking-repo";
 import { enqueueSync } from "../../jobs/index";

@@ -1,7 +1,5 @@
-import { isIanaZone } from "../../lib/timezone";
+import { isIanaZone, type WeeklyRule, type ScheduleOverride } from "@calpaca/core";
 import { Temporal } from "@js-temporal/polyfill";
-import type { WeeklyRule } from "../availability/rules";
-import type { ScheduleOverride } from "../availability/overrides";
 
 // Three missed 15-minute sync sweeps block onboarding setup. This is a
 // configuration check, never a substitute for checking a selected slot.

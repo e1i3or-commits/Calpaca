@@ -4,7 +4,7 @@ import { BrandMark } from "@/components/brand-mark";
 // Google's OAuth verification reads these two pages directly, so the privacy
 // policy must describe the actual Google data flow: which scopes, what is
 // persisted, and the Limited Use commitment. Keep it in sync with
-// src/sync/busy-mapping.ts and src/db/schema.ts — an inaccurate disclosure
+// packages/core/src/sync/busy-mapping.ts and src/db/schema.ts — an inaccurate disclosure
 // here is a failed brand review, not just a stale doc.
 const LAST_UPDATED = "July 27, 2026";
 const CONTACT_EMAIL = "kai@tourscale.com";

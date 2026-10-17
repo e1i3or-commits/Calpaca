@@ -42,9 +42,14 @@ database-backed behavior.
 
 - Use TypeScript and kebab-case filenames.
 - Prefer functions over classes.
-- Keep modules in `src/core/` pure: no database, network, filesystem, or
-  environment access.
-- Add a mirrored test under `tests/core/` for new core modules.
+- The scheduling engine lives in `packages/core` (`@calpaca/core`):
+  availability, slots, round robin, booking rules and lifecycle, routing,
+  polls, proposals and calendar busy mapping. It must stay pure (no database,
+  network, filesystem, clock or environment access) and its relative imports
+  use `.js` extensions so the package builds for Node ESM. Its tests live in
+  `packages/core/test/`.
+- App-level pure modules in `src/core/` follow the same rule; add a mirrored
+  test under `tests/core/` for new ones.
 - Never weaken or skip an existing assertion to make a change pass.
 - Treat booking events as append-only; mutate bookings through the event log,
   not by writing the projection directly.
@@ -54,6 +59,8 @@ database-backed behavior.
 All date/time work must be DST-safe. API responses containing a time should
 include UTC and the requester-declared timezone representation where
 applicable.
+
+By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Pull requests
 

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { err, ok, type Result } from "../../src/lib/result";
-import type { BusyChange } from "../../src/sync/busy-mapping";
+import { err, ok, type Result, type BusyChange } from "@calpaca/core";
 import { syncConnection, type SyncRepo } from "../../src/sync/engine";
 import type { EventsPage, GoogleApiError, ListEventsArgs } from "../../src/sync/google";
 

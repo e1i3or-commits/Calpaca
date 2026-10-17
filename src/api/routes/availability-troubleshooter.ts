@@ -7,9 +7,7 @@ import {
   getCapacityAwareBusyForUsers,
   getSchedulesForUsers,
 } from "../../db/availability-repo";
-import { diagnoseHostAvailability } from "../../core/availability/troubleshoot";
-import { forwardingIntervals } from "../../core/availability/overrides";
-import { isAllowedDuration } from "../../core/booking/durations";
+import { diagnoseHostAvailability, forwardingIntervals, isAllowedDuration } from "@calpaca/core";
 
 const bodySchema = z.object({
   eventTypeId: z.string().uuid(),

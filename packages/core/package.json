@@ -1,0 +1,45 @@
+{
+  "name": "@calpaca/core",
+  "version": "0.1.0",
+  "description": "Calpaca's pure scheduling engine: availability, slots, round-robin assignment, booking rules, routing, poll ranking and calendar busy mapping. No I/O.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test test",
+    "prepack": "bun run build"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "^0.5.1"
+  },
+  "keywords": [
+    "scheduling",
+    "availability",
+    "calendar",
+    "booking",
+    "round-robin",
+    "temporal"
+  ]
+}

@@ -320,7 +320,7 @@ function ProfileStep({ onDone }: { onDone: () => void }) {
           <Input
             id="onboarding-title"
             value={title}
-            placeholder="Co-CEO, TourScale"
+            placeholder="Head of Operations, Acme"
             onChange={(event) => setTitle(event.target.value)}
           />
         </div>

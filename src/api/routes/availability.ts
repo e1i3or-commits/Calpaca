@@ -22,29 +22,27 @@ import {
 import {
   effectiveOpenIntervals,
   forwardingIntervals,
-} from "../../core/availability/overrides";
-import {
   intersectMany,
   normalize,
   subtract,
-  type Interval,
-} from "../../core/availability/intervals";
-import { generateSlots, type SlotConfig } from "../../core/availability/slots";
-import { scoreSlots } from "../../core/availability/scoring";
-import type { ScoringSignals } from "../../core/availability/scoring";
-import {
+  generateSlots,
+  scoreSlots,
   confidenceFromEvidence,
   recommendationProvenance,
+  groupAvailability,
+  legacyLocations,
+  allowedDurations,
+  rankByMutualAvailability,
+  type Interval,
+  type SlotConfig,
+  type ScoringSignals,
   type RecommendationProvenance,
-} from "../../core/availability/provenance";
-import { groupAvailability, type GroupHost } from "../../core/availability/group";
+  type GroupHost,
+} from "@calpaca/core";
 import { resolveBookingLayout, resolveTheme } from "../../core/theming/themes";
 import { privateThemeNames } from "../private-themes";
 import { publicWorkspaceId } from "../public-workspace";
-import { legacyLocations } from "../../core/booking/locations";
-import { allowedDurations } from "../../core/booking/durations";
 import { getInviteeCalendarSession as dbGetInviteeCalendarSession } from "../../db/invitee-calendar-repo";
-import { rankByMutualAvailability } from "../../core/availability/mutual";
 import { getPublicWorkspaceEntitlements } from "../../db/workspace-repo";
 
 /**
@@ -237,7 +235,7 @@ type ProvenanceSlot = {
 
 /**
  * Availability with no hosts[] filter: union of every host configured on the
- * event type (mirrors src/core/assignment/round-robin.ts teamAvailability),
+ * event type (mirrors packages/core/src/assignment/round-robin.ts teamAvailability),
  * scored per host and deduped by keeping the best score per distinct slot. A
  * solo event type has exactly one host, so this degenerates to that host's
  * own scored slots.

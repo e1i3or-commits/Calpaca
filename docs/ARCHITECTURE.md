@@ -33,7 +33,11 @@ OAuth) is the only currently planned second-kind feature and is deferred to v2.
 
 ## Core engine modules
 
-### Availability (src/core/availability/)
+The engine is a separate workspace package, `@calpaca/core`
+([packages/core](../packages/core/README.md)). The app imports it by name; it
+has no I/O and builds to ESM with type declarations for other consumers.
+
+### Availability (packages/core/src/availability/)
 
 Input: busy intervals (from cache), working-hours rules, event type config
 (duration, buffers, minimum notice, rolling window, per-day caps), a query
@@ -52,7 +56,7 @@ Signals in v1:
 The default booking page shows the top 3 scored slots with "show all times"
 one click away. The slot wall is the fallback view, not the default.
 
-### Booking lifecycle (src/core/booking/)
+### Booking lifecycle (packages/core/src/booking/)
 
 Append-only event log: `booking_events` is the source of truth
 (created, rescheduled, cancelled, reassigned, no_show, invite_sent,
@@ -72,7 +76,7 @@ Trust details that are product features here:
 - invitee-local time displayed on both sides; bookings landing outside the
   invitee's reasonable local hours get a confirmation warning
 
-### Assignment (src/core/assignment/)
+### Assignment (packages/core/src/assignment/)
 
 Three modes over one availability engine:
 - solo: one host

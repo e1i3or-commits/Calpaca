@@ -1,0 +1,226 @@
+import type { Temporal } from "@js-temporal/polyfill";
+import { ok, err, type Result } from "../result.js";
+import type { RoutingAnswers } from "../routing/condition.js";
+import type { AssignmentExplanation } from "../assignment/round-robin.js";
+import type { BookingAnswers } from "./questions.js";
+import type { BookingLocation } from "./locations.js";
+
+/** Mirrors docs/SCHEMA.md `booking_event_kind`. Duplicated, not imported from
+ * src/db/schema: core must not depend on the database layer. */
+export type BookingEventKind =
+  | "created"
+  | "rescheduled"
+  | "cancelled"
+  | "reassigned"
+  | "no_show"
+  | "invite_sent"
+  | "invite_delivered"
+  | "invite_failed"
+  | "reminder_sent"
+  | "invitee_changed";
+
+export interface CreatedPayload {
+  readonly startsAt: Temporal.Instant;
+  readonly endsAt: Temporal.Instant;
+  readonly hostUserIds: readonly string[];
+  /** present when the invitee arrived via a routing form */
+  readonly routingAnswers?: RoutingAnswers;
+  readonly bookingAnswers?: BookingAnswers;
+  readonly bookingLocation?: BookingLocation;
+  /** round-robin decision captured at booking time; absent for solo/group */
+  readonly assignment?: AssignmentExplanation;
+  /** invitee-added guests, already normalized by core/booking/guests */
+  readonly guestEmails?: readonly string[];
+}
+
+/** Who changed a booking when it was not the invitee's own token link.
+ * Absent means the invitee acted (or, for calendarObserved reschedules, the
+ * host's calendar did). */
+export interface BookingActor {
+  readonly kind: "organizer";
+  readonly userId: string;
+}
+
+export interface RescheduledPayload {
+  readonly calendarObserved?: boolean;
+  readonly startsAt: Temporal.Instant;
+  readonly endsAt: Temporal.Instant;
+  readonly actor?: BookingActor;
+}
+
+export interface CancelledPayload {
+  readonly reason?: string;
+  readonly actor?: BookingActor;
+}
+
+export interface ReassignedPayload {
+  readonly hostUserIds: readonly string[];
+  /** present only when a future reassignment flow uses round-robin ranking */
+  readonly assignment?: AssignmentExplanation;
+}
+
+export type NoShowPayload = Record<string, never>;
+export type InviteSentPayload = Record<string, never>;
+export type InviteDeliveredPayload = Record<string, never>;
+export type ReminderSentPayload = Record<string, never>;
+
+/** The person the invitation is for changed; time and hosts did not. */
+export interface InviteeChangedPayload {
+  readonly email: string;
+  readonly name: string;
+  readonly previousEmail: string;
+}
+
+export interface InviteFailedPayload {
+  readonly reason?: string;
+}
+
+export type BookingEvent =
+  | { readonly kind: "created"; readonly payload: CreatedPayload }
+  | { readonly kind: "rescheduled"; readonly payload: RescheduledPayload }
+  | { readonly kind: "cancelled"; readonly payload: CancelledPayload }
+  | { readonly kind: "reassigned"; readonly payload: ReassignedPayload }
+  | { readonly kind: "no_show"; readonly payload: NoShowPayload }
+  | { readonly kind: "invite_sent"; readonly payload: InviteSentPayload }
+  | { readonly kind: "invite_delivered"; readonly payload: InviteDeliveredPayload }
+  | { readonly kind: "invite_failed"; readonly payload: InviteFailedPayload }
+  | { readonly kind: "reminder_sent"; readonly payload: ReminderSentPayload }
+  | { readonly kind: "invitee_changed"; readonly payload: InviteeChangedPayload };
+
+/** Extracts the payload type for a given event kind, for callers that build
+ * one event at a time (e.g. a db-layer appendEvent(bookingId, kind, payload)). */
+export type BookingEventPayload<K extends BookingEventKind> = Extract<BookingEvent, { kind: K }>["payload"];
+
+export type BookingLifecycleStatus = "confirmed" | "cancelled" | "no_show";
+export type InviteStatus = "none" | "sent" | "delivered" | "failed";
+
+export interface BookingState {
+  readonly status: BookingLifecycleStatus;
+  readonly startsAt: Temporal.Instant;
+  readonly endsAt: Temporal.Instant;
+  readonly hostUserIds: readonly string[];
+  readonly inviteStatus: InviteStatus;
+}
+
+/** Reasons the pure lifecycle fold can reject an event. Applications that
+ * guard bookings with extra rules widen this via `BookingStateError<R>`. */
+export type BookingStateErrorReason =
+  | "already_created"
+  | "not_created"
+  | "already_cancelled"
+  | "already_no_show"
+  | "booking_cancelled"
+  | "booking_no_show"
+  | "invite_not_sent"
+  | "empty_history";
+
+export interface BookingStateError<R extends string = BookingStateErrorReason> {
+  readonly kind: BookingEventKind | null;
+  readonly reason: R;
+}
+
+function illegal(kind: BookingEventKind, reason: BookingStateErrorReason): Result<BookingState, BookingStateError> {
+  return err({ kind, reason });
+}
+
+/**
+ * Applies one event to the current state (null = no "created" event yet).
+ * Illegal transitions (double create, any event before create, edits after
+ * cancelled/no_show, cancelling/no-showing twice, invite delivery/failure
+ * before send) are rejected with a typed reason instead of silently mutating.
+ */
+export function applyEvent(
+  state: BookingState | null,
+  event: BookingEvent,
+): Result<BookingState, BookingStateError> {
+  if (event.kind === "created") {
+    if (state !== null) return illegal(event.kind, "already_created");
+    return ok({
+      status: "confirmed",
+      startsAt: event.payload.startsAt,
+      endsAt: event.payload.endsAt,
+      hostUserIds: event.payload.hostUserIds,
+      inviteStatus: "none",
+    });
+  }
+
+  if (state === null) return illegal(event.kind, "not_created");
+
+  switch (event.kind) {
+    case "rescheduled": {
+      if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
+      return ok({ ...state, startsAt: event.payload.startsAt, endsAt: event.payload.endsAt, inviteStatus: event.payload.calendarObserved ? state.inviteStatus : "none" });
+    }
+
+    case "cancelled": {
+      if (state.status === "cancelled") return illegal(event.kind, "already_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
+      return ok({ ...state, status: "cancelled" });
+    }
+
+    case "reassigned": {
+      if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
+      return ok({ ...state, hostUserIds: event.payload.hostUserIds });
+    }
+
+    case "no_show": {
+      if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "already_no_show");
+      return ok({ ...state, status: "no_show" });
+    }
+
+    case "invite_sent": {
+      if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
+      return ok({ ...state, inviteStatus: "sent" });
+    }
+
+    case "invite_delivered": {
+      if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
+      if (state.inviteStatus !== "sent") return illegal(event.kind, "invite_not_sent");
+      return ok({ ...state, inviteStatus: "delivered" });
+    }
+
+    case "invite_failed": {
+      if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
+      if (state.inviteStatus !== "sent" && state.inviteStatus !== "delivered") return illegal(event.kind, "invite_not_sent");
+      return ok({ ...state, inviteStatus: "failed" });
+    }
+
+    case "reminder_sent": {
+      // Deliberately state-neutral: "was a reminder sent since the last
+      // reschedule" is answered by the event log itself (the reminder sweep's
+      // NOT EXISTS), not by a projection field — so BookingState keeps its
+      // shape and the log stays the single source of truth.
+      if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
+      return ok(state);
+    }
+
+    case "invitee_changed": {
+      // The invitee lives on the booking row, not in the projection. A new
+      // recipient still needs a fresh delivery, so the invite resets.
+      if (state.status === "cancelled") return illegal(event.kind, "booking_cancelled");
+      if (state.status === "no_show") return illegal(event.kind, "booking_no_show");
+      return ok({ ...state, inviteStatus: "none" });
+    }
+  }
+}
+
+/** Folds a full event history into the current state. An empty history is
+ * itself an error: there is no booking without a "created" event. */
+export function projectState(events: readonly BookingEvent[]): Result<BookingState, BookingStateError> {
+  if (events.length === 0) return err({ kind: null, reason: "empty_history" });
+
+  let state: BookingState | null = null;
+  for (const event of events) {
+    const result = applyEvent(state, event);
+    if (!result.ok) return result;
+    state = result.value;
+  }
+  return ok(state as BookingState);
+}

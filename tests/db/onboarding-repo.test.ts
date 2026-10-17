@@ -36,7 +36,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("onboarding repo", () => {
       plan: "free",
     }).returning();
     const [user] = await db.insert(schema.users).values({
-      name: "Kai Kaapro",
+      name: "Riley Morgan",
       email: `onboarding-${tag}@example.test`,
     }).returning();
     await db.insert(schema.workspaceMembers).values({

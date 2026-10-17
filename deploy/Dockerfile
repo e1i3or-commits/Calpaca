@@ -3,6 +3,8 @@
 FROM oven/bun:1.3 AS build
 WORKDIR /app
 COPY package.json bun.lock ./
+# workspace manifests must exist before install so the lockfile resolves
+COPY packages/core/package.json ./packages/core/
 RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build:web
@@ -10,7 +12,10 @@ RUN bun run build:web
 FROM oven/bun:1.3
 WORKDIR /app
 COPY package.json bun.lock ./
+COPY packages/core/package.json ./packages/core/
 RUN bun install --frozen-lockfile --production
+# @calpaca/core runs from source under Bun (its "bun" export condition)
+COPY packages/core/src ./packages/core/src
 COPY src ./src
 COPY drizzle ./drizzle
 COPY drizzle.config.ts tsconfig.json ./

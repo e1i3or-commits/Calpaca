@@ -5,7 +5,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { createBookingRoutes, type BookingDeps } from "../../src/api/routes/bookings";
 import type { BookingEventTypeConfig, HostSchedule } from "../../src/db/availability-repo";
 import type { BookingRow } from "../../src/db/booking-repo";
-import { ok } from "../../src/lib/result";
+import { ok } from "@calpaca/core";
 import { createSchedulerMcpServer } from "../../src/mcp/server";
 
 const NOW = Temporal.Instant.from("2027-01-04T08:00:00Z");

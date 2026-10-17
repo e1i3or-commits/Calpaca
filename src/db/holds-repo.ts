@@ -4,25 +4,27 @@ import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
 import { bookings, eventTypes, holds, oneOffOffers, proposals } from "./schema";
 import * as schema from "./schema";
-import { ok, err, type Result } from "../lib/result";
+import {
+  ok,
+  err,
+  buildAssignmentExplanation,
+  resolveBookingLocation,
+  type Result,
+  type AssignmentCandidate,
+  type AssignmentExplanation,
+  type BookingRecord,
+  type BookingActor,
+  type BookingState,
+  type RoutingAnswers,
+  type BookingAnswers,
+  type EventLocation,
+  type LocationType,
+} from "@calpaca/core";
 import { generateToken } from "../lib/id";
 import { appendEvent } from "./booking-repo";
 import { guardKickoffBooking } from "./kickoff-booking-guard";
 import type { KickoffBookingError } from "../core/engagement/kickoff-booking";
-import {
-  buildAssignmentExplanation,
-  type AssignmentCandidate,
-  type AssignmentExplanation,
-  type BookingRecord,
-} from "../core/assignment/round-robin";
-import type { BookingActor, BookingState, BookingStateError } from "../core/booking/state";
-import type { RoutingAnswers } from "../core/routing/condition";
-import type { BookingAnswers } from "../core/booking/questions";
-import {
-  resolveBookingLocation,
-  type EventLocation,
-  type LocationType,
-} from "../core/booking/locations";
+import type { AppBookingStateError as BookingStateError } from "../core/engagement/kickoff-booking";
 
 type Db = NodePgDatabase<typeof schema>;
 

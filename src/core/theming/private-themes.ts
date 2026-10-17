@@ -9,7 +9,7 @@
  * passes the raw string in.
  */
 
-import { err, ok, type Result } from "../../lib/result";
+import { err, ok, type Result } from "@calpaca/core";
 import { publicThemeNames } from "./themes";
 
 export interface PrivateTheme {

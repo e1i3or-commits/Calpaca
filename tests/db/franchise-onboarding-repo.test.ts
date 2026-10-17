@@ -14,8 +14,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("franchise onboarding repository
   try {
    await migrate(db,{migrationsFolder:"drizzle"});
    await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);
-   const people=await db.insert(s.users).values(["Kai Kaapro","Andrew Cole","Jake Halbert","Andres Duque","Santiago Yanine","Cal Alte","Other admin","Outsider"].map((name,i)=>({name,email:`onboarding-${i}@example.test`}))).returning();
-   const [ws,other]=await db.insert(s.workspaces).values([{name:"TourScale",slug:"onboarding-test"},{name:"Other",slug:"other-onboarding-test"}]).returning();
+   const people=await db.insert(s.users).values(["Leader One","Leader Two","Success One","Success Two","Success Three","Success Four","Other admin","Outsider"].map((name,i)=>({name,email:`onboarding-${i}@example.test`}))).returning();
+   const [ws,other]=await db.insert(s.workspaces).values([{name:"Acme Tours",slug:"onboarding-test"},{name:"Other",slug:"other-onboarding-test"}]).returning();
    await db.insert(s.workspaceMembers).values(people.map(person=>({workspaceId:ws!.id,userId:person.id,role:person===people[0]?"admin" as const:"member" as const})));
    const actor={userId:people[0]!.id,workspaceRole:"admin" as const};
    const input=franchiseOnboardingInput.parse({sourceWorkspaceId:crypto.randomUUID(),sourceProjectKey:"new-location",locationKey:crypto.randomUUID(),franchiseeId:"5854883000000000001",businessUnitId:"5854883000000000002",primaryContactId:"5854883000000000003",clientName:"Sample Entity",locationName:"Sample City",franchiseSuccessUserIds:people.slice(2,6).map(p=>p.id),kaiUserId:people[0]!.id,andrewUserId:people[1]!.id,accountLeadUserId:people[2]!.id,organizerUserId:people[2]!.id});

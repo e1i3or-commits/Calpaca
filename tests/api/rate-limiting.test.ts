@@ -15,7 +15,7 @@ import {
   incrementRateLimit,
   reapRateLimits,
 } from "../../src/db/rate-limit-repo";
-import { ok } from "../../src/lib/result";
+import { ok } from "@calpaca/core";
 import * as schema from "../../src/db/schema";
 
 const NOW = Temporal.Instant.from("2027-01-04T08:00:00Z");

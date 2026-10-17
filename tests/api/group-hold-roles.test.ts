@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { Temporal } from "@js-temporal/polyfill";
 import { createBookingRoutes, type BookingDeps } from "../../src/api/routes/bookings";
 import type { BookingEventTypeConfig } from "../../src/db/availability-repo";
-import { ok } from "../../src/lib/result";
+import { ok } from "@calpaca/core";
 
 const NOW = Temporal.Instant.from("2027-01-04T08:00:00Z");
 const eventType: BookingEventTypeConfig = {

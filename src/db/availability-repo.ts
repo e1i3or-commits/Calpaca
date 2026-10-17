@@ -4,11 +4,12 @@ import { Temporal } from "@js-temporal/polyfill";
 import { getDb } from "./client";
 import * as schema from "./schema";
 import { bookingPages, bookings, calendarBusyCache, calendarConnections, eventTypeHosts, eventTypes, holds, schedules, teams, users, workspaces } from "./schema";
-import type { Interval } from "../core/availability/intervals";
-import type { WeeklyRule } from "../core/availability/rules";
-import type { ScheduleOverride } from "../core/availability/overrides";
-import type { BookingQuestion } from "../core/booking/questions";
-import type { EventLocation } from "../core/booking/locations";
+import type {
+  Interval,
+  BookingQuestion,
+  EventLocation,
+  HostSchedule,
+} from "@calpaca/core";
 import { kickoffPubliclyAvailable, loadKickoffContext } from "./kickoff-context";
 
 type Db = NodePgDatabase<typeof schema>;
@@ -231,12 +232,7 @@ export interface EventTypeHostRecord {
   readonly image?: string | null;
 }
 
-export interface HostSchedule {
-  readonly userId: string;
-  readonly timezone: string;
-  readonly rules: readonly WeeklyRule[];
-  readonly overrides?: readonly ScheduleOverride[];
-}
+export type { HostSchedule } from "@calpaca/core";
 
 export interface HostBusy {
   readonly userId: string;

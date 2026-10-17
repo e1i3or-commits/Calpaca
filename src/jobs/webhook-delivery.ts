@@ -1,6 +1,6 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { getInviteContext } from "../db/booking-repo";
-import type { BookingActor } from "../core/booking/state";
+import type { BookingActor } from "@calpaca/core";
 import { getTimeSuggestionContext } from "../db/suggestion-repo";
 import { getMeetingPollWorkspaceId, getPollFinalizationContext } from "../db/poll-repo";
 import {

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createEmailDeliveryRoutes, type EmailDeliveryDeps } from "../../src/api/routes/webhooks";
-import { ok, err } from "../../src/lib/result";
-import type { BookingStateError } from "../../src/core/booking/state";
+import { ok, err, type BookingStateError } from "@calpaca/core";
 
 /** POST /api/webhooks/email-delivery — the normalized inbound feedback
  * endpoint (an n8n flow translates provider bounce/delivery notifications

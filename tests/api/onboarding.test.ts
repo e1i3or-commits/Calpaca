@@ -23,7 +23,7 @@ function facts(overrides: Partial<OnboardingFacts> = {}): OnboardingFacts {
 function readyFacts(overrides: Partial<OnboardingFacts> = {}): OnboardingFacts {
   return facts({
     furthestStep: "publish",
-    workspace: { slug: "tourscale" },
+    workspace: { slug: "acme" },
     calendars: { connectedCount: 1, blockingCount: 1, hasWriteDestination: true },
     scheduleCount: 1,
     eventTypeCount: 1,
@@ -36,8 +36,8 @@ function deps(overrides: Partial<OnboardingDeps> = {}): OnboardingDeps {
     requireAuth: async (c, next) => {
       c.set("user", {
         id: USER_ID,
-        email: "kai@tourscale.test",
-        name: "Kai Kaapro",
+        email: "riley@acme.test",
+        name: "Riley Morgan",
         workspaceId: WORKSPACE_ID,
         workspaceRole: "owner",
       });
@@ -81,18 +81,18 @@ describe("GET /api/me/onboarding", () => {
       requireAuth: async (c, next) => {
         c.set("user", {
           id: USER_ID,
-          email: "jake@tourscale.test",
+          email: "sam@acme.test",
           name: "Jake",
           workspaceId: WORKSPACE_ID,
           workspaceRole: "member",
         });
         await next();
       },
-      getFacts: async () => facts({ workspace: { slug: "tourscale" } }),
+      getFacts: async () => facts({ workspace: { slug: "acme" } }),
     }));
     const response = await routes.request("/api/me/onboarding");
     expect(await response.json()).toMatchObject({
-      workspace: { slug: "tourscale", slugIsPlaceholder: false, canManage: false },
+      workspace: { slug: "acme", slugIsPlaceholder: false, canManage: false },
     });
   });
 
@@ -102,7 +102,7 @@ describe("GET /api/me/onboarding", () => {
       workspace: {
         slug: "workspace-0a1b2c3d4e5f",
         slugIsPlaceholder: true,
-        suggestedSlug: "kai-kaapro",
+        suggestedSlug: "riley-morgan",
       },
     });
   });
@@ -110,7 +110,7 @@ describe("GET /api/me/onboarding", () => {
   test("stops suggesting once a real slug is claimed", async () => {
     const router = createOnboardingRoutes(deps({ getFacts: async () => readyFacts() }));
     expect(await (await router.request("/api/me/onboarding")).json()).toMatchObject({
-      workspace: { slug: "tourscale", slugIsPlaceholder: false, suggestedSlug: null },
+      workspace: { slug: "acme", slugIsPlaceholder: false, suggestedSlug: null },
       nextStep: null,
       canComplete: true,
     });

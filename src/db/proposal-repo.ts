@@ -1,14 +1,14 @@
 import { and, asc, desc, eq, gt } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { EngagementActor } from "../core/engagement/permissions";
-import { isAllowedDuration } from "../core/booking/durations";
 import {
+  isAllowedDuration,
   canEditProposal,
   effectiveProposalStatus,
   transitionProposal,
   type ProposalAction,
   type ProposalStatus,
-} from "../core/proposals/state";
+} from "@calpaca/core";
 import { generateToken } from "../lib/id";
 import { getDb } from "./client";
 import { getEngagement } from "./engagement-repo";

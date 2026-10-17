@@ -19,7 +19,12 @@ export default defineConfig({
     __CALPACA_VERSION__: JSON.stringify(packageJson.version),
   },
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      // the engine ships TypeScript source inside the workspace; the browser
+      // bundle compiles it directly instead of needing a prebuilt dist/
+      "@calpaca/core": fileURLToPath(new URL("../packages/core/src/index.ts", import.meta.url)),
+    },
   },
   build: {
     outDir: "../dist/web",

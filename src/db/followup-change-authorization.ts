@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { BookingEvent } from "../core/booking/state";
+import type { BookingEvent } from "@calpaca/core";
 import type { KickoffContext } from "./kickoff-context";
 import * as s from "./schema";
 /** Only the atomic reviewed-plan transaction can satisfy this proof: its

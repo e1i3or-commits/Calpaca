@@ -1,5 +1,11 @@
-import { err, ok, type Result } from "../lib/result";
-import { mapEventToBusyChange, type BusyChange, type GoogleEvent } from "./busy-mapping";
+import {
+  err,
+  ok,
+  mapEventToBusyChange,
+  type Result,
+  type BusyChange,
+  type GoogleEvent,
+} from "@calpaca/core";
 import type { EventsPage, GoogleApiError, ListEventsArgs } from "./google";
 
 // Sync orchestration with injected I/O so tests run against fakes. The

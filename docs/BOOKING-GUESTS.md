@@ -16,7 +16,7 @@ confirmation, reschedule, and cancellation email, and they appear as an
 `ATTENDEE` line in the ICS attachment used on the no-Google fallback path.
 
 At most ten guests may be added. The limit is `MAX_GUESTS` in
-`src/core/booking/guests.ts` rather than a per-event-type column: a public form
+`packages/core/src/booking/guests.ts` rather than a per-event-type column: a public form
 that fans out unbounded mail from `noreply@calpaca.io` is a deliverability
 risk, and one tested constant is cheaper than a column, a Zod field, a form
 input, and a number every organizer has to think about.
@@ -45,7 +45,7 @@ only other place they live.
 
 ## Validation
 
-`src/core/booking/guests.ts` is pure and owns every rule:
+`packages/core/src/booking/guests.ts` is pure and owns every rule:
 
 ```ts
 export const MAX_GUESTS = 10;
@@ -215,7 +215,7 @@ tracked for a future fix.
 
 ## Tests
 
-`tests/core/booking/guests.test.ts` carries the real coverage: deduplication,
+`packages/core/test/booking/guests.test.ts` carries the real coverage: deduplication,
 case folding, invitee and host exclusion, the cap boundary, and malformed
 input.
 

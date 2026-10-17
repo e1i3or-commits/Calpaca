@@ -75,7 +75,7 @@ export function OnboardingSchedulingPanel({engagement,reload}:{engagement:Engage
       </details>
       <div className="mt-5 border-t border-border pt-4"><h5 className="text-sm font-medium">Follow-up invitations</h5>
         {state.followups.enabled?<p role="status" className="mt-2 text-sm">Cadence enabled. Manage dates, pauses and invitation status in the meeting list above.</p>:<>
-          <p className="mt-2 text-sm text-muted-foreground">Review these dates with the franchisee before starting. Franchise Success attends every call; Kai and Andrew are optional.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Review these dates with the franchisee before starting. Franchise Success attends every call; the two leaders are optional.</p>
           <Issues items={state.followups.issues}/>
           {state.canPublish&&!state.followups.prepared?<button className={`${button} mt-3`} disabled={busy} onClick={()=>void act("prepare-followups")}>Set up follow-up calls</button>:null}
           {state.followups.eligibleKickoffs.length>0?<label className="mt-3 grid gap-1 text-sm">Kickoff for this cadence<select className="min-h-11 rounded-md border border-input bg-background px-3" value={kickoffId} disabled={busy||!state.canEnable} onChange={event=>setSelectedKickoff(event.target.value)}><option value="">Choose the confirmed kickoff</option>{state.followups.eligibleKickoffs.map(booking=><option key={booking.id} value={booking.id}>{format(booking.startsAt)}</option>)}</select></label>:null}
