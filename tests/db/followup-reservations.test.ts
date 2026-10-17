@@ -663,6 +663,10 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("skipping one follow-up and read
    const [listed]=await listEngagementSeries(f.ws,f.actor,{},f.db);
    expect(listed).toMatchObject({id:f.id,progress:{held:1,total:3}});
    expect(listed && "meetings" in listed).toBe(false);
+   // A window adds booked meetings only: the kickoff and the cancelled call, never the planned dates.
+   const [windowed]=await listEngagementSeries(f.ws,f.actor,{meetings:{from:new Date(Date.now()-86400_000),to:new Date(Date.now()+90*86400_000)}},f.db);
+   expect(windowed?.meetings?.map(m=>[m.kind,m.state])).toEqual([["kickoff","held"],["followup","cancelled"]]);
+   expect(windowed?.meetings?.[1]?.hostUserIds.length).toBeGreaterThan(0);
    expect(await getEngagementSeries(crypto.randomUUID(),f.actor,f.id,f.db)).toBeNull();
   }finally{await f.pool.end();}
  });

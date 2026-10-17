@@ -49,6 +49,11 @@ describe("engagement series routes", () => {
     expect(received.slice(0, 3)).toEqual([WORKSPACE_ID, { userId: USER_ID, workspaceRole: "admin" }, { status: "paused" }]);
     expect((await app.request("/api/me/engagement-series?status=gone")).status).toBe(400);
     expect((await app.request("/api/me/engagement-series?other=1")).status).toBe(400);
+    const from = "2026-10-01T00:00:00Z", to = "2026-11-01T00:00:00Z";
+    expect((await app.request(`/api/me/engagement-series?meetingsFrom=${from}&meetingsTo=${to}`)).status).toBe(200);
+    expect(received[2]).toEqual({ meetings: { from: new Date(from), to: new Date(to) } });
+    expect((await app.request(`/api/me/engagement-series?meetingsFrom=${from}`)).status).toBe(400);
+    expect((await app.request(`/api/me/engagement-series?meetingsFrom=${from}&meetingsTo=2027-03-01T00:00:00Z`)).status).toBe(400);
   });
 
   test("detail answers 404 for a malformed or invisible id", async () => {

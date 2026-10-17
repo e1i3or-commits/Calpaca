@@ -13,7 +13,7 @@ import { previewSchedule, type ScheduleSnapshot } from "../../../src/core/engage
 const now = new Date("2027-02-01T12:00:00Z");
 const at = (iso: string) => new Date(iso);
 const booking = (id: string, eventTypeId: string, start: string, status = "confirmed"): BookingInput => ({
-  id, eventTypeId, startsAt: at(start), endsAt: new Date(at(start).getTime() + 45 * 60_000), status, inviteStatus: "delivered", inviteeName: "Pat Owner",
+  id, eventTypeId, startsAt: at(start), endsAt: new Date(at(start).getTime() + 45 * 60_000), status, inviteStatus: "delivered", inviteeName: "Pat Owner", hostUserIds: ["host-1"],
 });
 const occurrence = (id: string, start: string, status: OccurrenceInput["status"], b: BookingInput | null = null): OccurrenceInput => ({
   id, startsAt: at(start), endsAt: new Date(at(start).getTime() + 45 * 60_000), status, exception: false, booking: b,
@@ -58,7 +58,8 @@ describe("engagement series", () => {
       ["o2", "followup", "planned"],
       ["o3", "followup", "cancelled"],
     ]);
-    expect(meetings[1]).toMatchObject({ bookingId: "b2", occurrenceId: "o1", inviteeName: "Pat Owner" });
+    expect(meetings[1]).toMatchObject({ bookingId: "b2", occurrenceId: "o1", inviteeName: "Pat Owner", hostUserIds: ["host-1"] });
+    expect(meetings[2]).toMatchObject({ bookingId: null, hostUserIds: [] });
     const progress = seriesProgress(meetings, now);
     expect(progress).toMatchObject({ held: 2, total: 3, noShows: 0 });
     expect(progress.next?.id).toBe("o2");
@@ -67,7 +68,7 @@ describe("engagement series", () => {
 
   test("the onboarding stage moves kickoff, follow-ups, check-in, complete", () => {
     const m = (kind: "kickoff" | "followup" | "checkin", state: "held" | "planned" | "booked") =>
-      ({ id: `${kind}-${state}`, kind, title: "", startsAt: "", endsAt: "", state, bookingId: null, occurrenceId: null, exception: false, inviteStatus: null, inviteeName: null });
+      ({ id: `${kind}-${state}`, kind, title: "", startsAt: "", endsAt: "", state, bookingId: null, occurrenceId: null, exception: false, inviteStatus: null, inviteeName: null, hostUserIds: [] });
     expect(onboardingStage([m("kickoff", "booked")], null)).toBe("kickoff");
     expect(onboardingStage([m("kickoff", "held")], null)).toBe("followups");
     expect(onboardingStage([m("kickoff", "held"), m("followup", "planned")], "planned")).toBe("followups");

@@ -54,7 +54,11 @@ Engagements.
   `progress` (`held`, `total`, `noShows`, `next`, `lastHeld`), `people`
   (Engagement role and follow-up `attendance`), the `eventTypes` it owns
   (`kind` kickoff, followup, checkin, one_off or conversation, and whether it
-  is `published`) and `canManage`.
+  is `published`) and `canManage`. With `meetingsFrom` and `meetingsTo` (ISO
+  instants, at most 93 days apart) each Engagement also carries its booked
+  meetings that start in that window, with their `hostUserIds`, so a calendar
+  outside Calpaca can show them beside other bookings. Planned dates are left
+  out.
 - `GET /api/me/engagement-series/{id}` adds `meetings`: every kickoff,
   check-in, one-off and conversation booking and every follow-up date, with
   `state` planned, paused, booked, held, no_show, cancelled or unbooked (a

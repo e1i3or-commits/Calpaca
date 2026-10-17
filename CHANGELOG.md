@@ -13,7 +13,8 @@ tracked with annotated Git tags named `v<version>`.
   meeting, team (with follow-up attendance) and the booking links it owns;
   `GET /api/me/engagement-series/{id}` adds every meeting, past and upcoming,
   with one state (planned, paused, booked, held, no-show, cancelled,
-  unbooked). `GET /api/me/event-types` now carries each link's
+  unbooked). `meetingsFrom`/`meetingsTo` add each Engagement's booked
+  meetings in a window. `GET /api/me/event-types` now carries each link's
   `engagementId`.
 - A single follow-up date can be skipped: the follow-up schedule accepts
   `{ "action": "skip", "occurrenceId": "..." }` through the same reviewed

@@ -129,7 +129,7 @@ async function load(
     eventTypeIds.length
       ? db.select({
           id: s.bookings.id, eventTypeId: s.bookings.eventTypeId, startsAt: s.bookings.startsAt, endsAt: s.bookings.endsAt,
-          status: s.bookings.status, inviteStatus: s.bookings.inviteStatus, inviteeName: s.bookings.inviteeName,
+          status: s.bookings.status, inviteStatus: s.bookings.inviteStatus, inviteeName: s.bookings.inviteeName, hostUserIds: s.bookings.hostUserIds,
         }).from(s.bookings).where(inArray(s.bookings.eventTypeId, eventTypeIds))
       : none,
   ]);
@@ -211,17 +211,25 @@ async function load(
 const kindOrder: Record<SeriesMeetingKind, number> = { kickoff: 0, followup: 1, checkin: 2, one_off: 3, conversation: 4 };
 const seriesMeetingKindsOrder = (k: SeriesMeetingKind) => kindOrder[k];
 
+/**
+ * The list leaves each series' meetings out; the detail read carries them.
+ * With `meetings`, each summary also carries its booked meetings (not planned
+ * dates) that start in [from, to): a calendar outside Calpaca shows those
+ * beside other bookings without reading every Engagement.
+ */
 export async function listEngagementSeries(
   workspaceId: string,
   actor: EngagementActor,
-  filters: { status?: EngagementStatus } = {},
+  filters: { status?: EngagementStatus; meetings?: { from: Date; to: Date } } = {},
   db: Db = getDb(),
   now = new Date(),
-): Promise<EngagementSeriesSummary[]> {
-  // The list leaves each series' meetings out; the detail read carries them.
-  return (await load(workspaceId, actor, filters, db, now)).map((detail) => {
-    const summary: { meetings?: unknown } & EngagementSeriesSummary = { ...detail };
-    delete summary.meetings;
+): Promise<(EngagementSeriesSummary & { meetings?: readonly SeriesMeeting[] })[]> {
+  const window = filters.meetings;
+  return (await load(workspaceId, actor, filters.status ? { status: filters.status } : {}, db, now)).map((detail) => {
+    const summary: { meetings?: readonly SeriesMeeting[] } & EngagementSeriesSummary = { ...detail };
+    if (window) {
+      summary.meetings = detail.meetings.filter((m) => m.bookingId && Date.parse(m.startsAt) >= window.from.getTime() && Date.parse(m.startsAt) < window.to.getTime());
+    } else delete summary.meetings;
     return summary;
   });
 }

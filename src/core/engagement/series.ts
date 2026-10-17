@@ -40,6 +40,8 @@ export interface SeriesMeeting {
   readonly exception: boolean;
   readonly inviteStatus: string | null;
   readonly inviteeName: string | null;
+  /** The booking's hosts; empty for a date that has no booking. */
+  readonly hostUserIds: readonly string[];
 }
 
 export interface BookingInput {
@@ -50,6 +52,7 @@ export interface BookingInput {
   readonly status: string;
   readonly inviteStatus: string;
   readonly inviteeName: string;
+  readonly hostUserIds: readonly string[];
 }
 
 export interface OccurrenceInput {
@@ -102,7 +105,7 @@ export function seriesMeetings(input: {
       id: b.id, kind: t.kind, title: t.title,
       startsAt: b.startsAt.toISOString(), endsAt: b.endsAt.toISOString(),
       state: bookingState(b, input.now), bookingId: b.id, occurrenceId: null, exception: false,
-      inviteStatus: b.inviteStatus, inviteeName: b.inviteeName,
+      inviteStatus: b.inviteStatus, inviteeName: b.inviteeName, hostUserIds: b.hostUserIds,
     }];
   });
   const fromOccurrences: SeriesMeeting[] = input.occurrences.map((o) => ({
@@ -110,6 +113,7 @@ export function seriesMeetings(input: {
     startsAt: o.startsAt.toISOString(), endsAt: o.endsAt.toISOString(),
     state: occurrenceState(o, input.now), bookingId: o.booking?.id ?? null, occurrenceId: o.id, exception: o.exception,
     inviteStatus: o.booking?.inviteStatus ?? null, inviteeName: o.booking?.inviteeName ?? null,
+    hostUserIds: o.booking?.hostUserIds ?? [],
   }));
   return [...fromBookings, ...fromOccurrences].sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id));
 }

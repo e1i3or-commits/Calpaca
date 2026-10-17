@@ -37,6 +37,14 @@ export const engagementPersonInput = z.object({
 
 const uuid = z.string().uuid();
 
+/** Both meeting bounds or neither, at most 93 days apart (a quarter covers any calendar view). */
+export const seriesListQuery = z.object({
+  status: z.enum(engagementStatuses).optional(),
+  meetingsFrom: z.string().datetime({ offset: true }).optional(),
+  meetingsTo: z.string().datetime({ offset: true }).optional(),
+}).strict().refine((q) => !q.meetingsFrom === !q.meetingsTo, { message: "meetingsFrom and meetingsTo go together" })
+  .refine((q) => !q.meetingsFrom || !q.meetingsTo || (Date.parse(q.meetingsTo) > Date.parse(q.meetingsFrom) && Date.parse(q.meetingsTo) - Date.parse(q.meetingsFrom) <= 93 * 86400_000), { message: "at most 93 days" });
+
 function context(c: { get: (key: "user") => AuthEnv["Variables"]["user"] }) {
   const user = c.get("user");
   if (!user.workspaceId || !user.workspaceRole) return null;
@@ -53,9 +61,13 @@ export function createEngagementSeriesRoutes(deps: EngagementSeriesDeps = defaul
   router.get("/api/me/engagement-series", async (c) => {
     const current = context(c);
     if (!current) return c.json({ error: "workspace_not_found" }, 404);
-    const parsed = z.object({ status: z.enum(engagementStatuses).optional() }).strict().safeParse(c.req.query());
+    const parsed = seriesListQuery.safeParse(c.req.query());
     if (!parsed.success) return c.json({ error: "invalid_query" }, 400);
-    const engagements = await deps.list(current.workspaceId, current.actor, parsed.data.status ? { status: parsed.data.status } : {});
+    const { status, meetingsFrom, meetingsTo } = parsed.data;
+    const engagements = await deps.list(current.workspaceId, current.actor, {
+      ...(status ? { status } : {}),
+      ...(meetingsFrom && meetingsTo ? { meetings: { from: new Date(meetingsFrom), to: new Date(meetingsTo) } } : {}),
+    });
     return c.json({ engagements });
   });
 
