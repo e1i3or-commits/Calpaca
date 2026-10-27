@@ -477,6 +477,13 @@
       "when": 1790860000000,
       "tag": "0067_onboarding_one_offs",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1793100000000,
+      "tag": "0068_booking_windows",
+      "breakpoints": true
     }
   ]
 }
