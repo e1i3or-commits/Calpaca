@@ -1,3 +1,4 @@
+import { withinBookingWindow } from "../../core/availability/booking-window";
 import { Hono } from "hono";
 import { z } from "zod";
 import { Temporal } from "@js-temporal/polyfill";
@@ -478,6 +479,7 @@ export async function rescheduleAuthorizedBooking(
   const eventType = await deps.getEventTypeForBookingById(booking.eventTypeId);
   if (!eventType) return { ok: false, status: 404, body: { error: "event_type_not_found" } };
 
+  if (!withinBookingWindow(slot, eventType.bookingWindow)) return { ok: false, status: 409, body: { error: "slot_unavailable" } };
   const durationMinutes = slot.start.until(slot.end).total({ unit: "minutes" });
   const originalDuration = booking.startsAt.until(booking.endsAt).total({ unit: "minutes" });
   if (durationMinutes !== originalDuration) {
@@ -616,6 +618,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     }
     const eventType = await deps.getEventTypeForBooking(eventTypeSlug, workspaceId);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+    if (!withinBookingWindow(slot, eventType.bookingWindow)) return c.json({ error: "slot_unavailable" }, 409);
     if(eventType.fixedRoster && (requestedHosts!==undefined || requestedOptionalHosts!==undefined || offerPublicId || proposalPublicId)) {
       return c.json({error:"kickoff_roster_locked"},400);
     }
@@ -963,6 +966,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
 
     const outcome = await rescheduleAuthorizedBooking(deps, booking, slot);
     if (!outcome.ok) return c.json(outcome.body, outcome.status);
+
 
     return c.json({
       bookingId: booking.id,

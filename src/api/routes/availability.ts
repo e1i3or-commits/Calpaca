@@ -1,3 +1,4 @@
+import { withinBookingWindow } from "../../core/availability/booking-window";
 import { Hono } from "hono";
 import { z } from "zod";
 import { Temporal } from "@js-temporal/polyfill";
@@ -565,7 +566,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
             id: bestFallback.missingUserId,
             name: missingHost?.name ?? bestFallback.missingUserId,
           },
-          slots: bestFallback.slots.map((s) => {
+          slots: bestFallback.slots.filter((s) => withinBookingWindow(s.slot, eventType.bookingWindow)).map((s) => {
             const requiredIds = selectedHosts
               .filter((host) =>
                 groupHostRole(host.role) === "required"
@@ -624,7 +625,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
     const occupancy = capacity > 1 && deps.getEventTypeSlotOccupancy
       ? await deps.getEventTypeSlotOccupancy(eventType.id, window, now)
       : null;
-    const rendered = ranked.map((s) => {
+    const rendered = ranked.filter((s) => withinBookingWindow(s.slot, eventType.bookingWindow)).map((s) => {
       const requiredIds = s.hostUserId
         ? [s.hostUserId]
         : selectedHosts

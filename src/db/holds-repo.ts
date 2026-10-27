@@ -1,3 +1,4 @@
+import { withinBookingWindow } from "../core/availability/booking-window";
 import { and, count, eq, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
@@ -270,6 +271,11 @@ export async function confirmHold(
 
     const startsAt = toInstant(first.slotStart);
     const endsAt = toInstant(first.slotEnd);
+    const [limits] = await tx.select({ bookingWindow: eventTypes.bookingWindow }).from(eventTypes)
+      .where(eq(eventTypes.id, first.eventTypeId)).for("share");
+    if (!limits || !withinBookingWindow({ start: startsAt, end: endsAt }, limits.bookingWindow)) {
+      return err({ kind: "not_active" });
+    }
     let offerId: string | undefined;
     if (offerPublicId) {
       const [offer] = await tx.select()
@@ -481,6 +487,11 @@ export async function confirmReschedule(
 
     const startsAt = toInstant(first.slotStart);
     const endsAt = toInstant(first.slotEnd);
+    const [limits] = await tx.select({ bookingWindow: eventTypes.bookingWindow }).from(eventTypes)
+      .where(eq(eventTypes.id, first.eventTypeId)).for("share");
+    if (!limits || !withinBookingWindow({ start: startsAt, end: endsAt }, limits.bookingWindow)) {
+      return err({ kind: "not_active" });
+    }
 
     const kickoff=await guardKickoffBooking(first.eventTypeId,rows.map(row=>row.hostUserId),{start:startsAt,end:endsAt},tx,bookingId);
     if(kickoff.kind==="blocked")return err({kind:kickoff.error});

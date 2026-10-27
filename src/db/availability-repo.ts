@@ -1,3 +1,4 @@
+import type { BookingWindow } from "../core/availability/booking-window-schema";
 import { and, eq, gt, gte, inArray, lt, notExists } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
@@ -37,6 +38,7 @@ export interface EventTypeConfig {
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
   readonly minimumNoticeMin: number;
+  readonly bookingWindow?: BookingWindow | null;
   readonly rollingWindowDays: number;
   readonly maxPerDay: number | null;
   readonly curatedSlotCount: number;
@@ -188,6 +190,7 @@ export interface BookingEventTypeConfig {
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
   readonly minimumNoticeMin: number;
+  readonly bookingWindow?: BookingWindow | null;
   readonly rollingWindowDays?: number;
   readonly maxPerDay?: number | null;
   readonly mode: AssignmentMode;
@@ -215,6 +218,7 @@ function toBookingEventTypeConfig(row: typeof eventTypes.$inferSelect): BookingE
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
     minimumNoticeMin: row.minimumNoticeMin,
+    bookingWindow: row.bookingWindow,
     rollingWindowDays: row.rollingWindowDays,
     maxPerDay: row.maxPerDay,
     mode: row.mode,
@@ -290,6 +294,7 @@ export async function getEventTypeBySlug(
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
     minimumNoticeMin: row.minimumNoticeMin,
+    bookingWindow: row.bookingWindow,
     rollingWindowDays: row.rollingWindowDays,
     maxPerDay: row.maxPerDay,
     curatedSlotCount: row.curatedSlotCount,

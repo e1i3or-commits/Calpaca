@@ -1,3 +1,4 @@
+import { bookingWindowSchema } from "../../core/availability/booking-window-schema";
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -355,6 +356,7 @@ export const eventTypeBodySchema = z
     bufferBeforeMin: z.number().int().min(0).max(240),
     bufferAfterMin: z.number().int().min(0).max(240),
     minimumNoticeMin: z.number().int().min(0).max(10080),
+    bookingWindow: bookingWindowSchema.nullable().optional(),
     rollingWindowDays: z.number().int().min(1).max(90),
     mode: z.enum(["solo", "round_robin", "group"]),
     scheduleId: z.string().uuid().nullable(),
