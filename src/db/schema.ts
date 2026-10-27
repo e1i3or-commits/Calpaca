@@ -1,3 +1,4 @@
+import type { BookingWindow } from "../core/availability/booking-window-schema";
 import {
   pgTable, uuid, text, integer, boolean, timestamp, date, jsonb,
   pgEnum, uniqueIndex, index, primaryKey, serial,
@@ -395,6 +396,7 @@ export const eventTypes = pgTable("event_types", {
   bufferBeforeMin: integer("buffer_before_min").notNull().default(0),
   bufferAfterMin: integer("buffer_after_min").notNull().default(0),
   minimumNoticeMin: integer("minimum_notice_min").notNull().default(240),
+  bookingWindow: jsonb("booking_window").$type<BookingWindow>(),
   rollingWindowDays: integer("rolling_window_days").notNull().default(14),
   maxPerDay: integer("max_per_day"),
   mode: assignmentMode("mode").notNull().default("solo"),

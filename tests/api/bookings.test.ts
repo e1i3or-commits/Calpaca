@@ -699,3 +699,11 @@ describe("POST /bookings/:id/cancel", () => {
     expect(res.status).toBe(404);
   });
 });
+
+test("direct hold requests cannot bypass a link's first bookable date", async () => {
+  let created = false;
+  const router = createBookingRoutes({ ...makeDeps({ onCreateHold: () => { created = true; } }), getEventTypeForBooking: async () => ({ ...soloEventType, bookingWindow: { timezone: "UTC", startDate: "2027-01-11", endDate: null, weeklyWindows: null, excludedDates: [] } }) });
+  const res = await post(router, "/holds", { eventTypeSlug: "solo-30", start: "2027-01-04T09:00:00Z", end: "2027-01-04T09:30:00Z" });
+  expect(res.status).toBe(409);
+  expect(created).toBe(false);
+});
