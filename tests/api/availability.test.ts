@@ -330,3 +330,13 @@ describe("GET /availability", () => {
     expect(lookupWorkspaceId).toBe("workspace-alpha");
   });
 });
+
+test("per-link screening windows filter group slots without bypassing host conflicts", async () => {
+  const event = { ...groupEventType, mode: "group" as const, bookingWindow: { timezone: "UTC", startDate: "2027-01-04", endDate: "2027-01-04", weeklyWindows: [{ dow: 1, start: "10:00", end: "12:00" }], excludedDates: [] } };
+  const deps = { ...makeDeps(), getEventTypeBySlug: async () => event };
+  const response = await json(await createAvailabilityRoutes(deps).request(`/availability?${baseParams("group-60")}`));
+  expect(response.all.length).toBeGreaterThan(0);
+  expect(response.all.every((s) => s.start.utc >= "2027-01-04T10:00" && s.end.utc <= "2027-01-04T12:00:00Z")).toBe(true);
+  const blocked = await json(await createAvailabilityRoutes({ ...deps, getBusyForUsers: async () => [{ userId: "host-c", intervals: [{ start: NOW, end: NOW.add({ hours: 24 }) }] }] }).request(`/availability?${baseParams("group-60")}`));
+  expect(blocked.all).toEqual([]);
+});

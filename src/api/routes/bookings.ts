@@ -1,3 +1,4 @@
+import { withinBookingWindow } from "../../core/availability/booking-window";
 import { Hono } from "hono";
 import { z } from "zod";
 import { Temporal } from "@js-temporal/polyfill";
@@ -486,6 +487,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     }
     const eventType = await deps.getEventTypeForBooking(eventTypeSlug, workspaceId);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+    if (!withinBookingWindow(slot, eventType.bookingWindow)) return c.json({ error: "slot_unavailable" }, 409);
     if(eventType.fixedRoster && (requestedHosts!==undefined || requestedOptionalHosts!==undefined || offerPublicId || proposalPublicId)) {
       return c.json({error:"kickoff_roster_locked"},400);
     }
@@ -833,6 +835,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
 
     const eventType = await deps.getEventTypeForBookingById(booking.eventTypeId);
     if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+    if (!withinBookingWindow(slot, eventType.bookingWindow)) return c.json({ error: "slot_unavailable" }, 409);
 
     const durationMinutes = slot.start.until(slot.end).total({ unit: "minutes" });
     const originalDuration = booking.startsAt.until(booking.endsAt).total({ unit: "minutes" });

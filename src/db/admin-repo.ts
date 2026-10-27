@@ -1,3 +1,4 @@
+import type { BookingWindow } from "../core/availability/booking-window-schema";
 import { and, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { getDb } from "./client";
@@ -349,6 +350,7 @@ export interface AdminEventType {
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
   readonly minimumNoticeMin: number;
+  readonly bookingWindow?: BookingWindow | null;
   readonly rollingWindowDays: number;
   readonly mode: "solo" | "round_robin" | "group";
   readonly scheduleId: string | null;
@@ -410,6 +412,7 @@ function toAdminEventType(
     bufferBeforeMin: row.bufferBeforeMin,
     bufferAfterMin: row.bufferAfterMin,
     minimumNoticeMin: row.minimumNoticeMin,
+    bookingWindow: row.bookingWindow,
     rollingWindowDays: row.rollingWindowDays,
     mode: row.mode,
     scheduleId: row.scheduleId,
@@ -642,6 +645,7 @@ export interface EventTypeInput {
   readonly bufferBeforeMin: number;
   readonly bufferAfterMin: number;
   readonly minimumNoticeMin: number;
+  readonly bookingWindow?: BookingWindow | null;
   readonly rollingWindowDays: number;
   readonly mode: "solo" | "round_robin" | "group";
   readonly scheduleId: string | null;
@@ -728,6 +732,7 @@ export async function updateEventType(
         bufferBeforeMin: input.bufferBeforeMin,
         bufferAfterMin: input.bufferAfterMin,
         minimumNoticeMin: input.minimumNoticeMin,
+        bookingWindow: input.bookingWindow,
         rollingWindowDays: input.rollingWindowDays,
         mode: input.mode,
         scheduleId: input.scheduleId,
