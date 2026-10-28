@@ -178,8 +178,8 @@ export function BookingPage({
     getEventTypeMeta(slug, workspaceSlug).then(setMeta, () => {});
   }, [slug, workspaceSlug]);
   useEffect(() => {
-    if (meta) setDurationMinutes(meta.durationMinutes);
-  }, [meta]);
+    if (meta) setDurationMinutes(offeredSlots?.[0] ? (Date.parse(offeredSlots[0].end)-Date.parse(offeredSlots[0].start))/60000 : meta.durationMinutes);
+  }, [meta, offeredSlots]);
   useEffect(() => {
     if (!meta?.selectableHosts) return;
     setHostRoles(
@@ -272,7 +272,7 @@ export function BookingPage({
                   onChange={changeHostRoles}
                 />
               )}
-              {(meta?.selectableDurations?.length ?? 0) > 1 && (
+              {!offeredSlots && (meta?.selectableDurations?.length ?? 0) > 1 && (
                 <section className="flex flex-col gap-2 border-b border-border pb-6">
                   <div>
                     <h2 className="text-sm font-medium">How long do you need?</h2>

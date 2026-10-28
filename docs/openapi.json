@@ -3346,6 +3346,46 @@
         }
       }
     },
+    "/api/me/one-off-offers/availability": {
+      "get": {
+        "operationId": "getApiMeOneOffOffersAvailability",
+        "tags": [
+          "One-off offers"
+        ],
+        "summary": "Preview verified availability for a custom solo meeting length",
+        "parameters": [],
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/api/me/one-off-offers": {
       "get": {
         "operationId": "getApiMeOneOffOffers",

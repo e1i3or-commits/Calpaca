@@ -53,6 +53,7 @@ import { getPublicWorkspaceEntitlements } from "../../db/workspace-repo";
  * reason - minimum notice / rolling window math is time-dependent.
  */
 export interface AvailabilityDeps {
+  readonly slotIncrementMin?: number;
   readonly getEventTypeBySlug: (slug: string, workspaceId?: string) => Promise<EventTypeConfig | null>;
   readonly resolveWorkspaceId?: (
     context: Parameters<typeof publicWorkspaceId>[0],
@@ -93,7 +94,7 @@ export interface AvailabilityDeps {
   ) => Promise<PublicBookingPage | null>;
 }
 
-const defaultDeps: AvailabilityDeps = {
+export const defaultAvailabilityDeps: AvailabilityDeps = {
   getEventTypeBySlug: (slug, workspaceId) =>
     dbGetEventTypeBySlug(slug, undefined, workspaceId),
   resolveWorkspaceId: publicWorkspaceId,
@@ -287,7 +288,7 @@ function groupHostRole(role: EventTypeHostRecord["role"]): "required" | "optiona
   return role === "optional" ? "optional" : "required";
 }
 
-export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): Hono {
+export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultAvailabilityDeps): Hono {
   const router = new Hono();
 
   router.get("/booking-page", async (c) => {
@@ -514,6 +515,7 @@ export function createAvailabilityRoutes(deps: AvailabilityDeps = defaultDeps): 
       },
     ]));
     const baseConfig: SlotConfig = {
+      ...(deps.slotIncrementMin ? {slotIncrementMin: deps.slotIncrementMin} : {}),
       durationMinutes,
       bufferBeforeMin: eventType.bufferBeforeMin,
       bufferAfterMin: eventType.bufferAfterMin,

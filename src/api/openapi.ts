@@ -145,6 +145,7 @@ export const openApiOperations: readonly Operation[] = [
   ["get", "/routing/{slug}", "Routing", "Get a public routing form"],
   ["post", "/routing/evaluate", "Routing", "Evaluate routing answers"],
   ["get", "/api/me/users", "Organizer", "List active users", "session"],
+  ["get", "/api/me/one-off-offers/availability", "One-off offers", "Preview verified availability for a custom solo meeting length", "session"],
   ["get", "/api/me/one-off-offers", "One-off offers", "List manageable single-use booking offers", "session"],
   ["post", "/api/me/one-off-offers", "One-off offers", "Create a single-use booking offer", "session"],
   ["post", "/api/me/one-off-offers/suggestions", "One-off offers", "Suggest conflict-free offer times", "session"],

@@ -1,0 +1,36 @@
+/** Disposable local DB only: authenticated HTTP preview → offer → booking-length rules. */
+import assert from "node:assert/strict";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { getDb } from "../src/db/client";
+import * as schema from "../src/db/schema";
+import { createEventType } from "../src/db/admin-repo";
+import { createApiToken } from "../src/db/profile-repo";
+import { oneOffOfferRoutes } from "../src/api/routes/one-off-offers";
+import { eq } from "drizzle-orm";
+const url=new URL(process.env.DATABASE_URL!);
+assert(["127.0.0.1","localhost"].includes(url.hostname)&&url.pathname==="/calpaca_gmail_smoke");
+const db=getDb();await migrate(db,{migrationsFolder:"drizzle"});
+const key=crypto.randomUUID();
+const [workspace]=await db.insert(schema.workspaces).values({name:"Gmail preview test",slug:key}).returning();
+const [host]=await db.insert(schema.users).values({name:"Host",email:`${key}@example.test`}).returning();
+await db.insert(schema.workspaceMembers).values({workspaceId:workspace!.id,userId:host!.id,role:"owner"});
+await db.insert(schema.schedules).values({userId:host!.id,timezone:"UTC",rules:[1,2,3,4,5,6,7].map(dow=>({dow,start:"09:00",end:"17:00"}))});
+const [connection]=await db.insert(schema.calendarConnections).values({userId:host!.id,externalCalendarId:"synthetic",lastSyncedAt:new Date(),syncHealthy:true}).returning();
+const event=await createEventType(host!.id,{title:"Buffered link",slug:key,durationMinutes:30,mode:"solo",bufferBeforeMin:10,bufferAfterMin:10,minimumNoticeMin:0,rollingWindowDays:90,scheduleId:null,teamId:null,hosts:[{userId:host!.id,role:"member",weight:100}]},db,workspace!.id);
+assert(typeof event!=="string");
+const token=await createApiToken(host!.id,"Local test",null,db);
+const start=new Date();start.setUTCDate(start.getUTCDate()+1);start.setUTCHours(10,7,0,0);const end=new Date(start.getTime()+45*60000);
+const query=new URLSearchParams({eventTypeId:event.id,durationMinutes:"45",start:start.toISOString(),end:end.toISOString(),inviteeTimezone:"UTC",exact:"1"});
+const path=`/api/me/one-off-offers/availability?${query}`;
+assert.equal((await oneOffOfferRoutes.request(path,{headers:{authorization:"Bearer calpaca_invalid"}})).status,401);
+const request=()=>oneOffOfferRoutes.request(path,{headers:{authorization:`Bearer ${token.token}`}});
+const response=await request();assert.equal(response.status,200);const body=await response.json() as {all:{start:{utc:string};end:{utc:string};recommendation:{confidence:string}}[]};
+assert(body.all.some(s=>Date.parse(s.start.utc)===start.getTime()&&Date.parse(s.end.utc)===end.getTime()&&s.recommendation.confidence==="confirmed"));
+const offered=await oneOffOfferRoutes.request("/api/me/one-off-offers",{method:"POST",headers:{authorization:`Bearer ${token.token}`,"content-type":"application/json"},body:JSON.stringify({eventTypeId:event.id,title:"Custom 45",slots:[{start:start.toISOString(),end:end.toISOString()}],expiresAt:end.toISOString()})});
+assert.equal(offered.status,201);
+// A conflict only in the before-buffer must remove the exact requested time.
+await db.insert(schema.calendarBusyCache).values({connectionId:connection!.id,startsAt:new Date(start.getTime()-8*60000),endsAt:new Date(start.getTime()-5*60000)});
+const blocked=await (await request()).json() as typeof body;assert(!blocked.all.some(s=>Date.parse(s.start.utc)===start.getTime()));
+const [saved]=await db.select().from(schema.eventTypes).where(eq(schema.eventTypes.id,event.id));assert.equal(saved!.durationMinutes,30);
+console.log("Authenticated custom 10:07 / 45-minute preview, fresh evidence, buffer conflict, offer creation, and unchanged regular link passed.");
+process.exit(0);

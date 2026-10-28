@@ -625,6 +625,8 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     if (agent && !eventType.agentPolicy?.enabled) {
       return c.json({ error: "agent_not_allowed" }, 403);
     }
+    let verifiedOffer = false;
+    if (offerPublicId && !deps.getOneOffOfferByPublicId) return c.json({error:"offer_unavailable"},409);
     if (offerPublicId && deps.getOneOffOfferByPublicId) {
       const offer = await deps.getOneOffOfferByPublicId(offerPublicId);
       const allowed = offer
@@ -636,6 +638,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
           && Temporal.Instant.compare(Temporal.Instant.from(candidate.end), slot.end) === 0
         );
       if (!allowed) return c.json({ error: "offer_unavailable" }, 409);
+      verifiedOffer = true;
     }
     const proposal = proposalPublicId && deps.getPublicProposal
       ? await deps.getPublicProposal(proposalPublicId)
@@ -665,7 +668,7 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
     }
 
     const durationMinutes = slot.start.until(slot.end).total({ unit: "minutes" });
-    if (!isAllowedDuration(
+    if (!verifiedOffer && !isAllowedDuration(
       durationMinutes,
       eventType.durationMinutes,
       eventType.selectableDurations,
