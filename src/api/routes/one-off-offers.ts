@@ -1,3 +1,4 @@
+import { createAvailabilityRoutes, defaultAvailabilityDeps } from "./availability";
 import { Hono } from "hono";
 import { z } from "zod";
 import { Temporal } from "@js-temporal/polyfill";
@@ -57,6 +58,34 @@ routes.get("/offers/:publicId", async (c) => {
 
 routes.use("/api/me/one-off-offers", requireSession);
 routes.use("/api/me/one-off-offers/*", requireSession);
+
+// Authenticated preview for one-off lengths; regular public links keep their settings.
+routes.get("/api/me/one-off-offers/availability", async c => {
+  const input = z.object({eventTypeId:z.string().uuid(),durationMinutes:z.coerce.number().int().min(5).max(480),start:z.string().datetime({offset:true}),end:z.string().datetime({offset:true}),inviteeTimezone:z.string().refine(isIanaZone),exact:z.enum(["1","0"]).optional()}).safeParse(c.req.query());
+  if (!input.success) return c.json({error:"invalid_query"},400);
+  const user=c.get("user");
+  if (!user.workspaceId) return c.json({error:"workspace_not_found"},404);
+  const data=input.data;
+  const event=await getEventTypeForHost(data.eventTypeId,user.id,undefined,user.workspaceId);
+  if (!event || event.mode!=="solo") return c.json({error:"event_type_not_found"},404);
+  const span=Date.parse(data.end)-Date.parse(data.start);
+  if (span<=0 || span>(data.exact==="1"?86400000:14*86400000)) return c.json({error:"invalid_window"},400);
+  const preview=createAvailabilityRoutes({...defaultAvailabilityDeps,
+    ...(data.exact==="1"?{slotIncrementMin:1}:{}),
+    resolveWorkspaceId:async()=>user.workspaceId!,
+    getEventTypeBySlug:async()=>{
+      const config=await defaultAvailabilityDeps.getEventTypeBySlug(event.slug,user.workspaceId!);
+      return config && !config.fixedRoster?{...config,durationMinutes:data.durationMinutes,selectableDurations:[data.durationMinutes]}:null;
+    },
+  });
+  // Include buffers in the evidence window; clamping to the offered interval
+  // itself would reject every otherwise-free slot on a buffered meeting link.
+  const query=new URLSearchParams({eventTypeSlug:event.slug,
+    start:new Date(Date.parse(data.start)-event.bufferBeforeMin*60000).toISOString(),
+    end:new Date(Date.parse(data.end)+event.bufferAfterMin*60000).toISOString(),
+    inviteeTimezone:data.inviteeTimezone});
+  return preview.request(`/availability?${query}`);
+});
 
 routes.get("/api/me/one-off-offers", async (c) => {
   const user = c.get("user");
@@ -141,6 +170,8 @@ routes.post("/api/me/one-off-offers", async (c) => {
     user.workspaceId,
   );
   if (!eventType) return c.json({ error: "event_type_not_found" }, 404);
+  const config = await defaultAvailabilityDeps.getEventTypeBySlug(eventType.slug,user.workspaceId);
+  if (!config || config.fixedRoster) return c.json({error:"event_type_not_found"},404);
   const now = Temporal.Now.instant();
   let expiresAt: Temporal.Instant;
   try {
@@ -153,7 +184,8 @@ routes.post("/api/me/one-off-offers", async (c) => {
       if (
         Temporal.Instant.compare(start, now) <= 0
         || Temporal.Instant.compare(start, end) >= 0
-        || !isAllowedDuration(duration, eventType.durationMinutes, eventType.selectableDurations)
+        || (!isAllowedDuration(duration, eventType.durationMinutes, eventType.selectableDurations)
+          && !(eventType.mode === "solo" && Number.isInteger(duration) && duration >= 5 && duration <= 480))
       ) throw new Error("invalid slot");
     }
   } catch {

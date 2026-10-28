@@ -777,3 +777,22 @@ test("direct hold requests cannot bypass a link's first bookable date", async ()
   expect(res.status).toBe(409);
   expect(created).toBe(false);
 });
+
+describe("one-off custom lengths",()=>{
+ test("accepts only the exact active offer slot, while regular links keep their duration",async()=>{
+  const start="2027-01-04T09:00:00Z",end="2027-01-04T09:45:00Z";
+  const offer={id:"one",publicId:"offered",eventTypeId:"et-solo",eventTypeSlug:"solo-30",eventTypeTitle:"Meeting",workspaceSlug:"test",title:"Custom",message:null,recipientEmail:null,slots:[{start,end}],status:"active" as const,expiresAt:new Date("2099-01-01"),bookingId:null,createdAt:new Date()};
+  const deps={...makeDeps(),getOneOffOfferByPublicId:async(id:string)=>id==="offered"?offer:null};
+  const router=createBookingRoutes(deps);
+  const body={eventTypeSlug:"solo-30",start,end};
+  expect((await post(router,"/holds",body)).status).toBe(400);
+  expect((await post(router,"/holds",{...body,offerPublicId:"offered"})).status).toBe(201);
+  expect((await post(router,"/holds",{...body,end:"2027-01-04T10:00:00Z",offerPublicId:"offered"})).status).toBe(409);
+  expect((await post(router,"/holds",{...body,offerPublicId:"unknown"})).status).toBe(409);
+ });
+ test("still rejects a custom offer if the host is busy during its extended portion",async()=>{
+  const start="2027-01-04T09:00:00Z",end="2027-01-04T09:45:00Z";
+  const deps={...makeDeps({busyByUserId:{"host-a":[iv("2027-01-04T09:30:00Z","2027-01-04T10:00:00Z")]}}),getOneOffOfferByPublicId:async()=>({id:"one",publicId:"offered",eventTypeId:"et-solo",eventTypeSlug:"solo-30",eventTypeTitle:"Meeting",workspaceSlug:"test",title:"Custom",message:null,recipientEmail:null,slots:[{start,end}],status:"active" as const,expiresAt:new Date("2099-01-01"),bookingId:null,createdAt:new Date()})};
+  expect((await post(createBookingRoutes(deps),"/holds",{eventTypeSlug:"solo-30",start,end,offerPublicId:"offered"})).status).toBe(409);
+ });
+});
