@@ -1,4 +1,5 @@
 import type { Delivery } from "../db/kickoff-delivery-repo";
+import { buildBookingAttendees } from "../core/invite/attendees";
 
 export class KickoffProviderError extends Error {
   constructor(public readonly code:string,public readonly retryable=false){super(code);}
@@ -17,8 +18,9 @@ export async function syncKickoffGoogle(delivery:Delivery,calendarId:string,acce
   const ctx=delivery.snapshot,booking=ctx.booking,organizer=ctx.hosts[0];
   if(!organizer)throw new KickoffProviderError("organizer_missing");
   const expectedOrganizer=(calendarId==="primary"?organizer.email:calendarId).toLowerCase();
-  const attendees=[{email:booking.inviteeEmail,displayName:booking.inviteeName,optional:false},...ctx.hosts.filter(host=>host.email.toLowerCase()!==expectedOrganizer).map(host=>({email:host.email,displayName:host.name,optional:host.role==="optional"})),...(booking.guestEmails??[]).map(email=>({email,optional:false}))]
-    .filter((person,index,all)=>all.findIndex(other=>other.email.toLowerCase()===person.email.toLowerCase())===index);
+  const attendees=buildBookingAttendees(
+    {email:booking.inviteeEmail,name:booking.inviteeName},ctx.hosts,booking.guestEmails,
+  ).map(person=>({email:person.email,displayName:person.name,optional:person.role==="optional"}));
   const base=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
   const url=`${base}/${encodeURIComponent(delivery.googleEventId)}`;
   const headers={authorization:`Bearer ${accessToken}`,"content-type":"application/json"};
@@ -36,10 +38,13 @@ export async function syncKickoffGoogle(delivery:Delivery,calendarId:string,acce
     try {return await response.json() as Event;}catch{throw new KickoffProviderError("calendar_readback_invalid",true);}
   }
   const needsMeet=booking.bookingLocation?.type==="google_meet"||(!booking.bookingLocation&&booking.meetingFormat==="google_meet");
-  function matches(event:Event,requireOperation=true) {
+  function matches(event:Event,requireOperation=true,requireFullRoster=false) {
     const expected=new Set(attendees.map(person=>person.email.toLowerCase()));
-    const actual=(event.attendees??[]).filter(person=>person.email?.toLowerCase()!==expectedOrganizer);
-    expected.delete(expectedOrganizer);
+    // Old primary-calendar events omitted the organizer. Continue to accept
+    // their read-only retries/reminders; new writes must verify every host.
+    const fullRoster=requireFullRoster||event.extendedProperties?.private?.tourscaleAttendeeRosterVersion==="1";
+    const actual=fullRoster?(event.attendees??[]):(event.attendees??[]).filter(person=>person.email?.toLowerCase()!==expectedOrganizer);
+    if(!fullRoster)expected.delete(expectedOrganizer);
     return event.id===delivery.googleEventId && event.status!=="cancelled"
       && event.organizer?.email?.toLowerCase()===expectedOrganizer
       && new Date(event.start?.dateTime??"").getTime()===new Date(booking.startsAt).getTime()
@@ -72,7 +77,7 @@ export async function syncKickoffGoogle(delivery:Delivery,calendarId:string,acce
   if(!existing&&delivery.kind!=="created")throw new KickoffProviderError("calendar_event_missing");
   const body={summary:`${ctx.eventTypeTitle}: ${organizer.name} and ${booking.inviteeName}`,
     start:{dateTime:booking.startsAt},end:{dateTime:booking.endsAt},attendees,
-    extendedProperties:{private:{tourscaleBookingId:booking.id,tourscaleDeliveryId:delivery.id,tourscaleSequence:String(delivery.sequence)}},
+    extendedProperties:{private:{tourscaleBookingId:booking.id,tourscaleDeliveryId:delivery.id,tourscaleSequence:String(delivery.sequence),tourscaleAttendeeRosterVersion:"1"}},
     ...(!existing?{id:delivery.googleEventId}:{}),
     ...(!existing&&needsMeet?{conferenceData:{createRequest:{requestId:delivery.googleEventId,conferenceSolutionKey:{type:"hangoutsMeet"}}}}:{}),
   };
@@ -83,5 +88,5 @@ export async function syncKickoffGoogle(delivery:Delivery,calendarId:string,acce
   const response=await call(`${existing?url:base}?sendUpdates=${sendUpdates}&conferenceDataVersion=1`,{method:existing?"PATCH":"POST",headers:existing?{"If-Match":existing.etag!}:{},body:JSON.stringify(body)});
   if(response.status===412)throw new KickoffProviderError("calendar_version_changed",true);
   const after=await read();
-  if(!after||!matches(after))throw new KickoffProviderError("calendar_write_unverified",true);
+  if(!after||!matches(after,true,true))throw new KickoffProviderError("calendar_write_unverified",true);
 }
