@@ -2,6 +2,7 @@ import { Temporal } from "@js-temporal/polyfill";
 import { getAuth } from "../auth/index";
 import { guestsToInvite } from "@calpaca/core";
 import { buildIcs } from "../core/invite/ics";
+import { buildBookingAttendees } from "../core/invite/attendees";
 import { composeInviteEmail, type InviteKind } from "../core/invite/email";
 import {
   appendEvent,
@@ -134,11 +135,6 @@ export async function sendInvite(bookingId: string, kind: InviteKind): Promise<v
  */
 async function syncGoogleEvent(ctx: InviteContext, kind: InviteKind): Promise<boolean> {
   const { booking, hosts } = ctx;
-  const guests = guestsToInvite(
-    booking.guestEmails ?? [],
-    booking.inviteeEmail,
-    hosts.map((h) => h.email),
-  );
   const [organizer] = hosts;
   if (!organizer) return false;
   const existingId = booking.googleEventId ?? null;
@@ -195,11 +191,11 @@ async function syncGoogleEvent(ctx: InviteContext, kind: InviteKind): Promise<bo
           || (!booking.bookingLocation && booking.meetingFormat === "google_meet"),
         startIso,
         endIso,
-        attendees: [
-          { email: booking.inviteeEmail, displayName: booking.inviteeName },
-          ...hosts.slice(1).map((h) => ({ email: h.email, displayName: h.name })),
-          ...guests.map((email) => ({ email })),
-        ],
+        attendees: buildBookingAttendees(
+          { email: booking.inviteeEmail, name: booking.inviteeName },
+          hosts,
+          booking.guestEmails,
+        ).map((person) => ({ email: person.email, displayName: person.name })),
       },
     });
     if (!r.ok) {
@@ -346,14 +342,11 @@ export function buildMail(
           : {}),
         ...(renderedLocation ? { location: renderedLocation } : {}),
         organizer: { name: organizer.name, email: organizer.email },
-        attendees: [
+        attendees: buildBookingAttendees(
           { name: booking.inviteeName, email: booking.inviteeEmail },
-          ...hosts.slice(1).map((h) => ({ name: h.name, email: h.email, role: h.role })),
-          // A guest supplies only an address, and IcsPerson.name is
-          // interpolated straight into CN=, so an empty string would emit a
-          // bare "CN=;". The address is what clients show anyway.
-          ...guests.map((email) => ({ name: email, email })),
-        ],
+          hosts,
+          guests,
+        ),
       })
     : null;
 

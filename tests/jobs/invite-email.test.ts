@@ -33,6 +33,43 @@ function context(guestEmails: string[] = []): InviteContext {
 }
 
 describe("buildMail recipients", () => {
+  for (const kind of ["created", "rescheduled", "cancelled", "reminder"] as const) {
+    test(`${kind} ICS lists the organizer once as a participant without changing identity or recipients`, () => {
+      const base = context(["g1@example.com", "ORGANIZER@example.com"]);
+      const ctx: InviteContext = { ...base, rescheduleCount: 2,
+        hosts: [base.hosts[0]!, { ...base.hosts[1]!, role: "optional" }] };
+      const mail = buildMail(ctx, kind, NOW);
+      const lines = mail.ics!.content.replace(/\r\n /g, "").split("\r\n");
+      const attendees = lines.filter((line) => line.startsWith("ATTENDEE;"));
+      expect(attendees).toHaveLength(4);
+      expect(attendees.filter((line) => line.endsWith(":mailto:organizer@example.com")))
+        .toHaveLength(1);
+      expect(lines).toContain("ORGANIZER;CN=Organizer:mailto:organizer@example.com");
+      expect(lines).toContain("UID:b1@scheduling-platform");
+      expect(lines).toContain("SEQUENCE:2");
+      expect(lines).toContain(`METHOD:${kind === "cancelled" ? "CANCEL" : "REQUEST"}`);
+      expect(attendees.find((line) => line.endsWith(":mailto:second@example.com")))
+        .toContain("ROLE=OPT-PARTICIPANT");
+      expect(mail.to).toBe("invitee@example.com");
+      expect(mail.cc).toEqual(["organizer@example.com", "second@example.com", "g1@example.com"]);
+      expect(mail.replyTo).toBe("organizer@example.com");
+    });
+  }
+
+  test("a solo organizer is an attendee, and an overlapping invitee is not duplicated", () => {
+    const base = context();
+    const ctx: InviteContext = { ...base, hosts: [base.hosts[0]!] };
+    const attendees = (mail: ReturnType<typeof buildMail>) => mail.ics!.content
+      .replace(/\r\n /g, "").split("\r\n").filter((line) => line.startsWith("ATTENDEE;"));
+    expect(attendees(buildMail(ctx, "created", NOW))).toHaveLength(2);
+    const overlapping = { ...ctx, booking: { ...ctx.booking, inviteeEmail: "ORGANIZER@example.com" } };
+    expect(attendees(buildMail(overlapping, "created", NOW))).toHaveLength(1);
+  });
+
+  test("native Google invitations still omit the fallback ICS attachment", () => {
+    expect(buildMail(context(), "created", NOW, { includeIcs: false }).ics).toBeUndefined();
+  });
+
   test("without guests, Cc is exactly the hosts", () => {
     const mail = buildMail(context(), "created", NOW);
     expect(mail.to).toBe("invitee@example.com");
