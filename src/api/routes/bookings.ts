@@ -683,7 +683,9 @@ export function createBookingRoutes(deps: BookingDeps = defaultDeps): Hono {
       }
       targetHostIds = [...new Set(proposalOption.hostUserIds)];
     } else if (eventType.mode === "group") {
-      const required = allHosts.filter((h) => h.role === "required").map((h) => h.userId);
+      // Match group availability: legacy/default "member" roles are required,
+      // while only explicitly optional hosts may be omitted.
+      const required = allHosts.filter((h) => h.role !== "optional").map((h) => h.userId);
       const selected = requestedHosts ?? required;
       const disallowed = requestedHosts
         ? selected.filter((id) => !eventType.publicSelectableHostIds.includes(id))

@@ -297,6 +297,76 @@ describe("POST /holds", () => {
     expect(body.holdIds.slice().sort()).toEqual(["hold-host-b", "hold-host-c"]);
   });
 
+  test("group: defaults member-role hosts to required without a public host selection", async () => {
+    let held: readonly string[] = [];
+    const deps: BookingDeps = {
+      ...makeDeps({ onCreateHold: (hostIds) => { held = hostIds; } }),
+      getEventTypeForBooking: async () => ({ ...groupEventType, publicSelectableHostIds: [] }),
+      getEventTypeHosts: async () => [
+        { userId: "host-b", role: "member", weight: 100 },
+        { userId: "host-c", role: "member", weight: 100 },
+      ],
+    };
+    const res = await post(createBookingRoutes(deps), "/holds", {
+      eventTypeSlug: "group-60",
+      start: "2027-01-04T11:00:00Z",
+      end: "2027-01-04T12:00:00Z",
+    });
+
+    expect(res.status).toBe(201);
+    expect(held).toEqual(["host-b", "host-c"]);
+    expect((await res.json() as { holdIds: string[] }).holdIds).toEqual([
+      "hold-host-b", "hold-host-c",
+    ]);
+  });
+
+  test("group: defaults to member and required hosts but not optional hosts", async () => {
+    let held: readonly string[] = [];
+    const deps: BookingDeps = {
+      ...makeDeps({ onCreateHold: (hostIds) => { held = hostIds; } }),
+      getEventTypeHosts: async () => [
+        { userId: "host-b", role: "member", weight: 100 },
+        { userId: "host-c", role: "required", weight: 100 },
+        { userId: "host-d", role: "optional", weight: 100 },
+      ],
+    };
+    const res = await post(createBookingRoutes(deps), "/holds", {
+      eventTypeSlug: "group-60",
+      start: "2027-01-04T11:00:00Z",
+      end: "2027-01-04T12:00:00Z",
+    });
+
+    expect(res.status).toBe(201);
+    expect(held).toEqual(["host-b", "host-c"]);
+  });
+
+  test("group: member-role hosts cannot be omitted when busy or missing a schedule", async () => {
+    for (const unavailable of ["busy", "missing_schedule"] as const) {
+      let holdCreated = false;
+      const deps: BookingDeps = {
+        ...makeDeps({
+          onCreateHold: () => { holdCreated = true; },
+          ...(unavailable === "busy"
+            ? { busyByUserId: { "host-b": [iv("2027-01-04T11:00:00Z", "2027-01-04T12:00:00Z")] } }
+            : { schedules: { "host-c": schedulesByUserId["host-c"]! } }),
+        }),
+        getEventTypeHosts: async () => [
+          { userId: "host-b", role: "member", weight: 100 },
+          { userId: "host-c", role: "required", weight: 100 },
+        ],
+      };
+      const res = await post(createBookingRoutes(deps), "/holds", {
+        eventTypeSlug: "group-60",
+        start: "2027-01-04T11:00:00Z",
+        end: "2027-01-04T12:00:00Z",
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: "slot_not_available" });
+      expect(holdCreated).toBe(false);
+    }
+  });
+
   test("protected kickoff holds reject host subsets, role overrides and alternate selection paths", async () => {
     for(const extra of [{hosts:["host-b"]},{optionalHosts:["host-c"]},{offerPublicId:"offer"},{proposalPublicId:"proposal"}]) {
       let called=false;
