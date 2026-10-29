@@ -26,4 +26,12 @@ describe("franchise onboarding policy", () => {
   for(const cadence of ["weekly","biweekly","monthly"])expect(onboardingCadenceUpdate.safeParse({revision:1,cadence}).success).toBe(true);
   expect(onboardingCadenceUpdate.safeParse({revision:0,cadence:"every-30-days"}).success).toBe(false);
  });
+ test("accepts legacy Zoho and Twenty-native CRM identities, nothing else", () => {
+  const twenty = {...raw, franchiseeId:"FDB00227-A8F0-4453-B965-3C0110907AA3", businessUnitId:"0b9e1c4a-2d3f-4e5a-9b6c-7d8e9f0a1b2c", primaryContactId:"5854883000000000003"};
+  const parsed = franchiseOnboardingInput.parse(twenty);
+  expect(parsed.franchiseeId).toBe("fdb00227-a8f0-4453-b965-3c0110907aa3");
+  expect(parsed.businessUnitId).toBe("0b9e1c4a-2d3f-4e5a-9b6c-7d8e9f0a1b2c");
+  for (const bad of ["abc", "123", "fdb00227-a8f0-4453-b965", "fdb00227-a8f0-0453-b965-3c0110907aa3"])
+   expect(franchiseOnboardingInput.safeParse({...raw, franchiseeId:bad}).success).toBe(false);
+ });
 });

@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 const id = z.string().uuid();
-const crmId = z.string().regex(/^[0-9]{10,30}$/);
+// Legacy Zoho records keep numeric IDs; records created natively in Twenty CRM use UUIDs.
+const crmId = z.string().regex(/^(?:[0-9]{10,30}|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i).transform(v => v.toLowerCase());
 const name = z.string().trim().min(1).max(160).regex(/^[^\u0000-\u001f\u007f]+$/);
 export const onboardingCadences = ["weekly", "biweekly", "monthly"] as const;
 export type OnboardingCadence = typeof onboardingCadences[number];
@@ -71,7 +72,7 @@ export function sameClientContact(a: Pick<OnboardingClientContact,"name"|"email"
 /** Trusted automation receipt; never accepted by the staff contact form. */
 export const workspaceClientContactSync = z.object({
   requestId:id, sourceWorkspaceId:id, sourceProjectKey:z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(64),
-  locationKey:id, primaryContactId:z.string().regex(/^[0-9]{10,30}$/), name,
+  locationKey:id, primaryContactId:crmId, name,
   email:z.string().trim().toLowerCase().email().max(254), previousEmail:z.string().trim().toLowerCase().email().max(254),
   accountId:id, googleUserId:z.string().regex(/^[0-9]{10,30}$/), verifiedAt:z.string().datetime(),
 }).strict();
