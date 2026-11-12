@@ -46,6 +46,13 @@ window, and for group queries an array of host availability sets.
 Pipeline: expand rules to open intervals -> subtract busy -> apply buffers and
 notice -> discretize into candidate slots -> score -> return ranked slots.
 
+Workspace closed days (`closed-days.ts`: the US holidays a workspace
+observes, with weekend observance, plus its own date ranges) join each host's
+own date overrides as full-day `unavailable` exceptions when
+`getSchedulesForUsers` loads a schedule, so every booking path applies them
+in the host's timezone without knowing they exist. A host in several
+workspaces is closed on the union of their closed days.
+
 Scoring is a ranking pass over the same output, not separate machinery.
 Signals in v1:
 - fragmentation penalty (a booking that splits a large open block scores low)

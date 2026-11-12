@@ -29,7 +29,7 @@ async function fixture() {
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL}),db=drizzle(pool,{schema:s});
  await migrate(db,{migrationsFolder:"drizzle"});await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);await db.delete(s.kickoffDeliveryWorker);
  const people=await db.insert(s.users).values(Array.from({length:6},(_,i)=>({name:`Person ${i}`,email:`followup-reserve-${i}@example.invalid`}))).returning();
- const [workspace]=await db.insert(s.workspaces).values({name:"Follow-up reservations",slug:"followup-reservation-test"}).returning();
+ const [workspace]=await db.insert(s.workspaces).values({name:"Follow-up reservations",slug:"followup-reservation-test",usHolidays:[]}).returning();
  const ws=workspace!.id,ids=people.map(p=>p.id),actor={userId:ids[0]!,workspaceRole:"admin" as const};
  await db.insert(s.workspaceMembers).values(ids.map(userId=>({userId,workspaceId:ws,role:"member" as const})));
  const provision=await provisionFranchiseOnboarding(ws,actor,franchiseOnboardingInput.parse({sourceWorkspaceId:crypto.randomUUID(),sourceProjectKey:"reserve",locationKey:crypto.randomUUID(),franchiseeId:"5854883000000000001",businessUnitId:"5854883000000000002",primaryContactId:"5854883000000000003",clientName:"Reservation Client",locationName:"Sample City",franchiseSuccessUserIds:ids.slice(2),kaiUserId:ids[0],andrewUserId:ids[1],accountLeadUserId:ids[2],organizerUserId:ids[0]}),db);

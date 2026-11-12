@@ -1006,6 +1006,29 @@ export function revokeUserInvitation(id: string): Promise<{ ok: true }> {
   return request(`/api/me/user-management/invitations/${id}`, { method: "DELETE" });
 }
 
+export interface ClosedDaysConfig {
+  readonly usHolidays: readonly { key: string; name: string; observed: boolean }[];
+  readonly ranges: readonly { id: string; name: string; startDate: string; endDate: string }[];
+  readonly canManage: boolean;
+}
+
+export function getClosedDays(): Promise<ClosedDaysConfig> {
+  return request("/api/me/closed-days");
+}
+
+export function setObservedUsHolidays(usHolidays: readonly string[]): Promise<{ ok: true }> {
+  return request("/api/me/closed-days/holidays", { method: "PUT", body: JSON.stringify({ usHolidays }) });
+}
+
+export function addClosedRange(input: { name: string; startDate: string; endDate: string }): Promise<{ range: ClosedDaysConfig["ranges"][number] }> {
+  return request("/api/me/closed-days", { method: "POST", body: JSON.stringify(input) });
+}
+
+export async function deleteClosedRange(id: string): Promise<void> {
+  const res = await fetch(`/api/me/closed-days/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) throw new ApiError(res.status, "delete_failed");
+}
+
 export function listSchedules(): Promise<{ schedules: Schedule[] }> {
   return request("/api/me/schedules");
 }

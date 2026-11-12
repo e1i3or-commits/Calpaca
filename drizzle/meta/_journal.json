@@ -484,6 +484,13 @@
       "when": 1793100000000,
       "tag": "0068_booking_windows",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1795000000000,
+      "tag": "0069_workspace_closed_days",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,8 @@ import type {
   HostSchedule,
 } from "@calpaca/core";
 import { kickoffPubliclyAvailable, loadKickoffContext } from "./kickoff-context";
+import { closedDaysForUsers } from "./closed-days-repo";
+import { closedDayOverrides } from "@calpaca/core";
 
 type Db = NodePgDatabase<typeof schema>;
 
@@ -432,7 +434,12 @@ export async function getSchedulesForUsers(
     ))].filter((id) => !byUser.has(id));
   }
 
-  return [...byUser.values()];
+  // Workspace closed days (US holidays, a conference) close every host like their own time off.
+  const closed = await closedDaysForUsers([...byUser.keys()], executor);
+  return [...byUser.values()].map((row) => ({
+    ...row,
+    overrides: [...row.overrides, ...closedDayOverrides(closed.get(row.userId) ?? [])],
+  }));
 }
 
 /**
