@@ -19,7 +19,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("engagement one-off meetings",()
   try {
    await migrate(db,{migrationsFolder:"drizzle"});await db.execute(sql`truncate table ${s.users},${s.workspaces} restart identity cascade`);
    const people=await db.insert(s.users).values(Array.from({length:6},(_,i)=>({name:`Person ${i}`,email:`oneoff-${i}@example.invalid`}))).returning();
-   const ids=people.map(person=>person.id),[workspace]=await db.insert(s.workspaces).values({name:"One off",slug:"oneoff"}).returning(),ws=workspace!.id;
+   const ids=people.map(person=>person.id),[workspace]=await db.insert(s.workspaces).values({name:"One off",slug:"oneoff",usHolidays:[]}).returning(),ws=workspace!.id;
    await db.insert(s.workspaceMembers).values(ids.map(userId=>({workspaceId:ws,userId,role:"member" as const})));
    const actor={userId:ids[2]!,workspaceRole:"member" as const};
    const provision=await provisionFranchiseOnboarding(ws,{...actor,workspaceRole:"admin"},franchiseOnboardingInput.parse({sourceWorkspaceId:crypto.randomUUID(),sourceProjectKey:"oneoff-test",locationKey:crypto.randomUUID(),franchiseeId:"5854883000000000001",businessUnitId:"5854883000000000002",primaryContactId:"5854883000000000003",clientName:"Synthetic Client",locationName:"Sample City",franchiseSuccessUserIds:ids.slice(2),kaiUserId:ids[0],andrewUserId:ids[1],accountLeadUserId:ids[2],organizerUserId:ids[2]}),db);
