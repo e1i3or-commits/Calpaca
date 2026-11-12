@@ -7,6 +7,18 @@ tracked with annotated Git tags named `v<version>`.
 
 ### User-facing improvements
 
+- Workspace closed days. **Availability, Closed days** lists the US holidays
+  the workspace observes (New Year's Day, Memorial Day, Juneteenth,
+  Independence Day, Labor Day, Thanksgiving, the day after and Christmas by
+  default; Martin Luther King Jr. Day, Presidents' Day, Columbus Day and
+  Veterans Day can be switched on) and its own dates, such as a conference.
+  A holiday on a weekend is observed on the Friday before or the Monday
+  after. Nobody in the workspace can be booked on a closed day, in their own
+  timezone, on every booking path: public pages, holds, reschedules,
+  protected kickoffs and the availability troubleshooter. Owners and admins
+  change them; any member reads them over
+  `GET /api/me/closed-days` and `GET /api/me/closed-days/dates?from&to`.
+
 - Engagements read as meeting series over the API, for Tyger and other
   dashboards: `GET /api/me/engagement-series` lists each visible Engagement
   with its cadence, schedule status, held and planned meeting counts, next
