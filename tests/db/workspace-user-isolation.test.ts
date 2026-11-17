@@ -116,6 +116,24 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("workspace user isolation", () =
         db,
       )).toBe("not_found");
 
+      const [alphaMember] = await db.insert(schema.users).values({
+        name: "Alpha Member",
+        email: "member@example.test",
+      }).returning();
+      await db.insert(schema.workspaceMembers).values({
+        workspaceId: alpha!.id,
+        userId: alphaMember!.id,
+        role: "member",
+      });
+      expect(await updateManagedUser(
+        alphaMember!.id,
+        alphaMember!.id,
+        { role: "admin" },
+        alpha!.id,
+        db,
+      )).toBe("forbidden");
+      expect(await getManagementDirectory(alphaMember!.id, alpha!.id, db)).toBeNull();
+
       const invitation = await createUserInvitation(
         alphaOwner!.id,
         "new@example.test",

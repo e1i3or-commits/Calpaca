@@ -36,7 +36,7 @@ export function Sheet({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <button type="button" tabIndex={-1} aria-label="Close" className="absolute inset-0 bg-foreground/25" onClick={onClose} />
+      <button type="button" tabIndex={-1} aria-label="Close" className="absolute inset-0 bg-foreground/25 dark:bg-black/60" onClick={onClose} />
       <div
         ref={panelRef}
         role="dialog"

@@ -7,6 +7,20 @@ tracked with annotated Git tags named `v<version>`.
 
 ### User-facing improvements
 
+- In dark mode, the dimmed backdrop behind side sheets, booking details and
+  the mobile menu is now dark instead of a white wash. Booking details label
+  the invitee's booking notes as **Notes from invitee**.
+
+- Only workspace owners and admins can open user management, change roles or
+  invite people. A workspace member could previously change roles, including
+  making themselves an admin, through the API.
+
+- In user management, **Deactivate** is tinted red and **Reactivate** in the primary color so
+  the two read differently at a glance.
+
+- Adding a custom domain opens the standard side sheet, which then shows the
+  DNS verification record to add.
+
 - An open tab notices a new deploy. Within a minute (or on returning to the
   tab) it shows **An update is available** with a **Refresh** button; it
   never reloads by itself. Not shown inside embedded booking widgets. See
