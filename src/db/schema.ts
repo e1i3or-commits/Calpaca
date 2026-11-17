@@ -294,7 +294,7 @@ export const accounts = pgTable("accounts", {
   accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
   refreshTokenExpiresAt: timestamp("refresh_token_expires_at", { withTimezone: true }),
   scope: text("scope"),
-  password: text("password"), // unused (no credential auth); BetterAuth expects the column
+  password: text("password"), // only the local dev-login account (docs/DEV-LOGIN.md) sets it
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("account_user_idx").on(t.userId)]);

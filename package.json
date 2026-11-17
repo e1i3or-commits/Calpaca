@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit && tsc -p web --noEmit && tsc -p packages/core --noEmit",
     "lint": "eslint .",
     "test": "bun test",
+    "seed:dev": "bun run scripts-dev/seed-dev-login.ts && bun run scripts-dev/seed-demo.ts",
     "openapi:generate": "bun run scripts-dev/generate-openapi.ts",
     "start": "bun run src/index.ts",
     "mcp": "bun run src/mcp/index.ts",

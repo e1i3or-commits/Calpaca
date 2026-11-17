@@ -25,6 +25,7 @@ import { ProposalPage } from "@/pages/proposal-page";
 import { PrivacyPage, TermsPage } from "@/pages/legal-page";
 import type { RoutingAnswers } from "@/lib/api";
 import { BrandMark } from "@/components/brand-mark";
+import { UpdateNotice } from "@/components/update-notice";
 import { initializeAppearance } from "@/lib/appearance";
 import "./styles.css";
 
@@ -35,6 +36,7 @@ const rootRoute = createRootRoute({
   component: () => (
     <div className="min-h-screen bg-background text-foreground">
       <Outlet />
+      <UpdateNotice />
     </div>
   ),
   notFoundComponent: () => (

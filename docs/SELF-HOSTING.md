@@ -117,6 +117,11 @@ curl https://calendar.example.com/health
 Review release notes and migration files before upgrading. Database migrations
 are forward-only; keep the backup until the new version has been exercised.
 
+Tabs already open on the old version show a **Refresh** prompt within a
+minute. If a proxy or CDN sits in front of Calpaca, let it pass through the
+app's `Cache-Control: no-store` on `/version.json`, or the prompt never
+appears.
+
 ## Operations
 
 Useful commands:
