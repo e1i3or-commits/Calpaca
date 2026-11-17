@@ -43,12 +43,13 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("closed days", () => {
       end: Temporal.Instant.from(`${to}T12:00:00Z`),
     }).map((interval) => interval.start.toZonedDateTimeISO(schedule.timezone).toPlainDate().toString());
 
-  test("a new workspace observes the default holidays and closes them for its hosts", async () => {
+  test("a new workspace observes the handbook's holidays and closes them for its hosts", async () => {
     const { pool, db, workspace, host } = await setup();
     try {
       const config = await getWorkspaceClosedDays(workspace.id, db);
       expect(config.usHolidays).toContain("thanksgiving");
-      expect(config.usHolidays).not.toContain("columbus_day");
+      expect(config.usHolidays).toContain("columbus_day");
+      expect(config.usHolidays).toContain("christmas_eve");
       const [schedule] = await getSchedulesForUsers([host.id], db);
       expect(openDays(schedule!, "2026-11-23", "2026-11-28")).toEqual(["2026-11-23", "2026-11-24", "2026-11-25"]);
     } finally {

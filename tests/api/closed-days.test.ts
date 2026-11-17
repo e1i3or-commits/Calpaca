@@ -30,7 +30,7 @@ describe("closed days API", () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { usHolidays: { key: string; observed: boolean }[]; ranges: unknown[]; canManage: boolean };
     expect(body.usHolidays.filter((h) => h.observed).map((h) => h.key)).toEqual([...DEFAULT_US_HOLIDAYS]);
-    expect(body.usHolidays.find((h) => h.key === "mlk_day")?.observed).toBe(false);
+    expect(body.usHolidays.find((h) => h.key === "christmas_eve")?.observed).toBe(true);
     expect(body.ranges).toEqual([conference]);
     expect(body.canManage).toBe(false);
   });

@@ -11001,7 +11001,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 12
+            "maxItems": 16
           }
         },
         "required": [
