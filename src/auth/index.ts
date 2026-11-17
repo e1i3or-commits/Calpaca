@@ -4,6 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { getDb } from "../db/client";
 import * as schema from "../db/schema";
 import { resolveWorkspaceByHostname } from "../db/workspace-repo";
+import { isDevLoginEnabled } from "./dev-login";
 
 // Calendar scopes ride the sign-in flow (ARCHITECTURE.md: no separate
 // connect step). readonly covers busy reads; events covers writing the
@@ -49,6 +50,8 @@ function buildAuth() {
       schema,
       usePlural: true,
     }),
+    // Seeded accounts only (scripts-dev/seed-dev-login.ts); nobody signs up by password.
+    emailAndPassword: { enabled: isDevLoginEnabled(), disableSignUp: true },
     socialProviders: {
       google: {
         clientId: process.env.GOOGLE_CLIENT_ID ?? "",

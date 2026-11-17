@@ -92,6 +92,18 @@ bun run dev:web
 
 Then open <http://localhost:5173>.
 
+To skip Google and sign in as a seeded demo host, see
+[docs/DEV-LOGIN.md](docs/DEV-LOGIN.md).
+
+To run the API on another port, set `PORT` and `BETTER_AUTH_URL` for the
+server and `API_ORIGIN` for Vite, and register the matching Google redirect
+URI (`${BETTER_AUTH_URL}/api/auth/callback/google`):
+
+```sh
+PORT=3100 BETTER_AUTH_URL=http://localhost:3100 bun run start
+API_ORIGIN=http://localhost:3100 bun run dev:web
+```
+
 > Keep `DATABASE_URL` and `TEST_DATABASE_URL` pointed at different databases.
 > Integration tests truncate their database.
 
@@ -142,6 +154,8 @@ bun run verify
 Database-backed tests use `TEST_DATABASE_URL` and skip cleanly when it is not
 set. See [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes; Calpaca's
 small infrastructure and dependency budget is a deliberate product constraint.
+UI work follows [docs/BRAND-STANDARD.md](docs/BRAND-STANDARD.md): tokens,
+surfaces, the `web/src/components/ui/` kit and interaction rules.
 
 ## Deployment options
 

@@ -13,6 +13,8 @@ import {
 import { errorText } from "@/lib/error-text";
 import { slugify } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/sheet";
+import { ChoiceList, FormSection, choiceRowClass } from "@/components/ui/form-section";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -79,6 +81,7 @@ export function BookingPagesManager({
             type="button"
             size="sm"
             variant="outline"
+            className="w-full sm:w-auto"
             onClick={() => setEditing({ id: null, form: DEFAULT_BOOKING_PAGE })}
           >
             <Plus className="mr-1 h-4 w-4" /> New page
@@ -86,9 +89,23 @@ export function BookingPagesManager({
         )}
       </div>
       {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
-      {editing ? (
+      <Sheet
+        open={editing !== null}
+        title={editing?.id ? "Edit booking page" : "New booking page"}
+        description="Group selected event types on a themed public page."
+        onClose={() => setEditing(null)}
+        footer={<>
+          <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+          <Button type="submit" form="booking-page-form" disabled={!editing?.form.title || !editing.form.slug || !editing.form.eventTypeIds.length}>
+            Save page
+          </Button>
+        </>}
+      >
+        {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
+        {editing && (
         <form
-          className="mt-4 grid gap-3 rounded-lg border border-border p-4 sm:grid-cols-2"
+          id="booking-page-form"
+          className="grid gap-4 sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
             void save();
@@ -158,10 +175,10 @@ export function BookingPagesManager({
               })}
             />
           </div>
-          <fieldset className="flex flex-col gap-2 sm:col-span-2">
-            <legend className="text-sm font-medium">Events to show</legend>
+          <FormSection title="Events to show" description="Invitees pick one of these on the page." className="sm:col-span-2">
+            <ChoiceList>
             {eventTypes.map((eventType) => (
-              <label key={eventType.id} className="flex items-center gap-2 text-sm">
+              <label key={eventType.id} className={choiceRowClass}>
                 <input
                   type="checkbox"
                   checked={editing.form.eventTypeIds.includes(eventType.id)}
@@ -178,64 +195,59 @@ export function BookingPagesManager({
                 {eventType.title}
               </label>
             ))}
-          </fieldset>
-          <div className="flex gap-2 sm:col-span-2">
-            <Button type="submit" disabled={!editing.form.title || !editing.form.slug || !editing.form.eventTypeIds.length}>
-              Save page
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
-          </div>
+            </ChoiceList>
+          </FormSection>
         </form>
-      ) : (
-        <ul className="mt-4 flex flex-col gap-2">
-          {pages.map((page) => (
-            <li key={page.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3 text-sm">
-              <span className="grow">
-                <span className="font-medium">{page.title}</span>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {page.eventTypeIds.length} event{page.eventTypeIds.length === 1 ? "" : "s"} · {page.theme}
-                </span>
+        )}
+      </Sheet>
+      <ul className="mt-4 flex flex-col gap-2">
+        {pages.map((page) => (
+          <li key={page.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3 text-sm">
+            <span className="grow">
+              <span className="font-medium">{page.title}</span>
+              <span className="ml-2 text-xs text-muted-foreground">
+                {page.eventTypeIds.length} event{page.eventTypeIds.length === 1 ? "" : "s"} · {page.theme}
               </span>
-              <Button type="button" size="sm" variant="ghost" onClick={() => {
-                void navigator.clipboard.writeText(pageUrl(page.slug)).then(() => {
-                  setCopied(page.id);
-                  setTimeout(() => setCopied(null), 1500);
-                }).catch(() => setError("Could not copy the booking page link. Try again."));
-              }}>
-                <Copy className="mr-1 h-3.5 w-3.5" />
-                <CopyFeedbackLabel copied={copied === page.id} idle="Link" />
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setEditing({
-                id: page.id,
-                form: {
-                  slug: page.slug,
-                  title: page.title,
-                  description: page.description,
-                  theme: page.theme,
-                  logoUrl: page.logoUrl,
-                  eventTypeIds: page.eventTypeIds,
-                },
-              })}>
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => {
-                void deleteBookingPage(page.id).then(reload).catch((e: unknown) => setError(errorText(e)));
-              }}>
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </li>
-          ))}
-          {!pages.length && (
-            <li>
-              <ActionableEmptyState
-                title="No custom booking pages yet"
-                description="Combine selected event types into one public page for a client, service, or campaign."
-                action={<Button type="button" size="sm" variant="outline" onClick={() => setEditing({ id: null, form: DEFAULT_BOOKING_PAGE })}><Plus className="h-4 w-4" /> Create a booking page</Button>}
-              />
-            </li>
-          )}
-        </ul>
-      )}
+            </span>
+            <Button type="button" size="sm" variant="ghost" onClick={() => {
+              void navigator.clipboard.writeText(pageUrl(page.slug)).then(() => {
+                setCopied(page.id);
+                setTimeout(() => setCopied(null), 1500);
+              }).catch(() => setError("Could not copy the booking page link. Try again."));
+            }}>
+              <Copy className="mr-1 h-3.5 w-3.5" />
+              <CopyFeedbackLabel copied={copied === page.id} idle="Link" />
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setEditing({
+              id: page.id,
+              form: {
+                slug: page.slug,
+                title: page.title,
+                description: page.description,
+                theme: page.theme,
+                logoUrl: page.logoUrl,
+                eventTypeIds: page.eventTypeIds,
+              },
+            })}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => {
+              void deleteBookingPage(page.id).then(reload).catch((e: unknown) => setError(errorText(e)));
+            }}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </li>
+        ))}
+        {!pages.length && (
+          <li>
+            <ActionableEmptyState
+              title="No custom booking pages yet"
+              description="Combine selected event types into one public page for a client, service, or campaign."
+              action={<Button type="button" size="sm" variant="outline" onClick={() => setEditing({ id: null, form: DEFAULT_BOOKING_PAGE })}><Plus className="h-4 w-4" /> Create a booking page</Button>}
+            />
+          </li>
+        )}
+      </ul>
     </section>
   );
 }

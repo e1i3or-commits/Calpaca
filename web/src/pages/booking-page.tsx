@@ -664,10 +664,21 @@ function PublicHostPicker({
   );
 }
 
-export function TimezoneSelect({ value, onChange }: { value: string; onChange: (tz: string) => void }) {
+export function TimezoneSelect({
+  value,
+  onChange,
+  id,
+  className = "min-w-0 max-w-full bg-transparent text-sm text-muted-foreground focus:outline-none",
+}: {
+  value: string;
+  onChange: (tz: string) => void;
+  id?: string;
+  className?: string;
+}) {
   return (
     <select
-      className="min-w-0 max-w-full bg-transparent text-sm text-muted-foreground focus:outline-none"
+      id={id}
+      className={className}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label="Timezone"

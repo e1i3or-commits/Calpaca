@@ -333,9 +333,11 @@ export function MarketingPage() {
                   <ul className="mt-7 space-y-3 text-sm">
                     {plan.points.map((point) => <li key={point} className="flex gap-2.5"><Check className="mt-0.5 h-4 w-4 shrink-0" />{point}</li>)}
                   </ul>
-                  <a href={plan.href} className={`mt-9 inline-flex min-h-11 items-center justify-center gap-2 px-4 text-sm font-semibold ${plan.featured ? "bg-primary-foreground text-primary" : "bg-foreground text-background"}`}>
-                    {plan.action} <ArrowRight className="h-4 w-4" />
-                  </a>
+                  <div className="mt-auto pt-9">
+                    <a href={plan.href} className={`flex min-h-11 items-center justify-center gap-2 px-4 text-sm font-semibold ${plan.featured ? "bg-primary-foreground text-primary" : "bg-foreground text-background"}`}>
+                      {plan.action} <ArrowRight className="h-4 w-4" />
+                    </a>
+                  </div>
                 </article>
               ))}
             </div>

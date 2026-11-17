@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { BrandMark } from "@/components/brand-mark";
 import { signInErrorMessage } from "@/lib/sign-in-error";
+import { DevLoginButton } from "@/components/dev-login-button";
 
 // Replaces the temporary /dev/sign-in HTML page: the sign-in POST must
 // originate in the browser so the OAuth state cookie is set where the
@@ -74,6 +75,7 @@ export function SignInPage() {
             <p className="text-center text-xs leading-5 text-muted-foreground">
               If you are new, this creates your Calpaca account. Google is used for secure sign-in and calendar connection.
             </p>
+            {import.meta.env.DEV && <DevLoginButton />}
           </CardContent>
         </Card>
       </div>

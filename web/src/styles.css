@@ -15,6 +15,7 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
+  --color-input: var(--border);
   --color-ring: var(--ring);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
@@ -23,6 +24,30 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+}
+
+@layer base {
+  button,
+  [role="button"],
+  a[href],
+  select,
+  summary,
+  label:has(> input:is([type="checkbox"], [type="radio"])),
+  input:is([type="checkbox"], [type="radio"], [type="file"], [type="color"]) {
+    cursor: pointer;
+  }
+
+  :is(button, select, input):disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 body {
@@ -217,6 +242,86 @@ html {
   --destructive: oklch(0.67 0.17 28);
   --destructive-foreground: oklch(0.98 0 0);
   color-scheme: dark;
+}
+
+/* Date and time fields. Unlayered so it beats the Input primitive's `flex`
+   utility, which makes Chrome pack the picker icon right after the value. */
+input:is([type="date"], [type="datetime-local"], [type="time"], [type="month"], [type="week"]) {
+  display: block;
+}
+
+input:is([type="date"], [type="datetime-local"], [type="time"], [type="month"], [type="week"])::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+input:is([type="date"], [type="datetime-local"], [type="time"], [type="month"], [type="week"])::-webkit-calendar-picker-indicator:hover {
+  opacity: 0.9;
+}
+
+/* Form controls on organizer pages. Unlayered on purpose: these beat Tailwind
+   utilities, so a select's px-3 can't eat the chevron's room. */
+[data-organizer] {
+  --control-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237a7268' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --control-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbfaf6' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+}
+
+[data-appearance="dark"] [data-organizer] {
+  --control-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9a197' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --control-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23131c16' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+}
+
+[data-organizer] select:not([multiple]) {
+  appearance: none;
+  background-image: var(--control-chevron);
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem;
+  padding-right: 2.25rem;
+}
+
+[data-organizer] :is(input, select, textarea):focus-visible {
+  outline: none;
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 20%, transparent);
+}
+
+[data-organizer] input:is([type="checkbox"], [type="radio"]) {
+  appearance: none;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  border: 1.5px solid color-mix(in oklab, var(--foreground) 35%, var(--border));
+  border-radius: 0.3rem;
+  background: var(--card) center / 0.8rem no-repeat;
+  cursor: pointer;
+  transition: background-color 120ms, border-color 120ms;
+}
+
+[data-organizer] input[type="radio"] {
+  border-radius: 999px;
+}
+
+[data-organizer] input:is([type="checkbox"], [type="radio"]):hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+[data-organizer] input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+  background-image: var(--control-check);
+}
+
+[data-organizer] input[type="radio"]:checked {
+  border-color: var(--primary);
+  background-color: var(--card);
+  box-shadow: inset 0 0 0 0.22rem var(--card), inset 0 0 0 0.6rem var(--primary);
+}
+
+[data-organizer] input:is([type="checkbox"], [type="radio"]):disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -149,6 +149,10 @@ import {
 } from "@/components/dashboard-primitives";
 import { EventTypesTab } from "@/components/event-types-tab";
 import { ClosedDaysPanel } from "@/components/closed-days-panel";
+import { SidebarSection } from "@/components/sidebar-section";
+import { AvatarUpload } from "@/components/avatar-upload";
+import { Sheet } from "@/components/ui/sheet";
+import { useModalBehavior } from "@/lib/use-modal-behavior";
 
 const TABS = [
   { key: "home", label: "Home", icon: Home, group: "primary" },
@@ -170,6 +174,17 @@ const TABS = [
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
+
+const SIDEBAR_SECTIONS = [
+  { group: "tools", label: "Tools" },
+  { group: "setup", label: "Workspace" },
+] as const;
+type SidebarGroup = (typeof SIDEBAR_SECTIONS)[number]["group"];
+
+function sidebarGroupOf(view: DashboardView): SidebarGroup | null {
+  const group = TABS.find((item) => item.key === view)?.group;
+  return SIDEBAR_SECTIONS.find((section) => section.group === group)?.group ?? null;
+}
 export type DashboardView = TabKey | "engagements";
 
 export const DASHBOARD_VIEW_PATHS: Record<DashboardView, string> = {
@@ -222,11 +237,14 @@ export function DashboardPage({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("calpaca:sidebar-collapsed") === "true",
   );
+  const [openSection, setOpenSection] = useState<SidebarGroup | null>(() => sidebarGroupOf(initialView));
   const [moreOpen, setMoreOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const { appearance, toggleAppearance } = useAppearance();
 
   useEffect(() => setTab(initialView), [initialView]);
+  // The open section follows the current page; a page outside every section closes them.
+  useEffect(() => setOpenSection(sidebarGroupOf(tab)), [tab]);
 
   const navigateToView = useCallback((view: DashboardView) => {
     const destination = DASHBOARD_VIEW_PATHS[view];
@@ -270,71 +288,67 @@ export function DashboardPage({
     <div data-organizer className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <aside className={`fixed inset-y-0 left-0 z-20 hidden flex-col border-r border-border/70 bg-card/90 px-3 py-5 backdrop-blur transition-[width] md:flex ${sidebarCollapsed ? "w-16" : "w-60"}`}>
         <Brand key={tab} collapsed={sidebarCollapsed} />
-        <nav className="mt-8 flex min-h-0 flex-1 flex-col overflow-y-auto" aria-label="Organizer">
+        <nav className="-mx-3 mt-8 min-h-0 flex-1 scrollbar-none overflow-y-auto overscroll-contain px-3 pb-3" aria-label="Organizer">
           <div className="space-y-1">
             {TABS.filter((item) => item.group === "primary").map((item) => (
               <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => navigateToView(item.key)} />
             ))}
           </div>
-          <p className={`mb-2 mt-8 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground ${sidebarCollapsed ? "sr-only" : ""}`}>
-            Tools
-          </p>
-          <div className="space-y-1">
-            {TABS.filter((item) => item.group === "tools").map((item) => (
-              <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => navigateToView(item.key)} />
+          <div className={sidebarCollapsed ? "mt-6 space-y-6" : "mt-2 space-y-1"}>
+            {SIDEBAR_SECTIONS.map((section) => (
+              <SidebarSection
+                key={section.group}
+                label={section.label}
+                open={openSection === section.group}
+                collapsed={sidebarCollapsed}
+                onToggle={() => setOpenSection((current) => (current === section.group ? null : section.group))}
+              >
+                {TABS.filter((item) => item.group === section.group).map((item) => (
+                  <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => navigateToView(item.key)} />
+                ))}
+              </SidebarSection>
             ))}
           </div>
-          <p className={`mb-2 mt-8 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground ${sidebarCollapsed ? "sr-only" : ""}`}>
-            Workspace
-          </p>
-          <div className="space-y-1">
-            {TABS.filter((item) => item.group === "setup").map((item) => (
-              <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => navigateToView(item.key)} />
-            ))}
-          </div>
-          <p className={`mb-2 mt-8 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground ${sidebarCollapsed ? "sr-only" : ""}`}>
-            Account
-          </p>
-          <div className="space-y-1">
+        </nav>
+        <div className="shrink-0 space-y-1 border-t border-border/70 pt-3">
+          <nav aria-label="Account" className="space-y-1">
             {TABS.filter((item) => item.group === "account").map((item) => (
               <NavButton key={item.key} item={item} active={tab === item.key} collapsed={sidebarCollapsed} onClick={() => navigateToView(item.key)} />
             ))}
-          </div>
-          <div className="mt-auto border-t border-border/70 pt-3">
-            <button
-              type="button"
-              className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground lg:h-10 ${sidebarCollapsed ? "justify-center" : ""}`}
-              aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}
-              title={`Use ${appearance === "dark" ? "light" : "dark"} mode`}
-              onClick={toggleAppearance}
-            >
-              {appearance === "dark" ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
-              {!sidebarCollapsed && (appearance === "dark" ? "Light mode" : "Dark mode")}
-            </button>
-            <button
-              type="button"
-              className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground lg:h-10 ${sidebarCollapsed ? "justify-center" : ""}`}
-              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-            >
-              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4 shrink-0" /> : <PanelLeftClose className="h-4 w-4 shrink-0" />}
-              {!sidebarCollapsed && "Collapse sidebar"}
-            </button>
-            <button
-              type="button"
-              className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground lg:h-10 ${sidebarCollapsed ? "justify-center" : ""}`}
-              aria-label="Sign out"
-              title={sidebarCollapsed ? "Sign out" : undefined}
-              onClick={() => void signOut().then(() => (window.location.href = "/sign-in"))}
-            >
-              <LogOut className="h-4 w-4 shrink-0" /> {!sidebarCollapsed && "Sign out"}
-            </button>
-            <p className={`px-3 pt-2 text-[10px] text-muted-foreground ${sidebarCollapsed ? "sr-only" : ""}`}>
-              Calpaca v{__CALPACA_VERSION__}
-            </p>
-          </div>
-        </nav>
+          </nav>
+          <button
+            type="button"
+            className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground lg:h-10 ${sidebarCollapsed ? "justify-center" : ""}`}
+            aria-label={`Use ${appearance === "dark" ? "light" : "dark"} mode`}
+            title={`Use ${appearance === "dark" ? "light" : "dark"} mode`}
+            onClick={toggleAppearance}
+          >
+            {appearance === "dark" ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+            {!sidebarCollapsed && (appearance === "dark" ? "Light mode" : "Dark mode")}
+          </button>
+          <button
+            type="button"
+            className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground lg:h-10 ${sidebarCollapsed ? "justify-center" : ""}`}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4 shrink-0" /> : <PanelLeftClose className="h-4 w-4 shrink-0" />}
+            {!sidebarCollapsed && "Collapse sidebar"}
+          </button>
+          <button
+            type="button"
+            className={`flex h-11 w-full items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground lg:h-10 ${sidebarCollapsed ? "justify-center" : ""}`}
+            aria-label="Sign out"
+            title={sidebarCollapsed ? "Sign out" : undefined}
+            onClick={() => void signOut().then(() => (window.location.href = "/sign-in"))}
+          >
+            <LogOut className="h-4 w-4 shrink-0" /> {!sidebarCollapsed && "Sign out"}
+          </button>
+          <p className={`px-3 pt-2 text-[10px] text-muted-foreground ${sidebarCollapsed ? "sr-only" : ""}`}>
+            Calpaca v{__CALPACA_VERSION__}
+          </p>
+        </div>
       </aside>
 
       <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border/70 bg-background/90 px-4 backdrop-blur md:hidden">
@@ -352,7 +366,7 @@ export function DashboardPage({
       </header>
 
       <main className={`px-4 pb-24 pt-7 transition-[margin] md:px-8 md:pb-10 md:pt-10 ${sidebarCollapsed ? "md:ml-16" : "md:ml-60"}`}>
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-7xl">
           <PageHeading tab={tab} />
           {error && <p role="alert" className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</p>}
           {!error && !users && <DashboardSkeleton />}
@@ -490,41 +504,7 @@ function MobileMoreSheet({
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    closeButtonRef.current?.focus();
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab" || !dialogRef.current) return;
-      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
-        'button:not([disabled]):not([tabindex="-1"]), a[href], [tabindex]:not([tabindex="-1"])',
-      ));
-      if (focusable.length === 0) return;
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
-      returnFocusRef.current?.focus();
-    };
-  }, [onClose, open, returnFocusRef]);
+  useModalBehavior({ open, containerRef: dialogRef, initialFocusRef: closeButtonRef, returnFocusRef, onClose });
 
   if (!open) return null;
   return (
@@ -536,7 +516,8 @@ function MobileMoreSheet({
       className="fixed inset-0 z-40 flex items-end bg-foreground/25 md:hidden"
     >
       <button type="button" tabIndex={-1} className="absolute inset-0" aria-label="Close navigation" onClick={onClose} />
-      <section className="relative z-10 max-h-[88vh] w-full overflow-y-auto rounded-t-2xl bg-background px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 shadow-2xl">
+      <section className="relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl bg-background shadow-2xl">
+        <div className="shrink-0 border-b border-border px-4 pb-4 pt-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 id="mobile-more-title" className="text-lg font-semibold">More</h2>
@@ -552,10 +533,12 @@ function MobileMoreSheet({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <Button className="mt-5 w-full" onClick={() => onNavigate("event-types")}>
+        <Button className="mt-4 w-full" onClick={() => onNavigate("event-types")}>
           <Plus className="h-4 w-4" /> Create booking link
         </Button>
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+        </div>
+        <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4">
+        <div className="grid gap-5 sm:grid-cols-2">
           {MOBILE_MORE_GROUPS.map((group) => (
             <section key={group.label}>
               <h3 className="px-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{group.label}</h3>
@@ -576,6 +559,7 @@ function MobileMoreSheet({
               </div>
             </section>
           ))}
+        </div>
         </div>
       </section>
     </div>
@@ -871,7 +855,7 @@ function HomeTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
 
         <button
           type="button"
-          className="group rounded-xl border border-border/70 bg-primary p-5 text-left text-primary-foreground transition hover:opacity-95"
+          className="group order-first rounded-xl border border-border/70 bg-primary p-5 text-left text-primary-foreground transition hover:opacity-95 lg:order-none"
           onClick={() => onNavigate("event-types")}
         >
           <Plus className="h-5 w-5" />
@@ -1568,16 +1552,25 @@ function SignupSheetsTab() {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
-        <Button onClick={() => setCreating((current) => !current)}>
+      <div className="flex flex-col sm:flex-row sm:justify-end">
+        <Button className="w-full sm:w-auto" onClick={() => setCreating(true)}>
           <Plus className="h-4 w-4" /> New sign-up sheet
         </Button>
       </div>
       {error && <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
-      {creating && (
-        <Card>
-          <CardHeader><CardTitle>Create a sign-up sheet</CardTitle><CardDescription>Add fixed sessions people can enroll in.</CardDescription></CardHeader>
-          <CardContent className="space-y-4">
+      <Sheet
+        open={creating}
+        size="lg"
+        title="Create a sign-up sheet"
+        description="Add fixed sessions people can enroll in."
+        onClose={() => setCreating(false)}
+        footer={<>
+          <Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button>
+          <Button disabled={!title.trim() || sessions.some((session) => !session.title.trim() || !session.start || !session.end)} onClick={() => void create()}>Create sign-up sheet</Button>
+        </>}
+      >
+          <div className="space-y-4">
+            {error && <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
             <div><Label htmlFor="sheet-title">Title</Label><Input id="sheet-title" className="mt-1" value={title} onChange={(event) => setTitle(event.target.value)} /></div>
             <div><Label htmlFor="sheet-description">Description</Label><Textarea id="sheet-description" className="mt-1" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
             <div className="max-w-xs"><Label htmlFor="sheet-limit">Maximum sessions per person</Label><Input id="sheet-limit" className="mt-1" type="number" min={1} max={50} value={maxPerPerson} onChange={(event) => setMaxPerPerson(Number(event.target.value))} /></div>
@@ -1607,10 +1600,8 @@ function SignupSheetsTab() {
               ))}
               <Button variant="outline" onClick={() => setQuestions((current) => [...current, { label: "", required: false }])}><Plus className="h-4 w-4" /> Add question</Button>
             </div>
-            <Button disabled={!title.trim() || sessions.some((session) => !session.title.trim() || !session.start || !session.end)} onClick={() => void create()}>Create sign-up sheet</Button>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+      </Sheet>
       {sheets === null && <DashboardSkeleton />}
       {sheets?.map((sheet) => (
         <Card key={sheet.id}>
@@ -1843,7 +1834,7 @@ function AvailabilityTroubleshooterTab({
             <Label htmlFor="diagnostic-event">Event type</Label>
             <select
               id="diagnostic-event"
-              className="h-10 rounded-lg border border-input bg-background px-3 text-sm"
+              className="h-9 w-full rounded-md border border-input bg-card px-3 text-sm shadow-sm"
               value={eventTypeId}
               onChange={(event) => {
                 setEventTypeId(event.target.value);
@@ -2055,19 +2046,25 @@ function OneOffOffersTab() {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
-        <Button onClick={() => setCreating((value) => !value)}>
+      <div className="flex flex-col sm:flex-row sm:justify-end">
+        <Button className="w-full sm:w-auto" onClick={() => setCreating(true)}>
           <Plus className="h-4 w-4" /> New offer
         </Button>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {creating && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Create a single-use offer</CardTitle>
-            <CardDescription>The first completed booking uses the link. Every other attempt is blocked.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4">
+      <Sheet
+        open={creating}
+        size="lg"
+        title="Create a single-use offer"
+        description="The first completed booking uses the link. Every other attempt is blocked."
+        onClose={() => setCreating(false)}
+        footer={<>
+          <Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button>
+          <Button disabled={!eventTypeId || !title.trim() || starts.some((start) => !start)} onClick={() => void save()}>Create offer</Button>
+        </>}
+      >
+          <div className="grid gap-4">
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
             <div className="grid gap-1.5">
               <Label htmlFor="offer-event">Event type</Label>
               <select id="offer-event" className="h-10 rounded-lg border border-input bg-background px-3 text-sm" value={eventTypeId} onChange={(event) => selectEventType(event.target.value)}>
@@ -2140,13 +2137,8 @@ function OneOffOffersTab() {
               <Label htmlFor="offer-expiry">Link expires</Label>
               <Input id="offer-expiry" type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
             </div>
-            <div className="flex gap-2">
-              <Button disabled={!eventTypeId || !title.trim() || starts.some((start) => !start)} onClick={() => void save()}>Create offer</Button>
-              <Button variant="ghost" onClick={() => setCreating(false)}>Cancel</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+      </Sheet>
       {offers.map((offer) => (
         <Card key={offer.id}>
           <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between">
@@ -2368,16 +2360,25 @@ function PollsTab() {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
-        <Button onClick={() => setCreating((value) => !value)}>
+      <div className="flex flex-col sm:flex-row sm:justify-end">
+        <Button className="w-full sm:w-auto" onClick={() => setCreating(true)}>
           <Plus className="h-4 w-4" /> New poll
         </Button>
       </div>
       {error && <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
-      {creating && (
-        <Card className="rounded-xl">
-          <CardHeader><CardTitle>Create a meeting poll</CardTitle><CardDescription>Add two or more candidate times.</CardDescription></CardHeader>
-          <CardContent className="space-y-4">
+      <Sheet
+        open={creating}
+        size="lg"
+        title="Create a meeting poll"
+        description="Add two or more candidate times."
+        onClose={() => setCreating(false)}
+        footer={<>
+          <Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button>
+          <Button disabled={!title.trim() || options.some((option) => !option.start)} onClick={() => void create()}>Create poll</Button>
+        </>}
+      >
+          <div className="space-y-4">
+            {error && <p role="alert" className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
             <div><Label htmlFor="poll-title">Title</Label><Input id="poll-title" className="mt-1.5" value={title} onChange={(event) => setTitle(event.target.value)} /></div>
             <div><Label htmlFor="poll-description">Description</Label><Textarea id="poll-description" className="mt-1.5" value={description} onChange={(event) => setDescription(event.target.value)} /></div>
             <div>
@@ -2486,13 +2487,9 @@ function PollsTab() {
                 </div>
               ))}
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => setOptions((current) => [...current, { start: "" }])}><Plus className="h-4 w-4" /> Add another time</Button>
-              <Button disabled={!title.trim() || options.some((option) => !option.start)} onClick={() => void create()}>Create poll</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            <Button type="button" variant="outline" onClick={() => setOptions((current) => [...current, { start: "" }])}><Plus className="h-4 w-4" /> Add another time</Button>
+          </div>
+      </Sheet>
       {polls === null && <DashboardSkeleton />}
       {polls?.length === 0 && !creating && (
         <ActionableEmptyState
@@ -2747,6 +2744,7 @@ function ProfileTab({ section }: { section: "profile" | "api" }) {
     reader.readAsDataURL(file);
   };
 
+  const [creatingToken, setCreatingToken] = useState(false);
   const generate = async () => {
     if (!tokenName.trim()) return;
     setError(null);
@@ -2755,6 +2753,7 @@ function ProfileTab({ section }: { section: "profile" | "api" }) {
       setNewToken(result.token);
       setTokenCopied(false);
       setTokenName("");
+      setCreatingToken(false);
       reloadTokens();
     } catch (reason) {
       setError(errorText(reason));
@@ -2762,7 +2761,7 @@ function ProfileTab({ section }: { section: "profile" | "api" }) {
   };
 
   return (
-    <div className="max-w-3xl">
+    <div>
       {section === "profile" && <Card>
         <CardHeader>
           <CardTitle className="text-xl">Profile</CardTitle>
@@ -2772,38 +2771,11 @@ function ProfileTab({ section }: { section: "profile" | "api" }) {
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           {!profile ? <InlineLoading label="Loading profile…" /> : (
             <>
-              <div className="flex items-center gap-4">
-                {profile.image ? (
-                  <img
-                    src={profile.image}
-                    alt=""
-                    className="h-16 w-16 rounded-full border border-border object-cover"
-                  />
-                ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                    <UserRound className="h-7 w-7 text-muted-foreground" />
-                  </div>
-                )}
-                <div className="flex flex-col gap-2">
-                  <Input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    aria-label="Upload profile image"
-                    onChange={(event) => readImage(event.target.files?.[0])}
-                  />
-                  {profile.image && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="self-start"
-                      onClick={() => setProfile({ ...profile, image: null })}
-                    >
-                      Remove image
-                    </Button>
-                  )}
-                </div>
-              </div>
+              <AvatarUpload
+                image={profile.image}
+                onSelect={readImage}
+                onRemove={() => setProfile({ ...profile, image: null })}
+              />
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="profile-name">Name</Label>
                 <Input
@@ -2849,13 +2821,13 @@ function ProfileTab({ section }: { section: "profile" | "api" }) {
                 </p>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Timezone</Label>
-                <div className="flex h-9 items-center rounded-md border border-border bg-card px-3">
-                  <TimezoneSelect
-                    value={profile.timezone}
-                    onChange={(timezone) => setProfile({ ...profile, timezone })}
-                  />
-                </div>
+                <Label htmlFor="timezone-1">Timezone</Label>
+                <TimezoneSelect
+                  id="timezone-1"
+                  className="h-9 w-full min-w-0 rounded-md border border-input bg-card px-3 text-sm shadow-sm"
+                  value={profile.timezone}
+                  onChange={(timezone) => setProfile({ ...profile, timezone })}
+                />
               </div>
               <Button
                 className="self-start"
@@ -2870,13 +2842,18 @@ function ProfileTab({ section }: { section: "profile" | "api" }) {
       </Card>}
 
       {section === "api" && <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-xl">
-            <KeyRound className="h-5 w-5" /> API tokens
-          </CardTitle>
-          <CardDescription>
-            Personal bearer tokens have your account access. Store them like passwords.
-          </CardDescription>
+        <CardHeader className="items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="flex flex-col gap-1.5">
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <KeyRound className="h-5 w-5" /> API tokens
+            </CardTitle>
+            <CardDescription>
+              Personal bearer tokens have your account access. Store them like passwords.
+            </CardDescription>
+          </div>
+          <Button size="sm" className="w-full sm:w-auto shrink-0" onClick={() => setCreatingToken(true)}>
+            <Plus className="mr-1 h-4 w-4" /> New token
+          </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {newToken && (
@@ -2906,17 +2883,35 @@ function ProfileTab({ section }: { section: "profile" | "api" }) {
               </Button>
             </div>
           )}
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              value={tokenName}
-              onChange={(event) => setTokenName(event.target.value)}
-              placeholder="Token name, e.g. n8n"
-              aria-label="Token name"
-            />
-            <Button disabled={!tokenName.trim()} onClick={() => void generate()}>
-              Generate
-            </Button>
-          </div>
+          <Sheet
+            open={creatingToken}
+            title="New API token"
+            description="The token has your account access. You'll see it once, after it's generated."
+            onClose={() => setCreatingToken(false)}
+            footer={<>
+              <Button variant="outline" onClick={() => setCreatingToken(false)}>Cancel</Button>
+              <Button type="submit" form="api-token-form" disabled={!tokenName.trim()}>Generate token</Button>
+            </>}
+          >
+            {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
+            <form
+              id="api-token-form"
+              className="flex flex-col gap-1.5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void generate();
+              }}
+            >
+              <Label htmlFor="api-token-name">Name</Label>
+              <Input
+                id="api-token-name"
+                value={tokenName}
+                onChange={(event) => setTokenName(event.target.value)}
+                placeholder="n8n"
+              />
+              <p className="text-xs text-muted-foreground">Name it after the integration that will use it.</p>
+            </form>
+          </Sheet>
           {tokens.length === 0 ? (
             <p className="text-sm text-muted-foreground">No personal tokens.</p>
           ) : (
@@ -3144,28 +3139,38 @@ function SchedulesTab() {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between">
+      <CardHeader className="items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-1.5">
           <CardTitle className="text-xl">Schedules</CardTitle>
           <CardDescription>Weekly working hours, in a named timezone.</CardDescription>
         </div>
         {!editing && (
-          <Button size="sm" onClick={() => setEditing({ id: null, form: DEFAULT_SCHEDULE })}>
+          <Button size="sm" className="w-full sm:w-auto" onClick={() => setEditing({ id: null, form: DEFAULT_SCHEDULE })}>
             <Plus className="mr-1 h-4 w-4" /> New
           </Button>
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {editing ? (
-          <ScheduleForm
-            form={editing.form}
-            onChange={(form) => setEditing({ ...editing, form })}
-            onCancel={() => setEditing(null)}
-            onSave={() => void save()}
-            people={people}
-          />
-        ) : !schedules ? (
+        <Sheet
+          open={editing !== null}
+          size="lg"
+          title={editing?.id ? "Edit schedule" : "New schedule"}
+          description="Weekly working hours, in a named timezone."
+          onClose={() => setEditing(null)}
+        >
+          {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
+          {editing && (
+            <ScheduleForm
+              form={editing.form}
+              onChange={(form) => setEditing({ ...editing, form })}
+              onCancel={() => setEditing(null)}
+              onSave={() => void save()}
+              people={people}
+            />
+          )}
+        </Sheet>
+        {!schedules ? (
           <InlineLoading label="Loading availability schedules…" />
         ) : schedules.length === 0 ? (
           <ActionableEmptyState
@@ -3180,9 +3185,9 @@ function SchedulesTab() {
                 key={s.id}
                 className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
               >
-                <span className="flex-1">
-                  <span className="font-medium">{s.name}</span>
-                  <span className="ml-2 text-xs text-muted-foreground">
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium sm:inline">{s.name}</span>
+                  <span className="block text-xs text-muted-foreground sm:ml-2 sm:inline">
                     {s.timezone} · {s.rules.length} rule{s.rules.length === 1 ? "" : "s"}
                   </span>
                 </span>
@@ -3306,13 +3311,13 @@ function ScheduleForm({
           />
         </div>
         <div className="flex min-w-0 flex-col gap-1.5">
-          <Label>Timezone</Label>
-          <div className="flex h-9 min-w-0 items-center rounded-md border border-border bg-card px-3">
-            <TimezoneSelect
-              value={form.timezone}
-              onChange={(timezone) => onChange({ ...form, timezone })}
-            />
-          </div>
+          <Label htmlFor="timezone-2">Timezone</Label>
+          <TimezoneSelect
+            id="timezone-2"
+            className="h-9 w-full min-w-0 rounded-md border border-input bg-card px-3 text-sm shadow-sm"
+            value={form.timezone}
+            onChange={(timezone) => onChange({ ...form, timezone })}
+          />
         </div>
       </div>
 
@@ -3476,12 +3481,12 @@ function ScheduleForm({
         ))}
       </div>
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={!valid}>
-          Save
-        </Button>
+      <div className="sticky bottom-0 -mx-5 -mb-5 mt-2 flex justify-end gap-2 border-t border-border bg-background px-5 py-4 sm:-mx-6 sm:px-6">
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
+        </Button>
+        <Button type="submit" disabled={!valid}>
+          Save
         </Button>
       </div>
     </form>
@@ -3594,30 +3599,39 @@ function RoutingTab({ users }: { users: DirectoryUser[] }) {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between">
+      <CardHeader className="items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-1.5">
           <CardTitle className="text-xl">Routing forms</CardTitle>
           <CardDescription>Ask invitees questions, send them to the right booking page.</CardDescription>
         </div>
         {!editing && (
-          <Button size="sm" onClick={() => setEditing({ id: null, form: DEFAULT_ROUTING_FORM })}>
+          <Button size="sm" className="w-full sm:w-auto" onClick={() => setEditing({ id: null, form: DEFAULT_ROUTING_FORM })}>
             <Plus className="mr-1 h-4 w-4" /> New
           </Button>
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {editing ? (
-          <RoutingFormEditor
-            form={editing.form}
-            users={users}
-            eventTypes={eventTypes}
-            teams={teams}
-            onChange={(form) => setEditing({ ...editing, form })}
-            onCancel={() => setEditing(null)}
-            onSave={() => void save()}
-          />
-        ) : !forms ? (
+        <Sheet
+          open={editing !== null}
+          size="lg"
+          title={editing?.id ? "Edit routing form" : "New routing form"}
+          onClose={() => setEditing(null)}
+        >
+          {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
+          {editing && (
+            <RoutingFormEditor
+              form={editing.form}
+              users={users}
+              eventTypes={eventTypes}
+              teams={teams}
+              onChange={(form) => setEditing({ ...editing, form })}
+              onCancel={() => setEditing(null)}
+              onSave={() => void save()}
+            />
+          )}
+        </Sheet>
+        {!forms ? (
           <InlineLoading label="Loading routing forms…" />
         ) : forms.length === 0 ? (
           <ActionableEmptyState
@@ -3936,12 +3950,12 @@ function RoutingFormEditor({
         </Button>
       </div>
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={!canSave}>
-          Save
-        </Button>
+      <div className="sticky bottom-0 -mx-5 -mb-5 mt-2 flex justify-end gap-2 border-t border-border bg-background px-5 py-4 sm:-mx-6 sm:px-6">
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
+        </Button>
+        <Button type="submit" disabled={!canSave}>
+          Save
         </Button>
       </div>
     </form>
@@ -4144,6 +4158,7 @@ function UserManagementPanel() {
 
   useEffect(() => reload(), [reload]);
 
+  const [inviting, setInviting] = useState(false);
   const invite = async () => {
     setSaving(true);
     setError(null);
@@ -4158,6 +4173,7 @@ function UserManagementPanel() {
       };
       setNotice(messages[result.delivery]);
       setEmail("");
+      setInviting(false);
       reload();
     } catch (cause) {
       setError(errorText(cause));
@@ -4196,22 +4212,41 @@ function UserManagementPanel() {
 
   return (
     <Card>
-      <CardHeader className="gap-1">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-primary" />
-          <CardTitle className="text-xl">User management</CardTitle>
+      <CardHeader className="items-start gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+            <CardTitle className="text-xl">User management</CardTitle>
+          </div>
+          <CardDescription>Invite people, set access, and safely deactivate accounts.</CardDescription>
         </div>
-        <CardDescription>Invite people, set access, and safely deactivate accounts.</CardDescription>
+        <Button size="sm" className="w-full sm:w-auto shrink-0" onClick={() => setInviting(true)}>
+          <UserPlus className="mr-1.5 h-4 w-4" /> Invite
+        </Button>
       </CardHeader>
       <CardContent className="space-y-5">
+        <Sheet
+          open={inviting}
+          title="Invite a teammate"
+          description="They get an email to join this workspace."
+          onClose={() => setInviting(false)}
+          footer={<>
+            <Button variant="outline" onClick={() => setInviting(false)}>Cancel</Button>
+            <Button type="submit" form="invite-user-form" disabled={saving || email.trim() === ""}>
+              <UserPlus className="mr-1.5 h-4 w-4" /> Send invite
+            </Button>
+          </>}
+        >
+        {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
         <form
-          className="grid gap-3 rounded-xl border border-border/70 bg-muted/30 p-4 sm:grid-cols-[1fr_140px_auto] sm:items-end"
+          id="invite-user-form"
+          className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault();
             void invite();
           }}
         >
-          <div>
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="invite-email">Email address</Label>
             <Input
               id="invite-email"
@@ -4221,7 +4256,7 @@ function UserManagementPanel() {
               onChange={(event) => setEmail(event.target.value)}
             />
           </div>
-          <div>
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="invite-role">Role</Label>
             <select
               id="invite-role"
@@ -4234,10 +4269,8 @@ function UserManagementPanel() {
               {directory.actor.role === "owner" && <option value="owner">Owner</option>}
             </select>
           </div>
-          <Button type="submit" disabled={saving || email.trim() === ""}>
-            <UserPlus className="mr-1.5 h-4 w-4" /> Invite
-          </Button>
         </form>
+        </Sheet>
 
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {notice && <p className="text-sm text-primary">{notice}</p>}
@@ -4351,28 +4384,43 @@ function TeamTab({ users }: { users: DirectoryUser[] }) {
     <div className="space-y-5">
       <UserManagementPanel />
       <Card>
-      <CardHeader className="flex-row items-center justify-between">
+      <CardHeader className="items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-1.5">
           <CardTitle className="text-xl">Teams</CardTitle>
           <CardDescription>Round-robin and group event types belong to a team.</CardDescription>
         </div>
         {!creating && (
-          <Button size="sm" onClick={() => setCreating(true)}>
+          <Button size="sm" className="w-full sm:w-auto" onClick={() => setCreating(true)}>
             <Plus className="mr-1 h-4 w-4" /> New
           </Button>
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {creating && (
+        <Sheet
+          open={creating}
+          title="New team"
+          description="Round-robin and group event types belong to a team."
+          onClose={() => setCreating(false)}
+          footer={<>
+            <Button type="button" variant="outline" onClick={() => setCreating(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="team-create-form" disabled={name.trim() === "" || slug.trim() === ""}>
+              Create team
+            </Button>
+          </>}
+        >
+          {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
           <form
-            className="flex items-end gap-3"
+            id="team-create-form"
+            className="flex flex-col gap-4"
             onSubmit={(e) => {
               e.preventDefault();
               void create();
             }}
           >
-            <div className="flex flex-1 flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="team-name">Name</Label>
               <Input
                 id="team-name"
@@ -4385,18 +4433,12 @@ function TeamTab({ users }: { users: DirectoryUser[] }) {
                 }}
               />
             </div>
-            <div className="flex flex-1 flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="team-slug">Slug</Label>
               <Input id="team-slug" value={slug} onChange={(e) => setSlug(e.target.value)} />
             </div>
-            <Button type="submit" disabled={name.trim() === "" || slug.trim() === ""}>
-              Create
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setCreating(false)}>
-              Cancel
-            </Button>
           </form>
-        )}
+        </Sheet>
         {!teams ? (
           <InlineLoading label="Loading teams…" />
         ) : teams.length === 0 ? (

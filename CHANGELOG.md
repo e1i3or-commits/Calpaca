@@ -7,6 +7,40 @@ tracked with annotated Git tags named `v<version>`.
 
 ### User-facing improvements
 
+- An open tab notices a new deploy. Within a minute (or on returning to the
+  tab) it shows **An update is available** with a **Refresh** button; it
+  never reloads by itself. Not shown inside embedded booking widgets. See
+  [docs/BRAND-STANDARD.md](docs/BRAND-STANDARD.md#new-deploy-refresh).
+
+- Adding or editing anything in the dashboard opens a side sheet over the
+  list, never an inline form or a separate page: event types, folders,
+  booking pages, schedules, closed dates, routing forms, teams, invites, API
+  tokens, polls, sign-up sheets, one-off offers, engagements, meeting
+  templates and proposals. Editor URLs (`/new`, `/$id/edit`) still work and
+  open the sheet.
+
+- Dashboard polish: wider content area; the sidebar keeps account, appearance,
+  collapse and sign-out pinned while its links scroll, and Tools and Workspace
+  collapse (one open at a time). Inputs and dropdowns share one outline and
+  focus ring, checkboxes and radios use the brand green, date pickers keep
+  their icon at the edge, clickable things show a pointer, the Engagements
+  status filter moved behind a Filters button, event type rows use one
+  Copy link | Embed | Move control, and the profile photo has a proper
+  uploader. See [docs/BRAND-STANDARD.md](docs/BRAND-STANDARD.md).
+
+### Mobile improvements
+
+- Card headers stack, page and card actions go full width, the More sheet
+  keeps its header pinned, and Home leads with Create a booking link.
+
+### Developer experience
+
+- Local dev login: `bun run seed:dev` creates a demo host, and the sign-in
+  page shows **Dev login** in the Vite dev build. Off unless
+  `CALPACA_DEV_LOGIN=1` and a localhost `BETTER_AUTH_URL`. See
+  [docs/DEV-LOGIN.md](docs/DEV-LOGIN.md).
+- The Vite dev proxy target is configurable with `API_ORIGIN`.
+
 - Workspace closed days. **Availability, Closed days** lists the holidays
   the workspace observes and its own dates, such as a conference. By default
   it observes the TourScale handbook's list, each of which can be switched
