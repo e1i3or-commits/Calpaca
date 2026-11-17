@@ -52,7 +52,7 @@ async function actorRole(
         eq(workspaceMembers.userId, userId),
       ))
       .limit(1);
-    return membership?.status === "active" ? membership.role : null;
+    return membership?.status === "active" && membership.role !== "member" ? membership.role : null;
   }
   return executor.transaction(async (tx) => {
     const [actor] = await tx

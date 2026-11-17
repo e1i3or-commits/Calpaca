@@ -37,7 +37,6 @@ import {
   ApiError,
   addPollInvitees,
   addTeamMember,
-  addWorkspaceDomain,
   analyticsCsvUrl,
   cancelSignupRegistrationByOrganizer,
   connectCalendar,
@@ -77,7 +76,6 @@ import {
   revokeApiToken,
   revokeOneOffOffer,
   suggestOneOffOfferTimes,
-  removeWorkspaceDomain,
   resendPollFinalization,
   resendPollInvitation,
   resendSignupConfirmation,
@@ -91,7 +89,6 @@ import {
   updateCalendarConnection,
   updateProfile,
   updateWorkspace,
-  verifyWorkspaceDomain,
   updateRoutingForm,
   updateSchedule,
   updateSignupSheetAdministration,
@@ -149,6 +146,7 @@ import {
 } from "@/components/dashboard-primitives";
 import { EventTypesTab } from "@/components/event-types-tab";
 import { ClosedDaysPanel } from "@/components/closed-days-panel";
+import { CustomDomainsSection } from "@/components/custom-domains-section";
 import { SidebarSection } from "@/components/sidebar-section";
 import { AvatarUpload } from "@/components/avatar-upload";
 import { Sheet } from "@/components/ui/sheet";
@@ -513,7 +511,7 @@ function MobileMoreSheet({
       role="dialog"
       aria-modal="true"
       aria-labelledby="mobile-more-title"
-      className="fixed inset-0 z-40 flex items-end bg-foreground/25 md:hidden"
+      className="fixed inset-0 z-40 flex items-end bg-foreground/25 dark:bg-black/60 md:hidden"
     >
       <button type="button" tabIndex={-1} className="absolute inset-0" aria-label="Close navigation" onClick={onClose} />
       <section className="relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl bg-background shadow-2xl">
@@ -1327,7 +1325,7 @@ function BookingDetailPanel({
   return (
     <div
       ref={dialogRef}
-      className="fixed inset-0 z-40 flex justify-end bg-foreground/20 backdrop-blur-[2px]"
+      className="fixed inset-0 z-40 flex justify-end bg-foreground/20 backdrop-blur-[2px] dark:bg-black/60"
       role="dialog"
       aria-modal="true"
       aria-labelledby="booking-details-title"
@@ -1367,7 +1365,12 @@ function BookingDetailPanel({
                     .filter(Boolean).join("\n")}
                 </p>
               )}
-              {booking.inviteeNotes && <p className="mt-3 whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm">{booking.inviteeNotes}</p>}
+              {booking.inviteeNotes && (
+                <div className="mt-3 rounded-lg bg-muted p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Notes from invitee</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm">{booking.inviteeNotes}</p>
+                </div>
+              )}
             </DetailSection>
 
             <DetailSection title="Delivery">
@@ -2947,8 +2950,6 @@ function WorkspaceCard() {
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [domains, setDomains] = useState<WorkspaceDomain[]>([]);
   const [deploymentMode, setDeploymentMode] = useState<"hosted" | "self_hosted">("self_hosted");
-  const [hostname, setHostname] = useState("");
-  const [dnsRecord, setDnsRecord] = useState<{ name: string; value: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
@@ -2962,18 +2963,6 @@ function WorkspaceCard() {
   }, []);
 
   useEffect(() => reload(), [reload]);
-
-  const addDomain = async () => {
-    setError(null);
-    try {
-      const result = await addWorkspaceDomain(hostname);
-      setDnsRecord(result.domain.dnsRecord);
-      setHostname("");
-      reload();
-    } catch (reason) {
-      setError(errorText(reason));
-    }
-  };
 
   return (
     <Card className="xl:col-span-2">
@@ -3010,75 +2999,13 @@ function WorkspaceCard() {
             </div>
 
             <div className="border-t border-border pt-4">
-              <p className="text-sm font-medium">Custom domains</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Add the hostname here first. DNS remains under your control until verification.
-              </p>
-              {workspace.entitlements.customDomains ? (
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <Input
-                    value={hostname}
-                    onChange={(event) => setHostname(event.target.value.toLowerCase())}
-                    placeholder="cal.example.com"
-                    aria-label="Custom hostname"
-                  />
-                  <Button
-                    disabled={!hostname.trim() || !["owner", "admin"].includes(workspace.role)}
-                    onClick={() => void addDomain()}
-                  >
-                    Add domain
-                  </Button>
-                </div>
-              ) : (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Custom domains require a paid hosted plan.
-                </p>
-              )}
+              <CustomDomainsSection
+                domains={domains}
+                entitled={workspace.entitlements.customDomains}
+                canManage={["owner", "admin"].includes(workspace.role)}
+                onChanged={reload}
+              />
             </div>
-
-            {dnsRecord && (
-              <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-                <p className="font-medium">Add this DNS verification record</p>
-                <code className="mt-2 block overflow-x-auto text-xs">
-                  TXT {dnsRecord.name} {dnsRecord.value}
-                </code>
-              </div>
-            )}
-
-            {domains.length > 0 && (
-              <ul className="flex flex-col gap-2">
-                {domains.map((domain) => (
-                  <li
-                    key={domain.id}
-                    className="flex items-center gap-3 rounded-md border border-border p-3 text-sm"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">{domain.hostname}</span>
-                      <span className="text-xs text-muted-foreground">{domain.status}</span>
-                    </span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={domain.status === "verified" || !["owner", "admin"].includes(workspace.role)}
-                      onClick={() => void verifyWorkspaceDomain(domain.id)
-                        .then(reload)
-                        .catch((reason: unknown) => setError(errorText(reason)))}
-                    >
-                      {domain.status === "verified" ? "Verified" : "Verify DNS"}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={!["owner", "admin"].includes(workspace.role)}
-                      onClick={() => void removeWorkspaceDomain(domain.id).then(reload)}
-                    >
-                      Remove
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </>
         )}
       </CardContent>
@@ -4304,6 +4231,9 @@ function UserManagementPanel() {
                   <Button
                     size="sm"
                     variant="outline"
+                    className={user.status === "active"
+                      ? "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
+                      : "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"}
                     disabled={!canEditOwner || user.id === directory.actor.id}
                     onClick={() => void updateUser(user, {
                       status: user.status === "active" ? "inactive" : "active",
