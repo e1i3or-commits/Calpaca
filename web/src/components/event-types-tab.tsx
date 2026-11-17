@@ -50,6 +50,7 @@ import {
   InlineLoading,
 } from "@/components/dashboard-primitives";
 import { BookingPagesManager } from "@/components/booking-pages-manager";
+import { Sheet } from "@/components/ui/sheet";
 
 // ---- event types ----
 
@@ -413,13 +414,13 @@ export function EventTypesTab({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between">
+      <CardHeader className="items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-1.5">
           <CardTitle className="text-xl">Event types</CardTitle>
           <CardDescription>What invitees can book, and with whom.</CardDescription>
         </div>
-        {!initialEditor && (
-          <div className="flex items-center gap-2">
+        {(
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <Button size="sm" variant="outline" onClick={copyBookingPage}>
               <Copy className="mr-1 h-4 w-4" />
               <CopyFeedbackLabel copied={copied === "booking-page"} idle="Booking page" />
@@ -435,68 +436,94 @@ export function EventTypesTab({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {validationIssues.length > 0 && (
-          <div className="rounded-xl border border-destructive/25 bg-destructive/8 p-4" role="alert">
-            <p className="text-sm font-medium text-destructive">Please fix the following:</p>
-            <ul className="mt-2 space-y-1.5 text-sm text-destructive">
-              {validationIssues.map((issue, index) => {
-                const field = String(issue.path[0] ?? "form");
-                const label = field
-                  .replace(/([A-Z])/g, " $1")
-                  .replace(/^./, (character) => character.toUpperCase());
-                const fieldIds: Record<string, string> = {
-                  title: "et-title",
-                  description: "et-description",
-                  slug: "et-slug",
-                  durationMinutes: "et-duration",
-                  capacity: "et-capacity",
-                  mode: "et-mode",
-                  bufferBeforeMin: "et-buffer-before",
-                  bufferAfterMin: "et-buffer-after",
-                  minimumNoticeMin: "et-notice",
-                  rollingWindowDays: "et-window",
-                  scheduleId: "et-schedule",
-                  theme: "et-theme",
-                  logoUrl: "et-logo",
-                  teamId: "et-team",
-                };
-                return (
-                  <li key={`${issue.path.join(".")}-${index}`}>
-                    <button
-                      type="button"
-                      className="text-left underline decoration-destructive/35 underline-offset-2"
-                      onClick={() => document.getElementById(fieldIds[field] ?? "")?.focus()}
-                    >
-                      <span className="font-medium">{label}</span>: {issue.message}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+        <Sheet
+          open={Boolean(initialEditor) || editing !== null}
+          size="xl"
+          title={editing?.id || (initialEditor && initialEditor !== "new") ? "Edit event type" : "New event type"}
+          description="What invitees can book, and with whom."
+          onClose={onCloseEditor}
+        >
+          <div className="flex flex-col gap-4">
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            {validationIssues.length > 0 && (
+              <div className="rounded-xl border border-destructive/25 bg-destructive/8 p-4" role="alert">
+                <p className="text-sm font-medium text-destructive">Please fix the following:</p>
+                <ul className="mt-2 space-y-1.5 text-sm text-destructive">
+                  {validationIssues.map((issue, index) => {
+                    const field = String(issue.path[0] ?? "form");
+                    const label = field
+                      .replace(/([A-Z])/g, " $1")
+                      .replace(/^./, (character) => character.toUpperCase());
+                    const fieldIds: Record<string, string> = {
+                      title: "et-title",
+                      description: "et-description",
+                      slug: "et-slug",
+                      durationMinutes: "et-duration",
+                      capacity: "et-capacity",
+                      mode: "et-mode",
+                      bufferBeforeMin: "et-buffer-before",
+                      bufferAfterMin: "et-buffer-after",
+                      minimumNoticeMin: "et-notice",
+                      rollingWindowDays: "et-window",
+                      scheduleId: "et-schedule",
+                      theme: "et-theme",
+                      logoUrl: "et-logo",
+                      teamId: "et-team",
+                    };
+                    return (
+                      <li key={`${issue.path.join(".")}-${index}`}>
+                        <button
+                          type="button"
+                          className="text-left underline decoration-destructive/35 underline-offset-2"
+                          onClick={() => document.getElementById(fieldIds[field] ?? "")?.focus()}
+                        >
+                          <span className="font-medium">{label}</span>: {issue.message}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+            {editorNotFound ? (
+              <ActionableEmptyState
+                title="Event type not found"
+                description="It may have been deleted, or the link may be incorrect."
+                action={<Button size="sm" onClick={onCloseEditor}>Return to event types</Button>}
+              />
+            ) : initialEditor && !editing ? (
+              <InlineLoading label="Loading event type…" />
+            ) : editing ? (
+              <EventTypeForm
+                eventTypeId={editing.id}
+                form={editing.form}
+                validationIssues={validationIssues}
+                users={users}
+                schedules={schedules}
+                teams={teams}
+                folders={folders}
+                themes={availableThemes}
+                layouts={availableLayouts}
+                onChange={(form) => {
+                  setValidationIssues([]);
+                  setEditing({ ...editing, form });
+                }}
+                onCancel={onCloseEditor}
+                onSave={() => void save()}
+              />
+            ) : null}
           </div>
-        )}
-        {creatingFolder && !initialEditor && (
-          <div className="flex items-center gap-2">
-            <Input
-              autoFocus
-              aria-label="New folder name"
-              placeholder="Folder name"
-              className="h-8 max-w-xs"
-              value={newFolderName}
-              onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void createFolder();
-                } else if (e.key === "Escape") {
-                  setCreatingFolder(false);
-                  setNewFolderName("");
-                }
-              }}
-            />
-            <Button size="sm" onClick={() => void createFolder()}>Save</Button>
+        </Sheet>
+        <Sheet
+          open={creatingFolder}
+          title="New folder"
+          description="Group related event types on this page."
+          onClose={() => {
+            setCreatingFolder(false);
+            setNewFolderName("");
+          }}
+          footer={<>
             <Button
-              size="sm"
               variant="outline"
               onClick={() => {
                 setCreatingFolder(false);
@@ -505,35 +532,26 @@ export function EventTypesTab({
             >
               Cancel
             </Button>
+            <Button disabled={!newFolderName.trim()} onClick={() => void createFolder()}>Create folder</Button>
+          </>}
+        >
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="new-folder-name">Name</Label>
+            <Input
+              id="new-folder-name"
+              placeholder="Client onboarding"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void createFolder();
+                }
+              }}
+            />
           </div>
-        )}
-        {editorNotFound ? (
-          <ActionableEmptyState
-            title="Event type not found"
-            description="It may have been deleted, or the link may be incorrect."
-            action={<Button size="sm" onClick={onCloseEditor}>Return to event types</Button>}
-          />
-        ) : initialEditor && !editing ? (
-          <InlineLoading label="Loading event type…" />
-        ) : editing ? (
-          <EventTypeForm
-            eventTypeId={editing.id}
-            form={editing.form}
-            validationIssues={validationIssues}
-            users={users}
-            schedules={schedules}
-            teams={teams}
-            folders={folders}
-            themes={availableThemes}
-            layouts={availableLayouts}
-            onChange={(form) => {
-              setValidationIssues([]);
-              setEditing({ ...editing, form });
-            }}
-            onCancel={onCloseEditor}
-            onSave={() => void save()}
-          />
-        ) : !eventTypes ? (
+        </Sheet>
+        {!eventTypes ? (
           <InlineLoading label="Loading event types…" />
         ) : eventTypes.length === 0 ? (
           <ActionableEmptyState
@@ -574,7 +592,7 @@ export function EventTypesTab({
             )}
           </div>
         )}
-        {eventTypes && !editing && !initialEditor && (
+        {eventTypes && (
           <BookingPagesManager
             eventTypes={eventTypes}
             bookingBase={bookingBase}
@@ -623,32 +641,29 @@ function EventTypeRow({
 
   return (
     <li
-      className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+      className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3 text-sm sm:px-4"
     >
-      <span className="min-w-0 grow basis-full sm:basis-0">
-        <span className="font-medium">{et.title}</span>
-        <span className="ml-2 text-xs text-muted-foreground">
+      <button type="button" className="min-w-0 basis-full text-left sm:basis-0 sm:grow" onClick={onEdit}>
+        <span className="block truncate font-medium hover:text-primary">{et.title}</span>
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
           /{et.slug} · {(et.selectableDurations?.length ?? 0) > 1
             ? `${et.selectableDurations!.join("/")} min`
             : `${et.durationMinutes} min`} · {et.mode.replace("_", " ")}
         </span>
-      </span>
-      <span className="flex shrink-0 items-center gap-1">
-        <Button variant="ghost" size="sm" onClick={onCopyLink}>
-          <Copy className="mr-1 h-3.5 w-3.5" />
-          <CopyFeedbackLabel copied={copied === et.slug} idle="Link" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggleEmbed}
-        >
-          <Code2 className="mr-1 h-3.5 w-3.5" />
+      </button>
+      <div className="flex w-full items-center gap-1 sm:w-auto sm:shrink-0">
+        <div className="flex min-w-0 flex-1 divide-x divide-border rounded-lg border border-border bg-card sm:flex-none">
+        <button type="button" className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:flex-none sm:px-3 rounded-l-lg" onClick={onCopyLink}>
+          <Copy className="hidden h-3.5 w-3.5 sm:block" />
+          <CopyFeedbackLabel copied={copied === et.slug} idle="Copy link" />
+        </button>
+        <button type="button" className={`inline-flex h-10 flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:flex-none sm:px-3 ${embedOpen ? "bg-muted text-foreground" : ""}`} aria-expanded={embedOpen} onClick={onToggleEmbed}>
+          <Code2 className="hidden h-3.5 w-3.5 sm:block" />
           Embed
-        </Button>
+        </button>
         <div
           ref={moveMenuRef}
-          className="relative"
+          className="relative flex flex-1 sm:flex-none"
           onBlur={(event) => {
             if (!moveMenuRef.current?.contains(event.relatedTarget as Node | null)) {
               setMoveMenuOpen(false);
@@ -668,11 +683,11 @@ function EventTypeRow({
             aria-haspopup="menu"
             aria-expanded={moveMenuOpen}
             aria-label={`Move ${et.title} to a folder`}
-            className="inline-flex h-11 items-center gap-1 rounded-md px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-8"
+            className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:flex-none sm:px-3 w-full rounded-r-lg"
             onClick={() => setMoveMenuOpen((open) => !open)}
           >
-            <FolderInput className="mr-1 h-3.5 w-3.5" />
-            Move to
+            <FolderInput className="hidden h-3.5 w-3.5 sm:block" />
+            Move
           </button>
           {moveMenuOpen && (
             <div
@@ -736,23 +751,14 @@ function EventTypeRow({
             </div>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={`Edit ${et.title}`}
-          onClick={onEdit}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={`Delete ${et.title}`}
-          onClick={onRemove}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </span>
+        </div>
+        <button type="button" className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:w-8" aria-label={`Edit ${et.title}`} title="Edit" onClick={onEdit}>
+          <Pencil className="h-4 w-4" />
+        </button>
+        <button type="button" className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:h-8 sm:w-8 hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete ${et.title}`} title="Delete" onClick={onRemove}>
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
       {embedOpen && (
         <div className="basis-full rounded-lg border border-border bg-muted/35 p-3">
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -1687,12 +1693,12 @@ function EventTypeForm({
       )}
       </EventTypeDisclosure>
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={!canSave}>
-          Save
-        </Button>
+      <div className="sticky bottom-0 -mx-5 -mb-5 mt-2 flex justify-end gap-2 border-t border-border bg-background px-5 py-4 sm:-mx-6 sm:px-6">
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
+        </Button>
+        <Button type="submit" disabled={!canSave}>
+          Save
         </Button>
       </div>
     </form>

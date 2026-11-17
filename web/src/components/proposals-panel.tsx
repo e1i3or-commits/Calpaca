@@ -190,15 +190,9 @@ export function NewProposal({ engagement }: { engagement: EngagementDetail }) {
   }
 
   return (
-    <section className="py-6">
-      <button
-        className="mb-4 min-h-11 text-sm text-muted-foreground"
-        onClick={() => go(`/app/engagements/${engagement.id}/proposals`)}
-      >
-        Back to proposals
-      </button>
-      <div className="max-w-2xl">
-        <h3 className="text-xl font-semibold">Create a proposal</h3>
+    <section>
+      <div>
+        <h3 className="sr-only">Create a proposal</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           Review the client purpose and recommended times before sharing anything.
         </p>

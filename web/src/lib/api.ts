@@ -1580,6 +1580,14 @@ export async function signInWithGoogle(callbackURL: string): Promise<string> {
   return url;
 }
 
+/** Local development only; the server refuses it unless CALPACA_DEV_LOGIN=1 on localhost. */
+export function signInWithDevAccount(email: string, password: string): Promise<unknown> {
+  return request("/api/auth/sign-in/email", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
 export function signOut(): Promise<unknown> {
   return request("/api/auth/sign-out", { method: "POST", body: "{}" });
 }

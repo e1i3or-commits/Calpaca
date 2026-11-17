@@ -1,4 +1,8 @@
 import { OneOffMeetingsPanel } from "./one-off-meetings-panel";
+import { Sheet } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { FilterButton } from "@/components/ui/filter-button";
+import { ChoiceList, FormSection, choiceRowClass } from "@/components/ui/form-section";
 import { OnboardingSchedulingPanel } from "@/components/onboarding-scheduling-panel";
 import { FollowupSchedulePanel } from "@/components/followup-schedule-panel";
 import { ClientContactRow } from "@/components/client-contact-panel";
@@ -41,10 +45,16 @@ function label(value: string) {
   return value.replaceAll("_", " ").replace(/^\w/, (character) => character.toUpperCase());
 }
 
+const STATUS_FILTERS: { value: EngagementStatus | ""; label: string }[] = [
+  { value: "", label: "Current statuses" },
+  ...(["draft", "potential", "active", "paused", "completed", "archived"] as const).map((value) => ({ value, label: label(value) })),
+];
+
 function ListView() {
   const [items, setItems] = useState<EngagementSummary[] | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<EngagementStatus | "">("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     setItems(null);
@@ -66,23 +76,37 @@ function ListView() {
           <span><strong className="text-foreground">{counts.potential}</strong> Potential</span>
           <span><strong className="text-foreground">{counts.completed}</strong> Completed</span>
         </div>
-        <button className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground" onClick={() => go("/app/engagements/new")}>
+        <button className="min-h-11 w-full sm:w-auto rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground" onClick={() => go("/app/engagements/new")}>
           New engagement
         </button>
       </div>
-      <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_12rem]">
-        <label>
+      <div className="mb-4 flex gap-2">
+        <label className="min-w-0 flex-1">
           <span className="sr-only">Search engagements</span>
           <input className="min-h-11 w-full rounded-lg border border-input bg-background px-3" placeholder="Search client work" value={search} onChange={(event) => setSearch(event.target.value)} />
         </label>
-        <label>
-          <span className="sr-only">Filter by status</span>
-          <select className="min-h-11 w-full rounded-lg border border-input bg-background px-3" value={status} onChange={(event) => setStatus(event.target.value as EngagementStatus | "")}>
-            <option value="">Current statuses</option>
-            {["draft", "potential", "active", "paused", "completed", "archived"].map((value) => <option key={value} value={value}>{label(value)}</option>)}
-          </select>
-        </label>
+        <FilterButton activeCount={status ? 1 : 0} onClick={() => setFiltersOpen(true)} />
       </div>
+      <Sheet
+        open={filtersOpen}
+        title="Filters"
+        onClose={() => setFiltersOpen(false)}
+        footer={<>
+          <Button variant="outline" disabled={!status} onClick={() => setStatus("")}>Reset</Button>
+          <Button onClick={() => setFiltersOpen(false)}>Done</Button>
+        </>}
+      >
+        <FormSection title="Status" description="Current statuses shows everything except archived work.">
+          <ChoiceList>
+            {STATUS_FILTERS.map((option) => (
+              <label key={option.value} className={choiceRowClass}>
+                <input type="radio" name="engagement-status" checked={status === option.value} onChange={() => setStatus(option.value)} />
+                {option.label}
+              </label>
+            ))}
+          </ChoiceList>
+        </FormSection>
+      </Sheet>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {!items && !error && <p role="status" className="text-sm text-muted-foreground">Loading engagements…</p>}
       {items?.length === 0 && (
@@ -180,7 +204,6 @@ function NewView({ users }: { users: DirectoryUser[] }) {
   const steps = ["Basics", "Team", "Delivery", "Review"];
   return (
     <section>
-      <button className="mb-5 min-h-11 text-sm text-muted-foreground hover:text-foreground" onClick={() => go("/app/engagements")}>Back to engagements</button>
       <div className="grid gap-8 md:grid-cols-[11rem_1fr]">
         <ol className="flex gap-2 overflow-x-auto md:block md:space-y-1" aria-label="Engagement setup steps">
           {steps.map((name, index) => <li key={name}><button className={`min-h-11 whitespace-nowrap px-3 text-left text-sm ${step === index ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => setStep(index)}>{index + 1}. {name}</button></li>)}
@@ -351,7 +374,7 @@ function PlaybookEditor({
   }
   if (loading) return <p role="status" className="text-sm text-muted-foreground">Loading conversation playbook…</p>;
   const sections = ["purpose", "participants", "preparation", "outcome", "scheduling", "publish"];
-  return <div className="py-6"><div className="mb-5 flex items-center justify-between"><button className="min-h-11 text-sm text-muted-foreground" onClick={() => go(`/app/engagements/${engagement.id}/conversations`)}>Back to conversations</button><span role="status" className="text-sm text-muted-foreground">{saved ? "Saved" : label(form.status)}</span></div><div className="grid gap-8 md:grid-cols-[11rem_1fr]"><nav aria-label="Playbook sections" className="flex gap-1 overflow-x-auto md:block">{sections.map((item) => <button key={item} className={`min-h-11 whitespace-nowrap px-3 text-left text-sm md:block md:w-full ${section === item ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => setSection(item)}>{label(item)}</button>)}</nav><div className="max-w-2xl">{error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}{section === "purpose" && <div className="grid gap-4"><h3 className="text-xl font-semibold">Why does this conversation exist?</h3><label className="grid gap-1 text-sm">Name<input className="min-h-11 rounded-lg border border-input bg-background px-3" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label><label className="grid gap-1 text-sm">Internal purpose<textarea className="min-h-24 rounded-lg border border-input bg-background p-3" value={form.purpose ?? ""} onChange={(event) => setForm({ ...form, purpose: event.target.value })} /></label><label className="grid gap-1 text-sm">Client explanation<textarea className="min-h-24 rounded-lg border border-input bg-background p-3" value={form.clientExplanation ?? ""} onChange={(event) => setForm({ ...form, clientExplanation: event.target.value })} /></label></div>}{section === "participants" && <div><h3 className="text-xl font-semibold">Who needs to participate?</h3><p className="mt-1 text-sm text-muted-foreground">One role per line. Start required roles with an asterisk.</p><textarea aria-label="Participant roles" className="mt-4 min-h-40 w-full rounded-lg border border-input bg-background p-3" value={roleText} onChange={(event) => setForm({ ...form, participantRoles: lines(event.target.value, "roles") as ConversationPlaybookInput["participantRoles"] })} /></div>}{section === "preparation" && <div><h3 className="text-xl font-semibold">What should happen before the meeting?</h3><p className="mt-1 text-sm text-muted-foreground">One preparation item per line. Start required items with an asterisk.</p><textarea aria-label="Preparation items" className="mt-4 min-h-40 w-full rounded-lg border border-input bg-background p-3" value={preparationText} onChange={(event) => setForm({ ...form, preparationItems: lines(event.target.value, "preparation") as ConversationPlaybookInput["preparationItems"] })} /></div>}{section === "outcome" && <div><h3 className="text-xl font-semibold">What must be true when it ends?</h3><label className="mt-4 grid gap-1 text-sm">Intended outcome<textarea className="min-h-32 rounded-lg border border-input bg-background p-3" value={form.outcomeDefinition ?? ""} onChange={(event) => setForm({ ...form, outcomeDefinition: event.target.value })} /></label></div>}{section === "scheduling" && <div className="grid gap-4"><h3 className="text-xl font-semibold">Scheduling inputs</h3><label className="grid gap-1 text-sm">Recommended duration<input type="number" min={5} max={720} step={5} className="min-h-11 rounded-lg border border-input bg-background px-3" value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: Number(event.target.value) })} /></label>{playbookId === "new" ? <><label className="grid gap-1 text-sm">Host<select className="min-h-11 rounded-lg border border-input bg-background px-3" value={hostUserId} onChange={(event) => { setHostUserId(event.target.value); setScheduleId(null); }}>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label><label className="grid gap-1 text-sm">Availability schedule<select className="min-h-11 rounded-lg border border-input bg-background px-3" value={scheduleId ?? ""} onChange={(event) => setScheduleId(event.target.value || null)}><option value="">Choose later</option>{schedules.filter((item) => item.userId === hostUserId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label></> : <a className="inline-flex min-h-11 items-center text-sm text-primary" href={`/app/workspace/conversation-playbooks/${encodeURIComponent(playbookId)}/edit`}>Open advanced scheduling settings</a>}</div>}{section === "publish" && <div><h3 className="text-xl font-semibold">Publish conversation</h3><p className="mt-2 text-sm text-muted-foreground">Ready playbooks require a purpose, at least one required participant role, an intended outcome, a host, and an availability schedule.</p><dl className="mt-5 grid grid-cols-[9rem_1fr] gap-y-2 text-sm"><dt className="text-muted-foreground">Purpose</dt><dd>{form.purpose?.trim() ? "Defined" : "Missing"}</dd><dt className="text-muted-foreground">Participants</dt><dd>{form.participantRoles.some((role) => role.required) ? "Defined" : "Missing"}</dd><dt className="text-muted-foreground">Outcome</dt><dd>{form.outcomeDefinition?.trim() ? "Defined" : "Missing"}</dd><dt className="text-muted-foreground">Schedule</dt><dd>{scheduleId ? "Selected" : "Missing"}</dd></dl></div>}<div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-border pt-4"><button disabled={saving || !form.title.trim()} className="min-h-11 rounded-lg border border-input px-4 text-sm disabled:opacity-50" onClick={() => void save("draft")}>Save draft</button><button disabled={saving || !form.title.trim()} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50" onClick={() => void save("ready")}>{saving ? "Saving…" : "Mark ready"}</button></div></div></div></div>;
+  return <div className="py-6"><div className="mb-5 flex items-center justify-end"><span role="status" className="text-sm text-muted-foreground">{saved ? "Saved" : label(form.status)}</span></div><div className="grid gap-8 md:grid-cols-[11rem_1fr]"><nav aria-label="Playbook sections" className="flex gap-1 overflow-x-auto md:block">{sections.map((item) => <button key={item} className={`min-h-11 whitespace-nowrap px-3 text-left text-sm md:block md:w-full ${section === item ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => setSection(item)}>{label(item)}</button>)}</nav><div className="max-w-2xl">{error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}{section === "purpose" && <div className="grid gap-4"><h3 className="text-xl font-semibold">Why does this conversation exist?</h3><label className="grid gap-1 text-sm">Name<input className="min-h-11 rounded-lg border border-input bg-background px-3" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label><label className="grid gap-1 text-sm">Internal purpose<textarea className="min-h-24 rounded-lg border border-input bg-background p-3" value={form.purpose ?? ""} onChange={(event) => setForm({ ...form, purpose: event.target.value })} /></label><label className="grid gap-1 text-sm">Client explanation<textarea className="min-h-24 rounded-lg border border-input bg-background p-3" value={form.clientExplanation ?? ""} onChange={(event) => setForm({ ...form, clientExplanation: event.target.value })} /></label></div>}{section === "participants" && <div><h3 className="text-xl font-semibold">Who needs to participate?</h3><p className="mt-1 text-sm text-muted-foreground">One role per line. Start required roles with an asterisk.</p><textarea aria-label="Participant roles" className="mt-4 min-h-40 w-full rounded-lg border border-input bg-background p-3" value={roleText} onChange={(event) => setForm({ ...form, participantRoles: lines(event.target.value, "roles") as ConversationPlaybookInput["participantRoles"] })} /></div>}{section === "preparation" && <div><h3 className="text-xl font-semibold">What should happen before the meeting?</h3><p className="mt-1 text-sm text-muted-foreground">One preparation item per line. Start required items with an asterisk.</p><textarea aria-label="Preparation items" className="mt-4 min-h-40 w-full rounded-lg border border-input bg-background p-3" value={preparationText} onChange={(event) => setForm({ ...form, preparationItems: lines(event.target.value, "preparation") as ConversationPlaybookInput["preparationItems"] })} /></div>}{section === "outcome" && <div><h3 className="text-xl font-semibold">What must be true when it ends?</h3><label className="mt-4 grid gap-1 text-sm">Intended outcome<textarea className="min-h-32 rounded-lg border border-input bg-background p-3" value={form.outcomeDefinition ?? ""} onChange={(event) => setForm({ ...form, outcomeDefinition: event.target.value })} /></label></div>}{section === "scheduling" && <div className="grid gap-4"><h3 className="text-xl font-semibold">Scheduling inputs</h3><label className="grid gap-1 text-sm">Recommended duration<input type="number" min={5} max={720} step={5} className="min-h-11 rounded-lg border border-input bg-background px-3" value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: Number(event.target.value) })} /></label>{playbookId === "new" ? <><label className="grid gap-1 text-sm">Host<select className="min-h-11 rounded-lg border border-input bg-background px-3" value={hostUserId} onChange={(event) => { setHostUserId(event.target.value); setScheduleId(null); }}>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label><label className="grid gap-1 text-sm">Availability schedule<select className="min-h-11 rounded-lg border border-input bg-background px-3" value={scheduleId ?? ""} onChange={(event) => setScheduleId(event.target.value || null)}><option value="">Choose later</option>{schedules.filter((item) => item.userId === hostUserId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label></> : <a className="inline-flex min-h-11 items-center text-sm text-primary" href={`/app/workspace/conversation-playbooks/${encodeURIComponent(playbookId)}/edit`}>Open advanced scheduling settings</a>}</div>}{section === "publish" && <div><h3 className="text-xl font-semibold">Publish conversation</h3><p className="mt-2 text-sm text-muted-foreground">Ready playbooks require a purpose, at least one required participant role, an intended outcome, a host, and an availability schedule.</p><dl className="mt-5 grid grid-cols-[9rem_1fr] gap-y-2 text-sm"><dt className="text-muted-foreground">Purpose</dt><dd>{form.purpose?.trim() ? "Defined" : "Missing"}</dd><dt className="text-muted-foreground">Participants</dt><dd>{form.participantRoles.some((role) => role.required) ? "Defined" : "Missing"}</dd><dt className="text-muted-foreground">Outcome</dt><dd>{form.outcomeDefinition?.trim() ? "Defined" : "Missing"}</dd><dt className="text-muted-foreground">Schedule</dt><dd>{scheduleId ? "Selected" : "Missing"}</dd></dl></div>}<div className="mt-8 flex flex-wrap justify-end gap-3 border-t border-border pt-4"><button disabled={saving || !form.title.trim()} className="min-h-11 rounded-lg border border-input px-4 text-sm disabled:opacity-50" onClick={() => void save("draft")}>Save draft</button><button disabled={saving || !form.title.trim()} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50" onClick={() => void save("ready")}>{saving ? "Saving…" : "Mark ready"}</button></div></div></div></div>;
 }
 
 function OnboardingPlanPanel({ engagement, reload }: {engagement: EngagementDetail; reload: () => Promise<void>}) {
@@ -434,8 +457,30 @@ function DetailView({
         <button className={`min-h-11 whitespace-nowrap text-sm ${section === "conversations" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}/conversations`)}>Meeting templates</button>
         <button className={`min-h-11 whitespace-nowrap text-sm ${section === "proposals" ? "font-medium text-primary" : "text-muted-foreground"}`} onClick={() => go(`/app/engagements/${item.id}/proposals`)}>Proposals</button>
       </nav>
-      {section === "conversations" && (playbookId ? <PlaybookEditor engagement={item} playbookId={playbookId} users={users} /> : <ConversationList engagement={item} />)}
-      {section === "proposals" && (newProposal ? <NewProposal engagement={item} /> : <ProposalList engagement={item} />)}
+      {section === "conversations" && <>
+        <ConversationList engagement={item} />
+        <Sheet
+          open={Boolean(playbookId)}
+          size="xl"
+          title={playbookId === "new" ? "New meeting template" : "Edit meeting template"}
+          description={item.name}
+          onClose={() => go(`/app/engagements/${item.id}/conversations`)}
+        >
+          {playbookId && <PlaybookEditor engagement={item} playbookId={playbookId} users={users} />}
+        </Sheet>
+      </>}
+      {section === "proposals" && <>
+        <ProposalList engagement={item} />
+        <Sheet
+          open={newProposal}
+          size="lg"
+          title="Create a proposal"
+          description={item.name}
+          onClose={() => go(`/app/engagements/${item.id}/proposals`)}
+        >
+          {newProposal && <NewProposal engagement={item} />}
+        </Sheet>
+      </>}
       {section === "overview" && <>
       {!item.onboarding && <div className="grid gap-8 py-6 md:grid-cols-2">
         <div><h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next</h3><p className="mt-2 font-medium">{item.eventTypes.length ? "Schedule a client conversation" : "Create the first conversation playbook"}</p><p className="mt-1 text-sm text-muted-foreground">Keep scheduling attached to this client context.</p></div>
@@ -462,7 +507,14 @@ export function EngagementsTab({
   playbookId?: "new" | string;
   newProposal?: boolean;
 }) {
-  if (mode === "new") return <NewView users={users} />;
+  if (mode === "new") {
+    return <>
+      <ListView />
+      <Sheet open size="xl" title="New engagement" description="Set up the client work Calpaca schedules for." onClose={() => go("/app/engagements")}>
+        <NewView users={users} />
+      </Sheet>
+    </>;
+  }
   if (mode !== "list") return <DetailView id={mode} section={section} playbookId={playbookId} newProposal={newProposal} users={users} />;
   return <ListView />;
 }

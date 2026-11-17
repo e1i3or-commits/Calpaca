@@ -11,6 +11,10 @@ if (!process.env.DISABLE_JOBS) {
 // Serve the built SPA (dist/web) from the same process: Hono + Postgres is
 // the whole deployment. Registered here, not in app.ts, so tests hit the
 // pure API surface. Unmatched GETs fall back to index.html for client routes.
+app.get("/version.json", async (c, next) => {
+  c.header("Cache-Control", "no-store");
+  await next();
+});
 app.get("*", serveStatic({ root: "./dist/web" }));
 app.get("*", serveStatic({ path: "./dist/web/index.html" }));
 
