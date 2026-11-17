@@ -33,7 +33,7 @@ release notes live in [CHANGELOG.md](CHANGELOG.md), and releases are tagged
   engagement, participants, preparation, outcome, and follow-up.
 - **The scheduling engine is complete:** solo, round robin, collective,
   capacity, polls, routing, one-off offers, sign-up sheets, questions,
-  selectable durations, time off, and availability diagnostics share one
+  selectable durations, time off, company closed days, and availability diagnostics share one
   calendar-aware foundation.
 - **Automation uses the same rules:** the public API and MCP server support
   controlled availability, holds, booking, rescheduling, and cancellation.

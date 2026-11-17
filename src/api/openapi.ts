@@ -1,3 +1,4 @@
+import { closedDaysHolidaysBodySchema, closedRangeBodySchema } from "./routes/closed-days";
 import { publishOnboardingInput,enableFollowupsInput } from "../core/engagement/onboarding-publication";
 import { sesNotificationInput,sesPollInput } from "../core/invite/ses-feedback";
 import { prepareFollowupInput, reserveFollowupInput } from "./routes/followup-reservations";
@@ -74,6 +75,8 @@ const requestSchemas = {
   TimeSuggestion: suggestionBodySchema,
   EventType: eventTypeBodySchema,
   Schedule: scheduleBodySchema,
+  ClosedDaysHolidays: closedDaysHolidaysBodySchema,
+  ClosedRange: closedRangeBodySchema,
 } satisfies Record<string, ZodTypeAny>;
 
 export type RequestSchemaName = keyof typeof requestSchemas;
@@ -213,6 +216,11 @@ export const openApiOperations: readonly Operation[] = [
   ["post", "/api/me/schedules", "Schedules", "Create an availability schedule", "session", "Schedule"],
   ["put", "/api/me/schedules/{id}", "Schedules", "Replace an availability schedule", "session", "Schedule"],
   ["delete", "/api/me/schedules/{id}", "Schedules", "Delete an availability schedule", "session"],
+  ["get", "/api/me/closed-days", "Schedules", "Get the workspace's observed US holidays and closed dates", "session"],
+  ["get", "/api/me/closed-days/dates", "Schedules", "List closed days between two dates (from, to; at most 400 days)", "session"],
+  ["put", "/api/me/closed-days/holidays", "Schedules", "Set which US holidays the workspace observes", "session", "ClosedDaysHolidays"],
+  ["post", "/api/me/closed-days", "Schedules", "Add a closed date range", "session", "ClosedRange"],
+  ["delete", "/api/me/closed-days/{id}", "Schedules", "Remove a closed date range", "session"],
   ["get", "/api/me/teams", "Teams", "List visible teams", "session"],
   ["post", "/api/me/teams", "Teams", "Create a team", "session"],
   ["get", "/api/me/teams/{id}/members", "Teams", "List team members", "session"],

@@ -2,7 +2,8 @@ import { and, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { PROTECTED_RESERVATION_WINDOW_DAYS, sameRoster, type KickoffBookingError } from "../core/engagement/kickoff-booking";
-import { effectiveOpenIntervals, subtract, generateSlots, type Interval } from "@calpaca/core";
+import { closedDayOverrides, effectiveOpenIntervals, subtract, generateSlots, type Interval } from "@calpaca/core";
+import { closedDaysForUsers } from "./closed-days-repo";
 import { kickoffConfigurationIssue, kickoffHosts, loadKickoffContext, lockKickoffContext, protectedReadiness, type KickoffContext } from "./kickoff-context";
 import * as s from "./schema";
 type Db = NodePgDatabase<typeof s>;
@@ -58,6 +59,7 @@ export async function protectedCalendarSlots(ctx: KickoffContext, window: Interv
   const required=kickoffHosts(ctx), event=ctx.eventType;
   const start=new Date(window.start.epochMilliseconds),end=new Date(window.end.epochMilliseconds);
   const schedules=await db.select().from(s.schedules).where(inArray(s.schedules.userId,required));
+  const closed=await closedDaysForUsers(required,db);
   const [previous]=excludeBookingId?await db.select({googleEventId:s.bookings.googleEventId}).from(s.bookings)
     .where(and(eq(s.bookings.id,excludeBookingId),eq(s.bookings.eventTypeId,ctx.eventType.id))):[];
   const cached=await db.select({userId:s.calendarConnections.userId,startsAt:s.calendarBusyCache.startsAt,endsAt:s.calendarBusyCache.endsAt,externalEventId:s.calendarBusyCache.externalEventId,lastSyncedAt:s.calendarConnections.lastSyncedAt})
@@ -96,7 +98,7 @@ export async function protectedCalendarSlots(ctx: KickoffContext, window: Interv
     const busy=[...cached.filter(row=>row.userId===id && (!previous?.googleEventId || row.externalEventId!==previous.googleEventId) && !cacheSuperseded(row)).map(interval),
       ...bookings.filter(row=>row.hostIds.includes(id)&&!releasedBookingIds.has(row.id)).map(interval),
       ...held.filter(row=>row.hostUserId===id).map(row=>interval({startsAt:row.slotStart,endsAt:row.slotEnd}))];
-    const open=effectiveOpenIntervals(schedule.rules,schedule.overrides,schedule.timezone,window);
+    const open=effectiveOpenIntervals(schedule.rules,[...schedule.overrides,...closedDayOverrides(closed.get(id)??[])],schedule.timezone,window);
     const slots=generateSlots(subtract(open,busy),{durationMinutes:event.durationMinutes,bufferBeforeMin:event.bufferBeforeMin,
       bufferAfterMin:event.bufferAfterMin,minimumNoticeMin:event.minimumNoticeMin,rollingWindowDays:event.rollingWindowDays,
       maxPerDay:event.maxPerDay??undefined,timezone:schedule.timezone},now);

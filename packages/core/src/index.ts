@@ -7,6 +7,7 @@ export * from "./timezone.js";
 export * from "./availability/intervals.js";
 export * from "./availability/rules.js";
 export * from "./availability/overrides.js";
+export * from "./availability/closed-days.js";
 export * from "./availability/slots.js";
 export * from "./availability/scoring.js";
 export * from "./availability/group.js";

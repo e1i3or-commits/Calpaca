@@ -103,9 +103,24 @@ export const workspaces = pgTable("workspaces", {
   // elapsed value downgrades entitlements only — no data is removed, so a beta
   // tester whose year runs out keeps their bookings, links, and history.
   planExpiresAt: timestamp("plan_expires_at", { withTimezone: true }),
+  // US holidays the workspace observes (keys from @calpaca/core US_HOLIDAYS).
+  // null means DEFAULT_US_HOLIDAYS, so the default can change without a backfill.
+  usHolidays: jsonb("us_holidays").$type<string[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// The workspace's own closed dates (a conference, an offsite): every host is
+// unavailable on them, on top of the US holidays above.
+export const workspaceClosedDays = pgTable("workspace_closed_days", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  workspaceId: uuid("workspace_id").notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  startDate: date("start_date", { mode: "string" }).notNull(),
+  endDate: date("end_date", { mode: "string" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("workspace_closed_day_workspace_idx").on(t.workspaceId, t.startDate)]);
 
 // Trials promised to people who have not signed up yet. A hosted workspace is
 // only created on first sign-in, so there is nothing to set a plan on at the

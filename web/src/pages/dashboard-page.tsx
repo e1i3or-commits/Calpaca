@@ -148,6 +148,7 @@ import {
   InlineLoading,
 } from "@/components/dashboard-primitives";
 import { EventTypesTab } from "@/components/event-types-tab";
+import { ClosedDaysPanel } from "@/components/closed-days-panel";
 
 const TABS = [
   { key: "home", label: "Home", icon: Home, group: "primary" },
@@ -384,7 +385,7 @@ export function DashboardPage({
               {tab === "profile" && <ProfileTab section="profile" />}
               {tab === "workspace-general" && <WorkspaceCard />}
               {tab === "api" && <ProfileTab section="api" />}
-              {tab === "schedules" && <SchedulesTab />}
+              {tab === "schedules" && <div className="flex flex-col gap-6"><SchedulesTab /><ClosedDaysPanel /></div>}
               {tab === "routing" && <RoutingTab users={users} />}
               {tab === "team" && <TeamTab users={users} />}
               {tab === "calendars" && <CalendarsTab />}

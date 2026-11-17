@@ -19,7 +19,7 @@ async function fixture() {
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL}),db=drizzle(pool,{schema:s});
  await migrate(db,{migrationsFolder:"drizzle"});await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);
  const people=await db.insert(s.users).values(Array.from({length:6},(_,i)=>({name:`Person ${i}`,email:`person-${i}@example.invalid`}))).returning();
- const [workspace]=await db.insert(s.workspaces).values({name:"Delivery test",slug:"delivery-test"}).returning();const ws=workspace!.id,actor={userId:people[0]!.id,workspaceRole:"admin" as const},ids=people.map(person=>person.id);
+ const [workspace]=await db.insert(s.workspaces).values({name:"Delivery test",slug:"delivery-test",usHolidays:[]}).returning();const ws=workspace!.id,actor={userId:people[0]!.id,workspaceRole:"admin" as const},ids=people.map(person=>person.id);
  await db.insert(s.workspaceMembers).values(ids.map(userId=>({userId,workspaceId:ws,role:"admin" as const})));
  const result=await provisionFranchiseOnboarding(ws,actor,franchiseOnboardingInput.parse({sourceWorkspaceId:crypto.randomUUID(),sourceProjectKey:"delivery",locationKey:crypto.randomUUID(),franchiseeId:"5854883000000000001",businessUnitId:"5854883000000000002",primaryContactId:"5854883000000000003",clientName:"Delivery Client",locationName:"Sample City",franchiseSuccessUserIds:ids.slice(2),kaiUserId:ids[0],andrewUserId:ids[1],accountLeadUserId:ids[2],organizerUserId:ids[4]}),db);
  if(result.kind!=="created")throw new Error("fixture onboarding failed");

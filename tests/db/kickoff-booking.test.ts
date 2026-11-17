@@ -20,7 +20,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("protected kickoff bookings", ()
    await migrate(db,{migrationsFolder:"drizzle"});
    await db.execute(sql`truncate table ${s.users}, ${s.workspaces} restart identity cascade`);
    const people=await db.insert(s.users).values(["Kai","Andrew","Jake","Andres","Santiago","Cal"].map((name,i)=>({name,email:`kickoff-${i}@example.invalid`}))).returning();
-   const [ws,other]=await db.insert(s.workspaces).values([{name:"Review",slug:"kickoff-test"},{name:"Other",slug:"kickoff-other"}]).returning();
+   const [ws,other]=await db.insert(s.workspaces).values([{name:"Review",slug:"kickoff-test",usHolidays:[]},{name:"Other",slug:"kickoff-other",usHolidays:[]}]).returning();
    const actor={userId:people[0]!.id,workspaceRole:"admin" as const};
    const organizer=people[4]!.id;
    const ids=people.map(person=>person.id);
