@@ -11,12 +11,14 @@ import { effectiveOpenIntervals } from "../../src/availability/overrides.js";
 const allKeys = US_HOLIDAYS.map((holiday) => holiday.key);
 
 describe("closedDaysBetween", () => {
-  test("lists every US federal holiday of 2026 on its observed date", () => {
+  test("lists every holiday of 2026 on its observed date", () => {
     const days = closedDaysBetween("2026-01-01", "2026-12-31", allKeys, []);
     expect(days.map((day) => `${day.date} ${day.name}`)).toEqual([
       "2026-01-01 New Year's Day",
       "2026-01-19 Martin Luther King Jr. Day",
       "2026-02-16 Presidents' Day",
+      "2026-04-05 Easter",
+      "2026-04-12 Orthodox Easter",
       "2026-05-25 Memorial Day",
       "2026-06-19 Juneteenth",
       // July 4, 2026 is a Saturday.
@@ -26,26 +28,27 @@ describe("closedDaysBetween", () => {
       "2026-11-11 Veterans Day",
       "2026-11-26 Thanksgiving",
       "2026-11-27 Day after Thanksgiving",
+      "2026-12-24 Christmas Eve",
       "2026-12-25 Christmas Day",
+      "2026-12-31 New Year's Eve",
     ]);
   });
 
-  test("the default set is the common eight", () => {
-    const days = closedDaysBetween("2027-01-01", "2027-12-31", DEFAULT_US_HOLIDAYS, []);
-    expect(days.map((day) => day.date)).toEqual([
-      "2027-01-01",
-      "2027-05-31",
-      // June 19, 2027 is a Saturday.
-      "2027-06-18",
-      "2027-07-05",
-      "2027-09-06",
-      "2027-11-25",
-      "2027-11-26",
-      // December 25, 2027 is a Saturday.
-      "2027-12-24",
-      // January 1, 2028 is a Saturday.
-      "2027-12-31",
-    ]);
+  test("the default set is the handbook's: every holiday listed", () => {
+    expect([...DEFAULT_US_HOLIDAYS]).toEqual(allKeys);
+  });
+
+  test("Easter and Orthodox Easter fall on their Sundays", () => {
+    const sundays = (key: "easter" | "orthodox_easter") =>
+      closedDaysBetween("2025-01-01", "2029-12-31", [key], []).map((day) => day.date);
+    expect(sundays("easter")).toEqual(["2025-04-20", "2026-04-05", "2027-03-28", "2028-04-16", "2029-04-01"]);
+    expect(sundays("orthodox_easter")).toEqual(["2025-04-20", "2026-04-12", "2027-05-02", "2028-04-16", "2029-04-08"]);
+  });
+
+  test("an eve on a weekend is observed on the Friday before", () => {
+    // December 24, 2022 is a Saturday; December 31, 2023 is a Sunday.
+    expect(closedDaysBetween("2022-12-01", "2022-12-31", ["christmas_eve"], [])).toEqual([{ date: "2022-12-23", name: "Christmas Eve" }]);
+    expect(closedDaysBetween("2023-12-01", "2023-12-31", ["new_years_eve"], [])).toEqual([{ date: "2023-12-29", name: "New Year's Eve" }]);
   });
 
   test("New Year's Day on a Saturday closes December 31 of the year before", () => {
