@@ -82,6 +82,7 @@ rejected. Replay still checks current access and management permission.
 | `GET /api/me/engagements/:id/followup-schedule` | Existing Engagement read permissions; current revision, rule, all saved dates, management permission and `deliveryState: not_invited | reservations_present` |
 | `POST .../followup-schedule/preview` | Lead/admin; `{revision, command}` returns changes, issues, canApply and previewHash |
 | `POST .../followup-schedule/apply` | Same input plus UUID requestId and previewHash; revalidates and atomically saves |
+| `GET .../followup-schedule/occurrences/:occurrenceId/availability?date=` | Move picker: `slots` open to every required attendee on that date, plus `teamBusy` (when at least one of them is busy inside their working hours) and `durationMinutes`, so the page can say why a time is missing. `409 calendar_setup_incomplete` when a required calendar is missing or not recently synced |
 
 Commands are `configure` with a rule, `move` with occurrenceId/date/time,
 `skip` with occurrenceId (cancels that one future date; a booked call is

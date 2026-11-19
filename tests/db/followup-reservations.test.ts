@@ -86,6 +86,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)("follow-up reservations",()=>{
    const blocked=await query();expect(blocked.kind).toBe("available");
    if(blocked.kind!=="available")throw new Error("availability missing");
    expect(blocked.slots.some(slot=>slot.start===`${date}T12:00:00Z`)).toBe(false);
+   expect(blocked.teamBusy.some(block=>block.start===`${date}T12:00:00Z`&&block.end===`${date}T12:45:00Z`)).toBe(true);
+   expect(blocked.teamBusy.some(block=>block.start===startsAt.toISOString().replace(".000",""))).toBe(false);
    expect((await applyFollowupSchedule(f.ws,f.actor,f.id,staleMove,f.db)).kind).toBe("calendar_reconciliation_blocked");
    expect((await getFollowupMoveAvailability(crypto.randomUUID(),f.actor,f.id,f.occurrence.id,date,f.db)).kind).toBe("not_found");
    expect((await getFollowupMoveAvailability(f.ws,f.actor,f.id,crypto.randomUUID(),date,f.db)).kind).toBe("not_found");
