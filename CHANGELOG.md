@@ -7,6 +7,12 @@ tracked with annotated Git tags named `v<version>`.
 
 ### User-facing improvements
 
+- **Move this meeting** explains a missing time. After a date is picked it
+  lists when a required teammate is busy and the first open time, or says the
+  team has no free gap long enough that day. The time list reads **No times on
+  this date** instead of looking disabled with no reason, and an unsynced
+  calendar says so and points to **Refresh availability**.
+
 - In dark mode, the dimmed backdrop behind side sheets, booking details and
   the mobile menu is now dark instead of a white wash. Booking details label
   the invitee's booking notes as **Notes from invitee**.

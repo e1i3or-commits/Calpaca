@@ -2,7 +2,7 @@ import { and, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Temporal } from "@js-temporal/polyfill";
 import { PROTECTED_RESERVATION_WINDOW_DAYS, sameRoster, type KickoffBookingError } from "../core/engagement/kickoff-booking";
-import { closedDayOverrides, effectiveOpenIntervals, subtract, generateSlots, type Interval } from "@calpaca/core";
+import { closedDayOverrides, effectiveOpenIntervals, normalize, subtract, generateSlots, type Interval } from "@calpaca/core";
 import { closedDaysForUsers } from "./closed-days-repo";
 import { kickoffConfigurationIssue, kickoffHosts, loadKickoffContext, lockKickoffContext, protectedReadiness, type KickoffContext } from "./kickoff-context";
 import * as s from "./schema";
@@ -56,6 +56,12 @@ export async function guardKickoffBooking(eventTypeId: string, hostIds: readonly
 /** Shared calendar evidence for both the move picker and the final booking guard.
  * Only the occurrence being moved (and audited batch releases) is excluded. */
 export async function protectedCalendarSlots(ctx: KickoffContext, window: Interval, db: Db, now: Temporal.Instant, excludeBookingId?: string, managedRequestId?: string): Promise<Interval[]> {
+  return (await protectedCalendarAvailability(ctx, window, db, now, excludeBookingId, managedRequestId)).slots;
+}
+
+/** `teamBusy` is when at least one required host is busy inside their own
+ * working hours: the context a picker needs to explain a missing time. */
+export async function protectedCalendarAvailability(ctx: KickoffContext, window: Interval, db: Db, now: Temporal.Instant, excludeBookingId?: string, managedRequestId?: string): Promise<{slots: Interval[]; teamBusy: Interval[]}> {
   const required=kickoffHosts(ctx), event=ctx.eventType;
   const start=new Date(window.start.epochMilliseconds),end=new Date(window.end.epochMilliseconds);
   const schedules=await db.select().from(s.schedules).where(inArray(s.schedules.userId,required));
@@ -92,17 +98,20 @@ export async function protectedCalendarSlots(ctx: KickoffContext, window: Interv
     gte(s.holds.expiresAt,new Date(now.epochMilliseconds)),lt(s.holds.slotStart,end),gte(s.holds.slotEnd,start))):[];
   const interval=(row:{startsAt:Date;endsAt:Date})=>({start:Temporal.Instant.fromEpochMilliseconds(row.startsAt.getTime()),end:Temporal.Instant.fromEpochMilliseconds(row.endsAt.getTime())});
   let shared: Interval[] | null = null;
+  const teamBusy: Interval[] = [];
   for(const id of required) {
     const schedule=schedules.find(row=>row.userId===id);
-    if(!schedule)return [];
+    if(!schedule)return {slots:[],teamBusy:[]};
     const busy=[...cached.filter(row=>row.userId===id && (!previous?.googleEventId || row.externalEventId!==previous.googleEventId) && !cacheSuperseded(row)).map(interval),
       ...bookings.filter(row=>row.hostIds.includes(id)&&!releasedBookingIds.has(row.id)).map(interval),
       ...held.filter(row=>row.hostUserId===id).map(row=>interval({startsAt:row.slotStart,endsAt:row.slotEnd}))];
     const open=effectiveOpenIntervals(schedule.rules,[...schedule.overrides,...closedDayOverrides(closed.get(id)??[])],schedule.timezone,window);
-    const slots=generateSlots(subtract(open,busy),{durationMinutes:event.durationMinutes,bufferBeforeMin:event.bufferBeforeMin,
+    const free=subtract(open,busy);
+    teamBusy.push(...subtract(open,free));
+    const slots=generateSlots(free,{durationMinutes:event.durationMinutes,bufferBeforeMin:event.bufferBeforeMin,
       bufferAfterMin:event.bufferAfterMin,minimumNoticeMin:event.minimumNoticeMin,rollingWindowDays:event.rollingWindowDays,
       maxPerDay:event.maxPerDay??undefined,timezone:schedule.timezone},now);
     shared = shared === null ? slots : shared.filter(slot => slots.some(candidate => candidate.start.equals(slot.start) && candidate.end.equals(slot.end)));
   }
-  return shared ?? [];
+  return {slots:shared ?? [],teamBusy:normalize(teamBusy)};
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ApiError, getFollowupMoveAvailability, applyFollowupSchedule, getFollowupSchedule, previewFollowupSchedule, type EngagementDetail, type FollowupPreviewInput, type FollowupRule, type SchedulePreview, type ScheduleSnapshot } from "@/lib/api";
+import { ApiError, getFollowupMoveAvailability, applyFollowupSchedule, getFollowupSchedule, previewFollowupSchedule, type EngagementDetail, type FollowupMoveAvailability, type FollowupPreviewInput, type FollowupRule, type SchedulePreview, type ScheduleSnapshot } from "@/lib/api";
+import { followupMoveHint } from "@/lib/followup-move-hint";
 
 const control = "min-h-11 rounded-lg border border-input bg-background px-3 text-sm disabled:opacity-50";
 const button = "min-h-11 rounded-lg border border-input px-4 text-sm disabled:opacity-50";
@@ -10,7 +11,7 @@ const messages: Record<string,string> = {
   engagement_paused: "This Engagement is paused. Resume the Engagement before editing its schedule.",
   engagement_closed: "This Engagement is closed. Its schedule history is preserved.",
   forbidden: "Only the account lead or a workspace administrator can change this schedule.",
-  calendar_setup_incomplete: "Set up follow-up calls and the required team’s calendars before choosing a new time.",
+  calendar_setup_incomplete: "Times can’t be checked right now: a required teammate’s calendar is not connected or has not synced recently. Select Refresh availability in a few minutes. If this persists, check follow-up call setup and the team’s calendar connections.",
   invalid_input: "Check the date, time, timezone and number of meetings.",
   request_conflict: "This save request has already been used. Refresh and preview again.",
 };
@@ -111,7 +112,7 @@ export function FollowupSchedulePanel({engagement,reload}:{engagement:Engagement
 function MoveMeetingPicker({engagementId,occurrenceId,timezone,locked,onChange,onPreview}:{engagementId:string;occurrenceId:string;timezone:string;locked:boolean;onChange:()=>void;onPreview:(date:string,time:string)=>void}) {
   const [date,setDate]=useState("");
   const [selected,setSelected]=useState("");
-  const [availability,setAvailability]=useState<{date:string;slots:{start:string;end:string}[]}|null>(null);
+  const [availability,setAvailability]=useState<(FollowupMoveAvailability&{date:string})|null>(null);
   const [error,setError]=useState<string|null>(null);
   const [retry,setRetry]=useState(0);
   useEffect(()=>{
@@ -119,11 +120,13 @@ function MoveMeetingPicker({engagementId,occurrenceId,timezone,locked,onChange,o
     let alive=true;
     setError(null);setAvailability(null);
     getFollowupMoveAvailability(engagementId,occurrenceId,date).then(result=>{
-      if(alive)setAvailability({date,slots:result.slots});
+      if(alive)setAvailability({...result,date});
     }).catch(error=>{if(alive)setError(explain(error));});
     return()=>{alive=false;};
   },[engagementId,occurrenceId,date,retry]);
-  const slots=availability?.date===date?availability.slots:[];
+  const current=availability?.date===date?availability:null;
+  const slots=current?.slots??[];
+  const hint=current&&followupMoveHint(current,timezone);
   const loading=!!date&&!error&&availability?.date!==date;
   const time=(start:string)=>new Intl.DateTimeFormat("en-GB",{timeZone:timezone,hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date(start));
   return <form className="mt-3" onSubmit={event=>{
@@ -134,13 +137,13 @@ function MoveMeetingPicker({engagementId,occurrenceId,timezone,locked,onChange,o
     <fieldset disabled={locked} className="flex flex-wrap items-end gap-3">
       <label className="grid gap-1">New date<input required type="date" className={control} value={date} onChange={event=>{setDate(event.target.value);setSelected("");setError(null);onChange();}}/></label>
       <label className="grid gap-1">Available times<select required className={control} value={selected} disabled={loading||!slots.length} onChange={event=>{setSelected(event.target.value);onChange();}}>
-        <option value="">{loading?"Checking calendars…":"Choose an available time"}</option>
+        <option value="">{loading?"Checking calendars…":error?"Unavailable, see below":current&&!slots.length?"No times on this date":"Choose an available time"}</option>
         {slots.map(slot=><option key={slot.start} value={slot.start}>{new Intl.DateTimeFormat(undefined,{timeZone:timezone,hour:"numeric",minute:"2-digit"}).format(new Date(slot.start))}</option>)}
       </select></label>
       <button className={button} disabled={locked||loading||!slots.some(slot=>slot.start===selected)}>Preview this move</button>
       {date&&<button type="button" className={button} disabled={locked||loading} onClick={()=>{setSelected("");setAvailability(null);setError(null);setRetry(value=>value+1);onChange();}}>Refresh availability</button>}
     </fieldset>
     {error&&<p role="alert" className="mt-2 text-destructive">{error}</p>}
-    {date&&!error&&!loading&&!slots.length&&<p role="status" className="mt-2 text-muted-foreground">No shared times available on this date. Choose another date.</p>}
+    {hint&&!error&&<div role="status" className="mt-2 grid gap-1 text-muted-foreground">{hint.busy&&<p>{hint.busy}</p>}<p>{hint.summary}</p></div>}
   </form>;
 }

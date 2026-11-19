@@ -1865,8 +1865,9 @@ export function enableOnboardingFollowups(id:string,input:{revision:number;reque
   return request(`/api/me/engagements/${encodeURIComponent(id)}/onboarding-scheduling/enable-followups`,{method:"POST",body:JSON.stringify(input)});
 }
 
+export type FollowupMoveAvailability = { timezone:string; durationMinutes:number; slots:{start:string;end:string}[]; teamBusy:{start:string;end:string}[] };
 export function getFollowupMoveAvailability(id:string,occurrenceId:string,date:string) {
-  return request<{timezone:string;slots:{start:string;end:string}[]}>(`/api/me/engagements/${encodeURIComponent(id)}/followup-schedule/occurrences/${encodeURIComponent(occurrenceId)}/availability?${new URLSearchParams({date})}`);
+  return request<FollowupMoveAvailability>(`/api/me/engagements/${encodeURIComponent(id)}/followup-schedule/occurrences/${encodeURIComponent(occurrenceId)}/availability?${new URLSearchParams({date})}`);
 }
 
 export type OneOffMeeting = { eventTypeId:string; title:string; durationMinutes:number; slug:string; bookingId:string|null; startsAt:string|null; status:string|null; inviteStatus:string|null };

@@ -29,7 +29,7 @@ test("applying requires both a reviewed hash and idempotency ID; repository conf
 test("move availability is authenticated, occurrence-scoped and validates dates",async()=>{
  const route=`${path}/occurrences/${id(4)}/availability`;
  expect((await createFollowupScheduleRoutes(deps(false)).request(`${route}?date=2027-01-05`)).status).toBe(401);
- let received:unknown;const d=deps();d.availability=async(...args)=>{received=args;return {kind:"available",timezone:"America/New_York",slots:[]};};
+ let received:unknown;const d=deps();d.availability=async(...args)=>{received=args;return {kind:"available",timezone:"America/New_York",durationMinutes:45,teamBusy:[],slots:[]};};
  const app=createFollowupScheduleRoutes(d);
  const response=await app.request(`${route}?date=2027-01-05&workspaceId=${id(99)}`);
  expect(response.status).toBe(200);expect(response.headers.get("cache-control")).toBe("no-store");

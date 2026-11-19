@@ -1,6 +1,7 @@
 import { Temporal } from "@js-temporal/polyfill";
+import { clamp } from "@calpaca/core";
 import { PROTECTED_RESERVATION_WINDOW_DAYS } from "../core/engagement/kickoff-booking";
-import { protectedCalendarSlots } from "./kickoff-booking-guard";
+import { protectedCalendarAvailability } from "./kickoff-booking-guard";
 import { getKickoffReadiness } from "./kickoff-readiness-repo";
 import { hasFollowupReservations } from "./followup-reservation-state";
 import { createHash } from "node:crypto";
@@ -146,8 +147,9 @@ export async function getFollowupMoveAvailability(workspaceId:string,actor:Engag
       end=day.add({days:1}).toZonedDateTime(schedule.rule.timezone).toInstant();
     }catch{return {kind:"invalid_input" as const};}
     const instant=Temporal.Instant.fromEpochMilliseconds(now.getTime());
-    const slots=await protectedCalendarSlots(ctx,{start:start.subtract({minutes:ctx.eventType.bufferBeforeMin}),end:end.add({minutes:ctx.eventType.bufferAfterMin})},tx,instant,occurrence.bookingId);
-    return {kind:"available" as const,timezone:schedule.rule.timezone,slots:slots.filter(slot=>
+    const {slots,teamBusy}=await protectedCalendarAvailability(ctx,{start:start.subtract({minutes:ctx.eventType.bufferBeforeMin}),end:end.add({minutes:ctx.eventType.bufferAfterMin})},tx,instant,occurrence.bookingId);
+    return {kind:"available" as const,timezone:schedule.rule.timezone,durationMinutes:ctx.eventType.durationMinutes,
+      teamBusy:clamp(teamBusy,{start,end}).map(block=>({start:block.start.toString(),end:block.end.toString()})),slots:slots.filter(slot=>
       Temporal.Instant.compare(slot.start,start)>=0&&Temporal.Instant.compare(slot.start,end)<0&&
       slot.end.epochMilliseconds<=now.getTime()+PROTECTED_RESERVATION_WINDOW_DAYS*86400_000&&
       !schedule.occurrences.some(other=>other.id!==occurrenceId&&other.status!=="cancelled"&&new Date(other.startsAt).getTime()<slot.end.epochMilliseconds&&new Date(other.endsAt).getTime()>slot.start.epochMilliseconds)
